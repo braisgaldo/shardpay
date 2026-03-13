@@ -16,7 +16,7 @@ import '../../models/app_models.dart';
 import '../../services/ticket_ocr_service.dart';
 import 'add_expense_screen.dart';
 
-enum _GroupMenuAction { toggleClosed, transferOwner, leave, delete }
+enum _GroupMenuAction { toggleClosed, notifySettlements, manageAdmins, transferOwner, leave, delete }
 
 class GroupDetailScreen extends ConsumerStatefulWidget {
   const GroupDetailScreen({super.key, required this.user, required this.groupId});
@@ -93,7 +93,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ],
               ),
               actions: [
-                if (group.ownerId == widget.user.id)
+                if (group.isAdmin(widget.user.id))
                   IconButton(
                     onPressed: group.isClosed ? null : () => _showJoinSettingsDialog(context, group),
                     icon: const Icon(Icons.settings_rounded),
@@ -104,6 +104,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     switch (action) {
                       case _GroupMenuAction.toggleClosed:
                         await _toggleGroupClosed(context, group);
+                        break;
+                      case _GroupMenuAction.notifySettlements:
+                        await _notifyGroupSettlements(context, group);
+                        break;
+                      case _GroupMenuAction.manageAdmins:
+                        await _showManageAdminsDialog(context, group);
                         break;
                       case _GroupMenuAction.transferOwner:
                         await _showTransferOwnershipDialog(context, group);
@@ -118,7 +124,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   },
                   itemBuilder: (context) {
                     final items = <PopupMenuEntry<_GroupMenuAction>>[];
-                    if (group.ownerId == widget.user.id) {
+                    if (group.isAdmin(widget.user.id)) {
                       items.add(
                         PopupMenuItem(
                           value: _GroupMenuAction.toggleClosed,
@@ -131,8 +137,34 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                         ),
                       );
+                      if (group.isClosed) {
+                        items.add(
+                          PopupMenuItem(
+                            value: _GroupMenuAction.notifySettlements,
+                            child: Row(
+                              children: [
+                                const Icon(Icons.campaign_rounded, size: 18),
+                                const SizedBox(width: 10),
+                                Text(tr(context, es: 'Solicitar pagos al grupo', en: 'Request payments from group', gl: 'Solicitar pagos ao grupo', fr: 'Demander les paiements du groupe', it: 'Richiedi pagamenti al gruppo', pt: 'Solicitar pagamentos ao grupo')),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
                     }
                     if (group.ownerId == widget.user.id && group.members.length > 1) {
+                      items.add(
+                        PopupMenuItem(
+                          value: _GroupMenuAction.manageAdmins,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.manage_accounts_rounded, size: 18),
+                              const SizedBox(width: 10),
+                              Text(tr(context, es: 'Administradores', en: 'Admins', gl: 'Admins', fr: 'Admins', it: 'Admin', pt: 'Admins')),
+                            ],
+                          ),
+                        ),
+                      );
                       items.add(
                         PopupMenuItem(
                           value: _GroupMenuAction.transferOwner,
@@ -202,9 +234,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onOcrCamera: () => _importTicket(context, group, ImageSource.camera),
                   onOcrGallery: () => _importTicket(context, group, ImageSource.gallery),
                   groupClosed: group.isClosed,
-                  onManagePeople: group.ownerId == widget.user.id ? () => _showJoinSettingsDialog(context, group) : null,
+                  onManagePeople: group.isAdmin(widget.user.id) ? () => _showJoinSettingsDialog(context, group) : null,
                 ),
-                _BalancesTab(group: group, balances: balances),
+                _BalancesTab(group: group, balances: balances, currentUserId: widget.user.id),
                 _ExpensesTab(
                   group: group,
                   currentUserId: widget.user.id,
@@ -222,6 +254,65 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       },
       error: (error, _) => Scaffold(body: Center(child: Text(error.toString()))),
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+    );
+  }
+
+  Future<void> _showManageAdminsDialog(BuildContext context, ExpenseGroup group) async {
+    final selectedAdminIds = group.adminIds.toSet();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: Text(tr(context, es: 'Administradores del grupo', en: 'Group admins', gl: 'Admins do grupo', fr: 'Admins du groupe', it: 'Admin del gruppo', pt: 'Admins do grupo')),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr(context, es: 'La persona propietaria sigue siendo quien puede borrar el grupo o reasignar la propiedad. Aquí puedes añadir o quitar admins adicionales.', en: 'The owner still controls deletion and ownership transfer. Here you can add or remove extra admins.', gl: 'A persoa propietaria segue controlando o borrado e a propiedade. Aqui podes engadir ou quitar admins adicionais.', fr: 'Le proprietaire conserve la suppression et le transfert. Ici vous pouvez ajouter ou retirer des admins supplementaires.', it: 'Il proprietario mantiene eliminazione e trasferimento. Qui puoi aggiungere o rimuovere admin aggiuntivi.', pt: 'A pessoa proprietaria continua a controlar apagar e transferir propriedade. Aqui podes adicionar ou remover admins extra.')),
+                      const SizedBox(height: 14),
+                      ...group.activeMembers.where((member) => member.userId != group.ownerId).map((member) {
+                        return CheckboxListTile.adaptive(
+                          value: selectedAdminIds.contains(member.userId),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(member.name),
+                          subtitle: Text(member.email.isEmpty ? tr(context, es: 'Miembro del grupo', en: 'Group member', gl: 'Membro do grupo', fr: 'Membre du groupe', it: 'Membro del gruppo', pt: 'Membro do grupo') : member.email),
+                          onChanged: (value) {
+                            setDialogState(() {
+                              if (value == true) {
+                                selectedAdminIds.add(member.userId);
+                              } else {
+                                selectedAdminIds.remove(member.userId);
+                              }
+                            });
+                          },
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                FilledButton(
+                  onPressed: () async {
+                    await ref.read(repositoryProvider).setGroupAdmins(groupId: group.id, requesterId: widget.user.id, adminIds: selectedAdminIds.toList());
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                  child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -304,20 +395,23 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         decoration: InputDecoration(labelText: tr(context, es: 'Descripción', en: 'Description', gl: 'Descricion', fr: 'Description', it: 'Descrizione', pt: 'Descricao')),
                       ),
                       const SizedBox(height: 16),
-                      Text(tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: groupIcons.entries.map((entry) {
-                          final selected = iconKey == entry.key;
-                          return ChoiceChip(
-                            selected: selected,
-                            label: Text(groupIconLabelForKey(entry.key)),
-                            avatar: Icon(entry.value, size: 18),
-                            onSelected: (_) => setDialogState(() => iconKey = entry.key),
+                      DropdownButtonFormField<String>(
+                        initialValue: iconKey,
+                        decoration: InputDecoration(labelText: tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo')),
+                        items: groupIcons.entries.map((entry) {
+                          return DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(entry.value, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(width: 140, child: Text(groupIconLabelForKey(entry.key), overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
                           );
                         }).toList(),
+                        onChanged: (value) => setDialogState(() => iconKey = value ?? iconKey),
                       ),
                       const SizedBox(height: 18),
                       Text(
@@ -619,7 +713,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     try {
       final parsed = await ref.read(ticketOcrServiceProvider).parseReceipt(
             imagePath: image.path,
-        defaultAllocations: equalAllocations(group.selectableMembers),
+            defaultAllocations: equalAllocations(group.selectableMembers),
             defaultCategoryId: 'food',
           );
       if (!context.mounted) {
@@ -637,6 +731,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     final items = parsed.items.map((item) => item.copyWith()).toList();
     final payerMembers = sortedMembersByName(group.activeMembers);
     var payerId = payerMembers.any((member) => member.userId == widget.user.id) ? widget.user.id : payerMembers.first.userId;
+    final titleController = TextEditingController(text: parsed.title ?? parsed.items.firstOrNull?.name ?? 'Ticket importado');
     final uuid = const Uuid();
     final categories = [...buildDefaultCategories(), ...group.customCategories];
     var isSaving = false;
@@ -654,6 +749,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(labelText: tr(context, es: 'Nombre del ticket', en: 'Receipt name', gl: 'Nome do ticket', fr: 'Nom du ticket', it: 'Nome dello scontrino', pt: 'Nome da fatura')),
+                      ),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: payerId,
                         decoration: InputDecoration(labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por')),
@@ -769,7 +869,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       final item = validItems[index];
                       final expense = ExpenseRecord(
                         id: index == 0 ? receiptSeedExpenseId : uuid.v4(),
-                        title: item.name.trim(),
+                        title: titleController.text.trim().isEmpty ? item.name.trim() : titleController.text.trim(),
                         payerId: payerId,
                         createdAt: createdAt.add(Duration(milliseconds: index)),
                         note: parsed.note ?? 'Añadido con OCR',
@@ -1113,7 +1213,39 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     }
     await ref.read(repositoryProvider).setGroupClosed(groupId: group.id, requesterId: widget.user.id, isClosed: closing);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(closing ? tr(context, es: 'Grupo cerrado.', en: 'Group closed.', gl: 'Grupo pechado.', fr: 'Groupe ferme.', it: 'Gruppo chiuso.', pt: 'Grupo fechado.') : tr(context, es: 'Grupo reabierto.', en: 'Group reopened.', gl: 'Grupo reaberto.', fr: 'Groupe rouvert.', it: 'Gruppo riaperto.', pt: 'Grupo reaberto.'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(closing ? tr(context, es: 'Grupo cerrado.', en: 'Group closed.', gl: 'Grupo pechado.', fr: 'Groupe ferme.', it: 'Gruppo chiuso.', pt: 'Grupo fechado.') : tr(context, es: 'Grupo reabierto.', en: 'Group reopened.', gl: 'Grupo reaberto.', fr: 'Groupe rouvert.', it: 'Gruppo riaperto.', pt: 'Grupo reaberto.')),
+          action: closing
+              ? SnackBarAction(
+                  label: tr(context, es: 'Solicitar pagos', en: 'Request payments', gl: 'Solicitar pagos', fr: 'Demander paiements', it: 'Richiedi pagamenti', pt: 'Solicitar pagamentos'),
+                  onPressed: () => _notifyGroupSettlements(context, group),
+                )
+              : null,
+        ),
+      );
+    }
+  }
+
+  Future<void> _notifyGroupSettlements(BuildContext context, ExpenseGroup group) async {
+    try {
+      final sent = await ref.read(repositoryProvider).requestGroupSettlementNotifications(groupId: group.id, requesterId: widget.user.id);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            sent == 0
+                ? tr(context, es: 'No hay deudas pendientes que reclamar.', en: 'There are no pending debts to request.', gl: 'Non hai debedas pendentes que reclamar.', fr: 'Il n y a pas de dettes en attente a reclamer.', it: 'Non ci sono debiti pendenti da richiedere.', pt: 'Nao ha dividas pendentes para pedir.')
+                : tr(context, es: 'Aviso enviado a $sent integrante(s).', en: 'Notice sent to $sent member(s).', gl: 'Aviso enviado a $sent integrante(s).', fr: 'Avis envoye a $sent membre(s).', it: 'Avviso inviato a $sent membro/i.', pt: 'Aviso enviado a $sent integrante(s).'),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+      }
     }
   }
 
@@ -1229,6 +1361,7 @@ class _OverviewTab extends StatelessWidget {
                   runSpacing: 8,
                   children: sortedMembersByName(group.visibleMembers).map((member) {
                     final isOwner = !member.isPending && member.userId == group.ownerId;
+                    final isAdmin = !member.isPending && group.adminIds.contains(member.userId);
                     final suffix = member.isPending
                         ? tr(context, es: 'pendiente', en: 'pending', gl: 'pendente', fr: 'en attente', it: 'in attesa', pt: 'pendente')
                       : member.isDeletedAccount
@@ -1236,7 +1369,9 @@ class _OverviewTab extends StatelessWidget {
                         : member.isArchived
                           ? tr(context, es: 'histórico', en: 'historical', gl: 'historico', fr: 'historique', it: 'storico', pt: 'historico')
                         : isOwner
-                            ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
+                            ? tr(context, es: 'propietario', en: 'owner', gl: 'propietario', fr: 'proprietaire', it: 'proprietario', pt: 'proprietario')
+                            : isAdmin
+                              ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
                             : null;
                     return Chip(label: Text(suffix == null ? member.name : '${member.name} · $suffix'));
                   }).toList(),
@@ -1286,10 +1421,11 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _BalancesTab extends StatelessWidget {
-  const _BalancesTab({required this.group, required this.balances});
+  const _BalancesTab({required this.group, required this.balances, required this.currentUserId});
 
   final ExpenseGroup group;
   final Map<String, double> balances;
+  final String currentUserId;
 
   @override
   Widget build(BuildContext context) {
@@ -1306,7 +1442,7 @@ class _BalancesTab extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(24),
-              onTap: () => _showBalanceSettlementDialog(context, group, member, balance),
+              onTap: () => _showBalanceSettlementDialog(context, group, member, balance, currentUserId),
               child: Ink(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(24)),
@@ -1342,67 +1478,222 @@ class _BalancesTab extends StatelessWidget {
   }
 }
 
-Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance) {
-  final relevantSettlements = settlementEdges(group, activeAccountsOnly: true)
-      .where((entry) => entry.fromUserId == member.userId || entry.toUserId == member.userId)
+Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
+  final directBalances = directBalancesForMember(group, member.userId);
+  final counterparties = directBalances.entries
+      .map((entry) => (member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key), amount: entry.value))
+      .where((entry) => entry.member != null)
+      .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
 
-  return showDialog<void>(
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (dialogContext) {
+      return Consumer(
+        builder: (dialogContext, ref, _) {
+          return FractionallySizedBox(
+            heightFactor: 0.84,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(member.name, style: Theme.of(dialogContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(
+                      balance >= 0 ? '+${money(balance, group.currency)}' : '-${money(balance.abs(), group.currency)}',
+                      style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 16),
+                    if (counterparties.isEmpty)
+                      Text(tr(context, es: 'No queda ninguna deuda abierta en este grupo.', en: 'There is no open debt left in this group.', gl: 'Non queda ningunha debeda aberta neste grupo.', fr: 'Il ne reste aucune dette ouverte dans ce groupe.', it: 'Non resta alcun debito aperto in questo gruppo.', pt: 'Nao resta nenhuma divida aberta neste grupo.'))
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: counterparties.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (_, index) {
+                            final entry = counterparties[index];
+                            final counterparty = entry.member!;
+                            final tappedMemberPays = entry.amount < 0;
+                            final debtorId = tappedMemberPays ? member.userId : counterparty.userId;
+                            final creditorId = tappedMemberPays ? counterparty.userId : member.userId;
+                            final currentUserIsDebtor = currentUserId == debtorId;
+                            final currentUserIsCreditor = currentUserId == creditorId;
+                            final amount = entry.amount.abs();
+                            final accent = tappedMemberPays ? const Color(0xFFC77600) : const Color(0xFF1E8E5A);
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(counterparty.name, style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              tappedMemberPays
+                                                  ? tr(context, es: '${member.name} paga a ${counterparty.name}', en: '${member.name} pays ${counterparty.name}', gl: '${member.name} paga a ${counterparty.name}', fr: '${member.name} paie ${counterparty.name}', it: '${member.name} paga ${counterparty.name}', pt: '${member.name} paga a ${counterparty.name}')
+                                                  : tr(context, es: '${counterparty.name} paga a ${member.name}', en: '${counterparty.name} pays ${member.name}', gl: '${counterparty.name} paga a ${member.name}', fr: '${counterparty.name} paie ${member.name}', it: '${counterparty.name} paga ${member.name}', pt: '${counterparty.name} paga a ${member.name}'),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
+                                        child: Text(money(amount, group.currency), style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: !currentUserIsCreditor || counterparty.isPending
+                                              ? null
+                                              : () async {
+                                                  Navigator.of(dialogContext).pop();
+                                                  await _requestDirectSettlement(context, ref, group, creditorId, debtorId, amount);
+                                                },
+                                          icon: const Icon(Icons.notifications_active_rounded),
+                                          label: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: FilledButton.icon(
+                                          onPressed: !currentUserIsDebtor || counterparty.isPending
+                                              ? null
+                                              : () async {
+                                                  Navigator.of(dialogContext).pop();
+                                                  await _recordDirectSettlement(context, ref, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterparty.name, creditorName: tappedMemberPays ? counterparty.name : member.name);
+                                                },
+                                          icon: const Icon(Icons.check_circle_rounded),
+                                          label: Text(tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<void> _requestDirectSettlement(
+  BuildContext context,
+  WidgetRef ref,
+  ExpenseGroup group,
+  String requesterId,
+  String targetUserId,
+  double suggestedAmount,
+) async {
+  final controller = TextEditingController(text: suggestedAmount.toStringAsFixed(2));
+  final amount = await showDialog<double>(
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: Text(member.name),
-        content: SizedBox(
-          width: 520,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                member.isPending
-                    ? tr(context, es: 'Los participantes pendientes no entran todavía en el plan de liquidación hasta vincular una cuenta real.', en: 'Pending participants are not included in the settlement plan until they link a real account.', gl: 'As persoas pendentes non entran ainda no plan de liquidacion ata vincular unha conta real.', fr: 'Les participants en attente ne sont pas encore inclus dans le plan de reglement.', it: 'I partecipanti in attesa non entrano ancora nel piano di regolazione finche non collegano un account reale.', pt: 'Os participantes pendentes ainda nao entram no plano de liquidacao ate associarem uma conta real.')
-                    : tr(context, es: 'Plan optimizado al menor número de transferencias posible.', en: 'Plan optimized to the minimum possible number of transfers.', gl: 'Plan optimizado ao menor numero posible de transferencias.', fr: 'Plan optimise avec le plus petit nombre de virements possible.', it: 'Piano ottimizzato con il minor numero possibile di trasferimenti.', pt: 'Plano otimizado para o menor numero possivel de transferencias.'),
-              ),
-              const SizedBox(height: 12),
-              if (!member.isPending)
-                Text(
-                  balance > 0.009
-                      ? tr(context, es: 'Saldo a favor: ${money(balance, group.currency)}', en: 'Credit balance: ${money(balance, group.currency)}', gl: 'Saldo a favor: ${money(balance, group.currency)}', fr: 'Solde positif : ${money(balance, group.currency)}', it: 'Saldo a favore: ${money(balance, group.currency)}', pt: 'Saldo a favor: ${money(balance, group.currency)}')
-                      : balance < -0.009
-                          ? tr(context, es: 'Saldo pendiente: ${money(balance.abs(), group.currency)}', en: 'Outstanding balance: ${money(balance.abs(), group.currency)}', gl: 'Saldo pendente: ${money(balance.abs(), group.currency)}', fr: 'Solde en attente : ${money(balance.abs(), group.currency)}', it: 'Saldo pendente: ${money(balance.abs(), group.currency)}', pt: 'Saldo pendente: ${money(balance.abs(), group.currency)}')
-                          : tr(context, es: 'Este balance ya está cuadrado.', en: 'This balance is already settled.', gl: 'Este balance xa esta cadrado.', fr: 'Ce solde est deja regle.', it: 'Questo saldo e gia sistemato.', pt: 'Este saldo ja esta regularizado.'),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              if (relevantSettlements.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                ...relevantSettlements.map((entry) {
-                  final fromMember = group.activeMembers.firstWhereOrNull((candidate) => candidate.userId == entry.fromUserId);
-                  final toMember = group.activeMembers.firstWhereOrNull((candidate) => candidate.userId == entry.toUserId);
-                  final memberPays = entry.fromUserId == member.userId;
-                  final message = memberPays
-                      ? tr(context, es: 'Paga ${money(entry.amount, group.currency)} a ${toMember?.name ?? entry.toUserId}', en: 'Pay ${money(entry.amount, group.currency)} to ${toMember?.name ?? entry.toUserId}', gl: 'Paga ${money(entry.amount, group.currency)} a ${toMember?.name ?? entry.toUserId}', fr: 'Payer ${money(entry.amount, group.currency)} a ${toMember?.name ?? entry.toUserId}', it: 'Paga ${money(entry.amount, group.currency)} a ${toMember?.name ?? entry.toUserId}', pt: 'Paga ${money(entry.amount, group.currency)} a ${toMember?.name ?? entry.toUserId}')
-                      : tr(context, es: 'Recibe ${money(entry.amount, group.currency)} de ${fromMember?.name ?? entry.fromUserId}', en: 'Receive ${money(entry.amount, group.currency)} from ${fromMember?.name ?? entry.fromUserId}', gl: 'Recibe ${money(entry.amount, group.currency)} de ${fromMember?.name ?? entry.fromUserId}', fr: 'Recevoir ${money(entry.amount, group.currency)} de ${fromMember?.name ?? entry.fromUserId}', it: 'Ricevi ${money(entry.amount, group.currency)} da ${fromMember?.name ?? entry.fromUserId}', pt: 'Recebe ${money(entry.amount, group.currency)} de ${fromMember?.name ?? entry.fromUserId}');
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(memberPays ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(message)),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            ],
-          ),
+        title: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
         ),
         actions: [
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cerrar', en: 'Close', gl: 'Pechar', fr: 'Fermer', it: 'Chiudi', pt: 'Fechar'))),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar'))),
         ],
       );
     },
   );
+  if (amount == null || amount <= 0) {
+    return;
+  }
+  await ref.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: targetUserId, amount: amount);
+}
+
+Future<void> _recordDirectSettlement(
+  BuildContext context,
+  WidgetRef ref,
+  ExpenseGroup group,
+  String debtorId,
+  String creditorId,
+  double suggestedAmount, {
+  required String debtorName,
+  required String creditorName,
+}) async {
+  final settlementTitle = tr(context, es: 'Liquidación directa', en: 'Direct settlement', gl: 'Liquidacion directa', fr: 'Reglement direct', it: 'Liquidazione diretta', pt: 'Liquidacao direta');
+  final settlementNote = tr(context, es: 'Pago entre $debtorName y $creditorName.', en: 'Payment between $debtorName and $creditorName.', gl: 'Pago entre $debtorName e $creditorName.', fr: 'Paiement entre $debtorName et $creditorName.', it: 'Pagamento tra $debtorName e $creditorName.', pt: 'Pagamento entre $debtorName e $creditorName.');
+  final settlementItemName = tr(context, es: 'Pago registrado', en: 'Recorded payment', gl: 'Pago rexistrado', fr: 'Paiement enregistre', it: 'Pagamento registrato', pt: 'Pagamento registado');
+  final controller = TextEditingController(text: suggestedAmount.toStringAsFixed(2));
+  final amount = await showDialog<double>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: Text(tr(context, es: 'Registrar pago', en: 'Record payment', gl: 'Rexistrar pago', fr: 'Enregistrer paiement', it: 'Registra pagamento', pt: 'Registar pagamento')),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar'))),
+        ],
+      );
+    },
+  );
+  if (amount == null || amount <= 0) {
+    return;
+  }
+
+  final uuid = const Uuid();
+  final expense = ExpenseRecord(
+    id: uuid.v4(),
+    title: settlementTitle,
+    payerId: debtorId,
+    createdAt: DateTime.now(),
+    kind: ExpenseRecordKind.settlement,
+    note: settlementNote,
+    items: [
+      ExpenseItem(
+        id: uuid.v4(),
+        name: settlementItemName,
+        amount: amount,
+        categoryId: 'work',
+        allocations: [
+          SplitAllocation(userId: creditorId, percentage: 100),
+          SplitAllocation(userId: debtorId, percentage: 0),
+        ],
+      ),
+    ],
+  );
+  await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
 }
 
 class _ExpensesTab extends StatefulWidget {
@@ -1472,6 +1763,7 @@ class _ExpensesTabState extends State<_ExpensesTab> {
         ],
         Card(
           child: ExpansionTile(
+            clipBehavior: Clip.none,
             initiallyExpanded: _hasActiveFilters,
             tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -1490,6 +1782,7 @@ class _ExpensesTabState extends State<_ExpensesTab> {
               ],
             ),
             children: [
+              const SizedBox(height: 8),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final narrow = constraints.maxWidth < 420;
@@ -1573,6 +1866,7 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                   ),
                 ),
               ],
+              const SizedBox(height: 4),
             ],
           ),
         ),
@@ -1767,7 +2061,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleMembers = sortedMembersByName(widget.group.activeMembers);
+    final visibleMembers = sortedMembersByName(widget.group.visibleMembers);
     final categoryMap = {for (final category in widget.categories) category.id: category};
     final categoryTotalsData = <String, double>{};
     final memberBars = <String, double>{};

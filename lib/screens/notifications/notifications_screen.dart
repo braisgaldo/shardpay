@@ -29,6 +29,7 @@ class NotificationsScreen extends ConsumerWidget {
               case AppNotificationType.reimbursementRecorded:
                 return preferences.refundNotificationsEnabled;
               case AppNotificationType.reimbursementRequested:
+              case AppNotificationType.groupSettlementRequested:
                 return preferences.refundRequestNotificationsEnabled;
             }
           }).toList();
@@ -105,6 +106,8 @@ Color _notificationColor(AppNotificationType type) {
       return const Color(0xFF3A86FF);
     case AppNotificationType.reimbursementRequested:
       return const Color(0xFFE4572E);
+    case AppNotificationType.groupSettlementRequested:
+      return const Color(0xFF6A4C93);
   }
 }
 
@@ -116,5 +119,7 @@ IconData _notificationIcon(AppNotificationType type) {
       return Icons.payments_rounded;
     case AppNotificationType.reimbursementRequested:
       return Icons.notification_important_rounded;
+    case AppNotificationType.groupSettlementRequested:
+      return Icons.campaign_rounded;
   }
 }

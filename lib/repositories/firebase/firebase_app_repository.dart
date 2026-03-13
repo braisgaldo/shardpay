@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
 import '../app_repository.dart';
 
@@ -116,6 +117,7 @@ class FirebaseAppRepository implements AppRepository {
       final group = ExpenseGroup.fromMap(doc.data());
       final remainingActive = group.activeMembers.where((entry) => entry.userId != user.id).toList();
       final ownerId = group.ownerId == user.id && remainingActive.isNotEmpty ? remainingActive.first.userId : group.ownerId;
+      final adminIds = group.adminIds.where((entry) => entry != user.id).where((entry) => remainingActive.any((member) => member.userId == entry)).toList();
       final updatedMembers = group.members.map((entry) {
         if (entry.userId != user.id) {
           return entry;
@@ -131,6 +133,7 @@ class FirebaseAppRepository implements AppRepository {
       await doc.reference.set(
         group.copyWith(
           ownerId: ownerId,
+          adminIds: adminIds,
           members: updatedMembers,
           memberIds: group.memberIds.where((entry) => entry != user.id).toList(),
           updatedAt: DateTime.now(),
@@ -176,10 +179,19 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<List<AppNotification>> watchNotifications(String userId) {
-    return _notificationsRef(userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList());
+    return (() async* {
+      try {
+        await for (final snapshot in _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots()) {
+          yield snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
+        }
+      } on FirebaseException catch (error) {
+        if (error.code == 'permission-denied') {
+          yield const <AppNotification>[];
+          return;
+        }
+        rethrow;
+      }
+    })();
   }
 
   @override
@@ -204,6 +216,7 @@ class FirebaseAppRepository implements AppRepository {
       iconKey: iconKey,
       currency: currency,
       ownerId: owner.id,
+      adminIds: const [],
       inviteCode: _uuid.v4().split('-').first.toUpperCase(),
       memberIds: [owner.id],
       members: [GroupMember(userId: owner.id, name: owner.displayName, email: owner.email, photoUrl: owner.photoUrl)],
@@ -265,7 +278,7 @@ class FirebaseAppRepository implements AppRepository {
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
       final current = ExpenseGroup.fromMap(snapshot.data()!);
-      _ensureGroupOpen(current);
+      _ensureGroupAllowsExpense(current, expense);
       final updated = current.copyWith(
         expenses: [...current.expenses, expense],
         updatedAt: DateTime.now(),
@@ -373,7 +386,29 @@ class FirebaseAppRepository implements AppRepository {
       if (current.members.firstWhereOrNull((entry) => entry.userId == newOwnerId) == null) {
         throw StateError('La nueva persona administradora debe pertenecer al grupo.');
       }
-      transaction.set(docRef, current.copyWith(ownerId: newOwnerId, updatedAt: DateTime.now()).toMap());
+      final nextAdmins = {
+        ...current.adminIds.where((entry) => entry != newOwnerId),
+        requesterId,
+      }.where((entry) => entry != newOwnerId).toList();
+      transaction.set(docRef, current.copyWith(ownerId: newOwnerId, adminIds: nextAdmins, updatedAt: DateTime.now()).toMap());
+    });
+  }
+
+  @override
+  Future<void> setGroupAdmins({
+    required String groupId,
+    required String requesterId,
+    required List<String> adminIds,
+  }) async {
+    final docRef = _firestore.collection('groups').doc(groupId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(docRef);
+      final current = ExpenseGroup.fromMap(snapshot.data()!);
+      if (current.ownerId != requesterId) {
+        throw StateError('Solo la persona administradora principal puede cambiar otros administradores.');
+      }
+      final validAdminIds = adminIds.where((entry) => entry != current.ownerId).where((entry) => current.activeMembers.any((member) => member.userId == entry)).toSet().toList();
+      transaction.set(docRef, current.copyWith(adminIds: validAdminIds, updatedAt: DateTime.now()).toMap());
     });
   }
 
@@ -405,6 +440,7 @@ class FirebaseAppRepository implements AppRepository {
       transaction.set(
         docRef,
         current.copyWith(
+          adminIds: current.adminIds.where((entry) => entry != userId).toList(),
           memberIds: remainingIds,
           members: current.members.map((entry) {
             if (entry.userId != userId) {
@@ -424,7 +460,7 @@ class FirebaseAppRepository implements AppRepository {
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
       final current = ExpenseGroup.fromMap(snapshot.data()!);
-      if (current.ownerId != requesterId) {
+      if (!current.isAdmin(requesterId)) {
         throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
       }
       transaction.set(
@@ -491,7 +527,6 @@ class FirebaseAppRepository implements AppRepository {
     if (group == null) {
       throw StateError('Grupo no encontrado.');
     }
-    _ensureGroupOpen(group);
     final requester = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
     await _createNotification(
       AppNotification(
@@ -507,6 +542,45 @@ class FirebaseAppRepository implements AppRepository {
         amount: amount,
       ),
     );
+  }
+
+  @override
+  Future<int> requestGroupSettlementNotifications({required String groupId, required String requesterId}) async {
+    final group = await _resolveGroup(groupId);
+    if (group == null) {
+      throw StateError('Grupo no encontrado.');
+    }
+    if (!group.isAdmin(requesterId)) {
+      throw StateError('Solo la persona administradora puede solicitar el cierre de pagos.');
+    }
+    if (!group.isClosed) {
+      throw StateError('Cierra el grupo antes de pedir que se salden las deudas.');
+    }
+
+    final balances = memberBalances(group);
+    final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
+    final recipients = group.activeMembers.where((entry) => entry.userId != requesterId).where((entry) => -((balances[entry.userId] ?? 0)) > 0.009).toList();
+
+    await Future.wait(
+      recipients.map(
+        (member) => _createNotification(
+          AppNotification(
+            id: _uuid.v4(),
+            userId: member.userId,
+            type: AppNotificationType.groupSettlementRequested,
+            title: 'Cierre de cuentas pendiente',
+            message: '${admin?.name ?? 'La persona administradora'} te pide saldar ${(-((balances[member.userId] ?? 0))).toStringAsFixed(2)} ${group.currency} en ${group.name}.',
+            createdAt: DateTime.now(),
+            groupId: group.id,
+            fromUserId: requesterId,
+            relatedUserId: member.userId,
+            amount: -((balances[member.userId] ?? 0)),
+          ),
+        ),
+      ),
+    );
+
+    return recipients.length;
   }
 
   @override
@@ -536,6 +610,13 @@ class FirebaseAppRepository implements AppRepository {
     if (group.isClosed) {
       throw StateError('El grupo está cerrado. Solo se puede consultar hasta que la persona administradora lo reabra.');
     }
+  }
+
+  void _ensureGroupAllowsExpense(ExpenseGroup group, ExpenseRecord expense) {
+    if (!group.isClosed || expense.kind == ExpenseRecordKind.settlement) {
+      return;
+    }
+    throw StateError('El grupo está cerrado. Solo se pueden registrar liquidaciones hasta que la persona administradora lo reabra.');
   }
 
   Future<void> _createNotification(AppNotification notification) {

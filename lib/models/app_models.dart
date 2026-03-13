@@ -119,7 +119,7 @@ class GroupMember {
 
 enum ExpenseRecordKind { expense, settlement }
 
-enum AppNotificationType { expenseAdded, reimbursementRecorded, reimbursementRequested }
+enum AppNotificationType { expenseAdded, reimbursementRecorded, reimbursementRequested, groupSettlementRequested }
 
 class AppNotification {
   const AppNotification({
@@ -431,6 +431,7 @@ class ExpenseGroup {
     required this.iconKey,
     required this.currency,
     required this.ownerId,
+    required this.adminIds,
     required this.inviteCode,
     required this.memberIds,
     required this.members,
@@ -450,6 +451,7 @@ class ExpenseGroup {
   final String iconKey;
   final String currency;
   final String ownerId;
+  final List<String> adminIds;
   final String inviteCode;
   final List<String> memberIds;
   final List<GroupMember> members;
@@ -462,6 +464,10 @@ class ExpenseGroup {
   final bool isClosed;
   final String? description;
   final DateTime? closedAt;
+
+  bool isAdmin(String userId) => ownerId == userId || adminIds.contains(userId);
+
+  List<String> get allAdminIds => [ownerId, ...adminIds.where((entry) => entry != ownerId)];
 
   List<GroupMember> get activeMembers => members.where((member) => !member.isArchived).toList();
 
@@ -498,6 +504,7 @@ class ExpenseGroup {
       'iconKey': iconKey,
         'currency': currency,
         'ownerId': ownerId,
+        'adminIds': adminIds,
         'inviteCode': inviteCode,
         'memberIds': memberIds,
         'members': members.map((entry) => entry.toMap()).toList(),
@@ -517,6 +524,7 @@ class ExpenseGroup {
     final rawCategories = (map['customCategories'] as List<dynamic>? ?? const []);
     final rawExpenses = (map['expenses'] as List<dynamic>? ?? const []);
     final rawMemberIds = (map['memberIds'] as List<dynamic>? ?? const []);
+    final rawAdminIds = (map['adminIds'] as List<dynamic>? ?? const []);
 
     return ExpenseGroup(
       id: map['id'] as String,
@@ -525,6 +533,7 @@ class ExpenseGroup {
       iconKey: map['iconKey'] as String? ?? 'groups',
       currency: map['currency'] as String? ?? 'EUR',
       ownerId: map['ownerId'] as String? ?? '',
+      adminIds: rawAdminIds.map((entry) => entry.toString()).where((entry) => entry != (map['ownerId'] as String? ?? '')).toList(),
       inviteCode: map['inviteCode'] as String? ?? '',
       memberIds: rawMemberIds.map((entry) => entry.toString()).toList(),
       members: rawMembers.map((entry) => GroupMember.fromMap(Map<String, dynamic>.from(entry as Map))).toList(),
@@ -546,6 +555,7 @@ class ExpenseGroup {
     String? iconKey,
     String? currency,
     String? ownerId,
+    List<String>? adminIds,
     String? inviteCode,
     List<String>? memberIds,
     List<GroupMember>? members,
@@ -565,6 +575,7 @@ class ExpenseGroup {
       iconKey: iconKey ?? this.iconKey,
       currency: currency ?? this.currency,
       ownerId: ownerId ?? this.ownerId,
+      adminIds: adminIds ?? this.adminIds,
       inviteCode: inviteCode ?? this.inviteCode,
       memberIds: memberIds ?? this.memberIds,
       members: members ?? this.members,

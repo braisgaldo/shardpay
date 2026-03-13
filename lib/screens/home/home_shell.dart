@@ -65,7 +65,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     ];
 
     return Scaffold(
-      body: pages[_index],
+      body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
@@ -485,26 +485,29 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
+                        initialValue: iconKey,
+                        decoration: InputDecoration(labelText: tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo')),
+                        items: groupIcons.entries.map((entry) {
+                          return DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(entry.value, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(width: 140, child: Text(groupIconLabelForKey(entry.key), overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) => setDialogState(() => iconKey = value ?? iconKey),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
                         initialValue: currency,
                         decoration: InputDecoration(labelText: tr(context, es: 'Divisa', en: 'Currency', gl: 'Divisa', fr: 'Devise', it: 'Valuta', pt: 'Moeda')),
                         items: currencyOptions.map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}'))).toList(),
                         onChanged: (value) => setDialogState(() => currency = value ?? currency),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: groupIcons.entries.map((entry) {
-                          final selected = iconKey == entry.key;
-                          return ChoiceChip(
-                            selected: selected,
-                            label: Text(groupIconLabelForKey(entry.key)),
-                            avatar: Icon(entry.value, size: 18),
-                            onSelected: (_) => setDialogState(() => iconKey = entry.key),
-                          );
-                        }).toList(),
                       ),
                       const SizedBox(height: 16),
                       Text(tr(context, es: 'Personas pendientes', en: 'Pending people', gl: 'Persoas pendentes', fr: 'Personnes en attente', it: 'Persone in attesa', pt: 'Pessoas pendentes'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),

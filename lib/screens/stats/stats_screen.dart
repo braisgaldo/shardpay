@@ -38,41 +38,46 @@ class StatsScreen extends ConsumerStatefulWidget {
 
 class _StatsScreenState extends ConsumerState<StatsScreen> {
   _StatsChartKind _selectedChart = _StatsChartKind.insights;
+  final Set<String> _selectedGroupIds = <String>{};
 
   @override
   Widget build(BuildContext context) {
     final groupsState = ref.watch(groupsProvider(widget.user.id));
 
-    return SafeArea(
-      child: groupsState.when(
+    return Scaffold(
+      body: SafeArea(
+        child: groupsState.when(
         data: (groups) {
-          final categories = [...buildDefaultCategories(), ...groups.expand((group) => group.customCategories)]
+          final selectedGroups = _selectedGroupIds.isEmpty
+              ? groups
+              : groups.where((group) => _selectedGroupIds.contains(group.id)).toList(growable: false);
+          final categories = [...buildDefaultCategories(), ...selectedGroups.expand((group) => group.customCategories)]
               .groupListsBy((entry) => entry.id)
               .values
               .map((entries) => entries.first)
               .toList();
           final categoryMap = {for (final category in categories) category.id: category};
-          final categoryData = categoryTotals(groups).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-          final monthly = monthlySpend(groups).entries.toList();
-          final groupSpend = {for (final group in groups) group.name: totalGroupSpend(group)}.entries.toList()
+          final categoryData = categoryTotals(selectedGroups).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          final monthly = monthlySpend(selectedGroups).entries.toList();
+          final groupSpend = {for (final group in selectedGroups) group.name: totalGroupSpend(group)}.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
           final memberSpend = <String, double>{};
           final memberNames = {
-            for (final group in groups)
+            for (final group in selectedGroups)
               for (final member in group.visibleMembers) member.userId: member.name,
           };
 
-          for (final group in groups) {
+          for (final group in selectedGroups) {
             for (final expense in group.expenses) {
               memberSpend.update(expense.payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
             }
           }
 
           final memberEntries = memberSpend.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-          final totalSpend = groups.fold<double>(0, (accumulatedSpend, group) => accumulatedSpend + totalGroupSpend(group));
-          final expensesCount = groups.fold<int>(0, (sum, group) => sum + group.expenses.length);
-          final peopleCount = groups.fold<int>(0, (sum, group) => sum + group.totalDisplayedMembers);
-          final headlineCurrency = groups.isEmpty ? 'EUR' : groups.first.currency;
+          final totalSpend = selectedGroups.fold<double>(0, (accumulatedSpend, group) => accumulatedSpend + totalGroupSpend(group));
+          final expensesCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.expenses.length);
+          final peopleCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.totalDisplayedMembers);
+          final headlineCurrency = selectedGroups.isEmpty ? (groups.isEmpty ? 'EUR' : groups.first.currency) : selectedGroups.first.currency;
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -92,10 +97,11 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                           return DropdownMenuItem<_StatsChartKind>(
                             value: option.kind,
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(option.icon),
                                 const SizedBox(width: 10),
-                                Expanded(child: Text(_chartTitle(context, option.kind), overflow: TextOverflow.ellipsis)),
+                                SizedBox(width: 170, child: Text(_chartTitle(context, option.kind), overflow: TextOverflow.ellipsis)),
                               ],
                             ),
                           );
@@ -111,12 +117,57 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr(context, es: 'Filtrar grupos', en: 'Filter groups', gl: 'Filtrar grupos', fr: 'Filtrer groupes', it: 'Filtra gruppi', pt: 'Filtrar grupos'), style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 6),
+                      Text(
+                        tr(context, es: 'Puedes ver todos, uno o varios grupos a la vez.', en: 'You can view all, one, or several groups at once.', gl: 'Podes ver todos, un ou varios grupos a vez.', fr: 'Vous pouvez voir tous, un ou plusieurs groupes a la fois.', it: 'Puoi vedere tutti, uno o piu gruppi alla volta.', pt: 'Podes ver todos, um ou varios grupos ao mesmo tempo.'),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilterChip(
+                            selected: _selectedGroupIds.isEmpty,
+                            onSelected: (_) => setState(_selectedGroupIds.clear),
+                            label: Text(tr(context, es: 'Todos', en: 'All', gl: 'Todos', fr: 'Tous', it: 'Tutti', pt: 'Todos')),
+                          ),
+                          ...groups.map((group) {
+                            final selected = _selectedGroupIds.contains(group.id);
+                            return FilterChip(
+                              selected: selected,
+                              avatar: Icon(groupIconForKey(group.iconKey), size: 16),
+                              label: Text(group.name),
+                              onSelected: (value) {
+                                setState(() {
+                                  if (value) {
+                                    _selectedGroupIds.add(group.id);
+                                  } else {
+                                    _selectedGroupIds.remove(group.id);
+                                  }
+                                });
+                              },
+                            );
+                          }),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               _buildSelectedChart(
                 context,
                 totalSpend: totalSpend,
                 expensesCount: expensesCount,
                 peopleCount: peopleCount,
-                groupsCount: groups.length,
+                groupsCount: selectedGroups.length,
                 headlineCurrency: headlineCurrency,
                 categoryData: categoryData,
                 categoryMap: categoryMap,
@@ -128,8 +179,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             ],
           );
         },
-        error: (error, _) => Center(child: Text(error.toString())),
-        loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => Center(child: Text(error.toString())),
+          loading: () => const Center(child: CircularProgressIndicator()),
+        ),
       ),
     );
   }

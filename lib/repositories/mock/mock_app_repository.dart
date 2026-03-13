@@ -77,6 +77,7 @@ class MockAppRepository implements AppRepository {
       }
       _groups[groupId] = group.copyWith(
         ownerId: group.ownerId == user.id && remainingActive.isNotEmpty ? remainingActive.first.userId : group.ownerId,
+        adminIds: group.adminIds.where((entry) => entry != user.id).where((entry) => remainingActive.any((member) => member.userId == entry)).toList(),
         members: group.members.map((entry) {
           if (entry.userId != user.id) {
             return entry;
@@ -170,6 +171,7 @@ class MockAppRepository implements AppRepository {
       iconKey: iconKey,
       currency: currency,
       ownerId: owner.id,
+      adminIds: const [],
       inviteCode: _uuid.v4().split('-').first.toUpperCase(),
       memberIds: [owner.id],
       members: [GroupMember(userId: owner.id, name: owner.displayName, email: owner.email, photoUrl: owner.photoUrl)],
@@ -226,7 +228,7 @@ class MockAppRepository implements AppRepository {
   @override
   Future<void> addExpense({required String groupId, required ExpenseRecord expense}) async {
     final group = _groups[groupId]!;
-    _ensureGroupOpen(group);
+    _ensureGroupAllowsExpense(group, expense);
     _groups[groupId] = group.copyWith(
       expenses: [...group.expenses, expense],
       updatedAt: DateTime.now(),
@@ -310,14 +312,33 @@ class MockAppRepository implements AppRepository {
     if (group.members.firstWhereOrNull((entry) => entry.userId == newOwnerId) == null) {
       throw StateError('La nueva persona administradora debe pertenecer al grupo.');
     }
-    _groups[groupId] = group.copyWith(ownerId: newOwnerId, updatedAt: DateTime.now());
+    final nextAdmins = {
+      ...group.adminIds.where((entry) => entry != newOwnerId),
+      requesterId,
+    }.where((entry) => entry != newOwnerId).toList();
+    _groups[groupId] = group.copyWith(ownerId: newOwnerId, adminIds: nextAdmins, updatedAt: DateTime.now());
+    _groupsController.add(null);
+  }
+
+  @override
+  Future<void> setGroupAdmins({
+    required String groupId,
+    required String requesterId,
+    required List<String> adminIds,
+  }) async {
+    final group = _groups[groupId]!;
+    if (group.ownerId != requesterId) {
+      throw StateError('Solo la persona administradora principal puede cambiar otros administradores.');
+    }
+    final validAdminIds = adminIds.where((entry) => entry != group.ownerId).where((entry) => group.activeMembers.any((member) => member.userId == entry)).toSet().toList();
+    _groups[groupId] = group.copyWith(adminIds: validAdminIds, updatedAt: DateTime.now());
     _groupsController.add(null);
   }
 
   @override
   Future<void> setGroupClosed({required String groupId, required String requesterId, required bool isClosed}) async {
     final group = _groups[groupId]!;
-    if (group.ownerId != requesterId) {
+    if (!group.isAdmin(requesterId)) {
       throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
     }
     _groups[groupId] = group.copyWith(
@@ -352,6 +373,7 @@ class MockAppRepository implements AppRepository {
     }
 
     _groups[groupId] = group.copyWith(
+      adminIds: group.adminIds.where((entry) => entry != userId).toList(),
       memberIds: remainingIds,
       members: group.members.map((entry) {
         if (entry.userId != userId) {
@@ -403,7 +425,6 @@ class MockAppRepository implements AppRepository {
   @override
   Future<void> requestReimbursement({required String groupId, required String requesterId, required String targetUserId, required double amount}) async {
     final group = _groups[groupId]!;
-    _ensureGroupOpen(group);
     final requester = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
     _pushNotification(
       AppNotification(
@@ -419,6 +440,45 @@ class MockAppRepository implements AppRepository {
         amount: amount,
       ),
     );
+  }
+
+  @override
+  Future<int> requestGroupSettlementNotifications({required String groupId, required String requesterId}) async {
+    final group = _groups[groupId]!;
+    if (!group.isAdmin(requesterId)) {
+      throw StateError('Solo la persona administradora puede solicitar el cierre de pagos.');
+    }
+    if (!group.isClosed) {
+      throw StateError('Cierra el grupo antes de pedir que se salden las deudas.');
+    }
+
+    final balances = memberBalances(group);
+    final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
+    var sent = 0;
+
+    for (final member in group.activeMembers.where((entry) => entry.userId != requesterId)) {
+      final amount = -(balances[member.userId] ?? 0);
+      if (amount <= 0.009) {
+        continue;
+      }
+      sent += 1;
+      _pushNotification(
+        AppNotification(
+          id: _uuid.v4(),
+          userId: member.userId,
+          type: AppNotificationType.groupSettlementRequested,
+          title: 'Cierre de cuentas pendiente',
+          message: '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.',
+          createdAt: DateTime.now(),
+          groupId: group.id,
+          fromUserId: requesterId,
+          relatedUserId: member.userId,
+          amount: amount,
+        ),
+      );
+    }
+
+    return sent;
   }
 
   @override
@@ -478,6 +538,7 @@ class MockAppRepository implements AppRepository {
       iconKey: 'trip',
       currency: 'EUR',
       ownerId: user.id,
+      adminIds: const [],
       inviteCode: 'ROAD24',
       memberIds: squad.map((member) => member.userId).toList(),
       members: squad,
@@ -502,6 +563,7 @@ class MockAppRepository implements AppRepository {
       iconKey: 'home',
       currency: 'EUR',
       ownerId: user.id,
+      adminIds: const [],
       inviteCode: 'PISO777',
       memberIds: [user.id, partner.userId],
       members: [squad.first, partner],
@@ -538,6 +600,13 @@ class MockAppRepository implements AppRepository {
     if (group.isClosed) {
       throw StateError('El grupo está cerrado. Solo se puede consultar hasta que la persona administradora lo reabra.');
     }
+  }
+
+  void _ensureGroupAllowsExpense(ExpenseGroup group, ExpenseRecord expense) {
+    if (!group.isClosed || expense.kind == ExpenseRecordKind.settlement) {
+      return;
+    }
+    throw StateError('El grupo está cerrado. Solo se pueden registrar liquidaciones hasta que la persona administradora lo reabra.');
   }
 
   void _pushNotification(AppNotification notification) {

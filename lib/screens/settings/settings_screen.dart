@@ -25,8 +25,9 @@ class SettingsScreen extends ConsumerWidget {
       orElse: () => 0,
     );
 
-    return SafeArea(
-      child: ListView(
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           Text(
@@ -114,6 +115,7 @@ class SettingsScreen extends ConsumerWidget {
                       return DropdownMenuItem(
                         value: option.id,
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
                               width: 18,
@@ -125,7 +127,8 @@ class SettingsScreen extends ConsumerWidget {
                               ),
                             ),
                             const SizedBox(width: 10),
-                            Expanded(
+                            SizedBox(
+                              width: 180,
                               child: Text(
                                 '${option.label} · ${option.brightness == Brightness.dark ? tr(context, es: 'oscuro', en: 'dark', gl: 'escuro', fr: 'sombre', it: 'scuro', pt: 'escuro') : tr(context, es: 'claro', en: 'light', gl: 'claro', fr: 'clair', it: 'chiaro', pt: 'claro')}',
                                 overflow: TextOverflow.ellipsis,
@@ -178,10 +181,11 @@ class SettingsScreen extends ConsumerWidget {
                       return DropdownMenuItem(
                         value: option.code,
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             LanguageFlag(code: option.code),
                             const SizedBox(width: 10),
-                            Expanded(child: Text(option.label, overflow: TextOverflow.ellipsis)),
+                            SizedBox(width: 180, child: Text(option.label, overflow: TextOverflow.ellipsis)),
                           ],
                         ),
                       );
@@ -296,6 +300,7 @@ class SettingsScreen extends ConsumerWidget {
             label: Text(tr(context, es: 'Eliminar perfil', en: 'Delete profile', gl: 'Eliminar perfil', fr: 'Supprimer le profil', it: 'Elimina profilo', pt: 'Eliminar perfil')),
           ),
         ],
+        ),
       ),
     );
   }

@@ -50,8 +50,10 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: option.brightness == Brightness.dark ? option.card.withValues(alpha: 0.9) : Colors.white,
-      labelStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-      floatingLabelStyle: textTheme.labelLarge?.copyWith(color: option.accent, fontWeight: FontWeight.w700),
+      isDense: false,
+      labelStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.2),
+      floatingLabelStyle: textTheme.labelLarge?.copyWith(color: option.accent, fontWeight: FontWeight.w700, height: 1.1),
+      alignLabelWithHint: true,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
@@ -72,8 +74,8 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
         borderRadius: BorderRadius.circular(18),
         borderSide: const BorderSide(color: Color(0xFFD00036), width: 1.6),
       ),
-      floatingLabelBehavior: FloatingLabelBehavior.always,
-      contentPadding: const EdgeInsets.fromLTRB(18, 22, 18, 14),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      contentPadding: const EdgeInsets.fromLTRB(18, 24, 18, 20),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: option.accent.withValues(alpha: 0.10),

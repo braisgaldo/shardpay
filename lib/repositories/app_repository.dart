@@ -47,6 +47,11 @@ abstract class AppRepository {
     required String requesterId,
     required String newOwnerId,
   });
+  Future<void> setGroupAdmins({
+    required String groupId,
+    required String requesterId,
+    required List<String> adminIds,
+  });
   Future<void> setGroupClosed({
     required String groupId,
     required String requesterId,
@@ -71,6 +76,10 @@ abstract class AppRepository {
     required String requesterId,
     required String targetUserId,
     required double amount,
+  });
+  Future<int> requestGroupSettlementNotifications({
+    required String groupId,
+    required String requesterId,
   });
   Future<void> markNotificationRead({required String userId, required String notificationId});
   Future<void> seedDemoData(AppUser user);
