@@ -182,7 +182,14 @@ class TicketOcrService {
       processed = img.adjustColor(processed, contrast: 1.9, brightness: 0.08, gamma: 0.92);
       processed = img.gaussianBlur(processed, radius: 1);
       processed = img.adjustColor(processed, contrast: 2.4, brightness: 0.03);
-      processed = img.threshold(processed, threshold: 165);
+      for (final pixel in processed) {
+        final luminance = img.getLuminance(pixel);
+        final binary = luminance >= 165 ? 255 : 0;
+        pixel
+          ..r = binary
+          ..g = binary
+          ..b = binary;
+      }
 
       final preparedFile = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_ocr_${DateTime.now().microsecondsSinceEpoch}.jpg');
       await preparedFile.writeAsBytes(img.encodeJpg(processed, quality: 96), flush: true);
