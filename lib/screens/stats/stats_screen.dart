@@ -40,6 +40,99 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
   _StatsChartKind _selectedChart = _StatsChartKind.insights;
   final Set<String> _selectedGroupIds = <String>{};
 
+  String _groupFilterSummary(BuildContext context, List<ExpenseGroup> sortedGroups) {
+    if (_selectedGroupIds.isEmpty) {
+      return tr(context, es: 'Todos los grupos', en: 'All groups', gl: 'Todos os grupos', fr: 'Tous les groupes', it: 'Tutti i gruppi', pt: 'Todos os grupos');
+    }
+    final selectedNames = sortedGroups.where((group) => _selectedGroupIds.contains(group.id)).map((group) => group.name).toList(growable: false);
+    return selectedNames.join(', ');
+  }
+
+  Future<Set<String>?> _showGroupFilterDialog(BuildContext context, List<ExpenseGroup> sortedGroups) async {
+    var search = '';
+    final selectedIds = _selectedGroupIds.toSet();
+
+    return showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final filteredGroups = sortedGroups.where((group) => group.name.toLowerCase().contains(search.toLowerCase())).toList(growable: false);
+            return AlertDialog(
+              title: Text(tr(context, es: 'Filtrar grupos', en: 'Filter groups', gl: 'Filtrar grupos', fr: 'Filtrer groupes', it: 'Filtra gruppi', pt: 'Filtrar grupos')),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        labelText: tr(context, es: 'Buscar grupo', en: 'Search group', gl: 'Buscar grupo', fr: 'Rechercher un groupe', it: 'Cerca gruppo', pt: 'Pesquisar grupo'),
+                      ),
+                      onChanged: (value) => setDialogState(() => search = value.trim()),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton(
+                            onPressed: () => setDialogState(selectedIds.clear),
+                            child: Text(tr(context, es: 'Todos', en: 'All', gl: 'Todos', fr: 'Tous', it: 'Tutti', pt: 'Todos')),
+                          ),
+                          TextButton(
+                            onPressed: () => setDialogState(() => selectedIds
+                              ..clear()
+                              ..addAll(sortedGroups.map((group) => group.id))),
+                            child: Text(tr(context, es: 'Seleccionar visibles', en: 'Select visible', gl: 'Seleccionar visibles', fr: 'Selectionner visibles', it: 'Seleziona visibili', pt: 'Selecionar visiveis')),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: filteredGroups.isEmpty
+                          ? Center(
+                              child: Text(tr(context, es: 'No hay grupos con ese nombre.', en: 'No groups match that name.', gl: 'Non hai grupos con ese nome.', fr: 'Aucun groupe ne correspond.', it: 'Nessun gruppo corrisponde.', pt: 'Nao ha grupos com esse nome.')),
+                            )
+                          : ListView(
+                              shrinkWrap: true,
+                              children: filteredGroups.map((group) {
+                                final selected = selectedIds.contains(group.id);
+                                return CheckboxListTile.adaptive(
+                                  value: selected,
+                                  contentPadding: EdgeInsets.zero,
+                                  secondary: Icon(groupIconForKey(group.iconKey)),
+                                  title: Text(group.name),
+                                  onChanged: (value) {
+                                    setDialogState(() {
+                                      if (value == true) {
+                                        selectedIds.add(group.id);
+                                      } else {
+                                        selectedIds.remove(group.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                FilledButton(onPressed: () => Navigator.of(dialogContext).pop(selectedIds), child: Text(tr(context, es: 'Aplicar', en: 'Apply', gl: 'Aplicar', fr: 'Appliquer', it: 'Applica', pt: 'Aplicar'))),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupsState = ref.watch(groupsProvider(widget.user.id));
@@ -48,9 +141,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
       body: SafeArea(
         child: groupsState.when(
         data: (groups) {
+          final sortedGroups = [...groups]..sort((left, right) => left.name.toLowerCase().compareTo(right.name.toLowerCase()));
           final selectedGroups = _selectedGroupIds.isEmpty
-              ? groups
-              : groups.where((group) => _selectedGroupIds.contains(group.id)).toList(growable: false);
+              ? sortedGroups
+              : sortedGroups.where((group) => _selectedGroupIds.contains(group.id)).toList(growable: false);
           final categories = [...buildDefaultCategories(), ...selectedGroups.expand((group) => group.customCategories)]
               .groupListsBy((entry) => entry.id)
               .values
@@ -129,33 +223,30 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                         tr(context, es: 'Puedes ver todos, uno o varios grupos a la vez.', en: 'You can view all, one, or several groups at once.', gl: 'Podes ver todos, un ou varios grupos a vez.', fr: 'Vous pouvez voir tous, un ou plusieurs groupes a la fois.', it: 'Puoi vedere tutti, uno o piu gruppi alla volta.', pt: 'Podes ver todos, um ou varios grupos ao mesmo tempo.'),
                       ),
                       const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          FilterChip(
-                            selected: _selectedGroupIds.isEmpty,
-                            onSelected: (_) => setState(_selectedGroupIds.clear),
-                            label: Text(tr(context, es: 'Todos', en: 'All', gl: 'Todos', fr: 'Tous', it: 'Tutti', pt: 'Todos')),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () async {
+                          final selectedIds = await _showGroupFilterDialog(context, sortedGroups);
+                          if (selectedIds == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedGroupIds
+                              ..clear()
+                              ..addAll(selectedIds);
+                          });
+                        },
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: tr(context, es: 'Grupos seleccionados', en: 'Selected groups', gl: 'Grupos seleccionados', fr: 'Groupes selectionnes', it: 'Gruppi selezionati', pt: 'Grupos selecionados'),
+                            suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
                           ),
-                          ...groups.map((group) {
-                            final selected = _selectedGroupIds.contains(group.id);
-                            return FilterChip(
-                              selected: selected,
-                              avatar: Icon(groupIconForKey(group.iconKey), size: 16),
-                              label: Text(group.name),
-                              onSelected: (value) {
-                                setState(() {
-                                  if (value) {
-                                    _selectedGroupIds.add(group.id);
-                                  } else {
-                                    _selectedGroupIds.remove(group.id);
-                                  }
-                                });
-                              },
-                            );
-                          }),
-                        ],
+                          child: Text(
+                            _groupFilterSummary(context, sortedGroups),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ),
                     ],
                   ),

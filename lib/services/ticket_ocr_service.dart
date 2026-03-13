@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image/image.dart' as img;
 import 'package:uuid/uuid.dart';
 
 import '../models/app_models.dart';
@@ -65,7 +66,8 @@ class TicketOcrService {
     required List<SplitAllocation> defaultAllocations,
     required String defaultCategoryId,
   }) async {
-    final inputImage = InputImage.fromFile(File(imagePath));
+    final preparedImagePath = await _prepareImageForOcr(imagePath);
+    final inputImage = InputImage.fromFile(File(preparedImagePath));
     final result = await _recognizer.processImage(inputImage);
     final fragments = _extractFragments(result);
     final rows = _buildRows(fragments);
@@ -164,6 +166,36 @@ class TicketOcrService {
       return;
     }
     debugPrint('[OCR] Item accepted: ${item.name} | ${item.amount.toStringAsFixed(2)}');
+  }
+
+  Future<String> _prepareImageForOcr(String imagePath) async {
+    try {
+      final originalBytes = await File(imagePath).readAsBytes();
+      final decoded = img.decodeImage(originalBytes);
+      if (decoded == null) {
+        return imagePath;
+      }
+
+      final targetWidth = decoded.width < 1800 ? 1800 : decoded.width;
+      var processed = decoded.width == targetWidth ? img.Image.from(decoded) : img.copyResize(decoded, width: targetWidth);
+      processed = img.grayscale(processed);
+      processed = img.adjustColor(processed, contrast: 1.9, brightness: 0.08, gamma: 0.92);
+      processed = img.gaussianBlur(processed, radius: 1);
+      processed = img.adjustColor(processed, contrast: 2.4, brightness: 0.03);
+      processed = img.threshold(processed, threshold: 165);
+
+      final preparedFile = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_ocr_${DateTime.now().microsecondsSinceEpoch}.jpg');
+      await preparedFile.writeAsBytes(img.encodeJpg(processed, quality: 96), flush: true);
+      if (kDebugMode) {
+        debugPrint('[OCR] Prepared image saved at ${preparedFile.path}');
+      }
+      return preparedFile.path;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[OCR] Image preprocessing failed: $error');
+      }
+      return imagePath;
+    }
   }
 
   void dispose() {

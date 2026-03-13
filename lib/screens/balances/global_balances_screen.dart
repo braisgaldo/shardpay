@@ -148,31 +148,40 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                     style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 16),
-                  if (entry.canSettleAll) ...[
-                    _SettlementCard(
-                      title: tr(sheetContext, es: 'Todas las deudas', en: 'All debts', gl: 'Todas as debedas', fr: 'Toutes les dettes', it: 'Tutti i debiti', pt: 'Todas as dividas'),
-                      subtitle: tr(sheetContext, es: 'Agrupa ${entry.groupBreakdown.length} grupos con recalculo automático.', en: 'Bundles ${entry.groupBreakdown.length} groups with automatic recalculation.', gl: 'Agrupa ${entry.groupBreakdown.length} grupos con recalculo automatico.', fr: 'Regroupe ${entry.groupBreakdown.length} groupes avec recalcul automatique.', it: 'Raggruppa ${entry.groupBreakdown.length} gruppi con ricalcolo automatico.', pt: 'Agrupa ${entry.groupBreakdown.length} grupos com recalculo automatico.'),
-                      amount: entry.netAmount.abs(),
-                      currency: entry.currency,
-                      accent: entry.netAmount > 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600),
-                      requestEnabled: entry.netAmount > 0,
-                      payEnabled: entry.netAmount < 0,
-                      onRequest: () async {
-                        Navigator.of(sheetContext).pop();
-                        await _requestAllSettlements(context, ref, entry, currentUserId);
-                      },
-                      onPay: () async {
-                        Navigator.of(sheetContext).pop();
-                        await _recordAllSettlements(context, ref, entry, currentUserId);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   Expanded(
                     child: ListView.separated(
-                      itemCount: entry.groupBreakdown.length,
+                      itemCount: entry.groupBreakdown.length + 1,
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (_, index) {
+                        if (index == entry.groupBreakdown.length) {
+                          final totalAccent = entry.netAmount >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
+                          return _SettlementCard(
+                            title: tr(sheetContext, es: 'Total entre ambos', en: 'Total between both', gl: 'Total entre ambos', fr: 'Total entre les deux', it: 'Totale tra voi', pt: 'Total entre ambos'),
+                            subtitle: tr(
+                              sheetContext,
+                              es: 'Ingresos ${money(entry.totalIncoming, entry.currency)} · Gastos ${money(entry.totalOutgoing, entry.currency)}',
+                              en: 'Income ${money(entry.totalIncoming, entry.currency)} · Expenses ${money(entry.totalOutgoing, entry.currency)}',
+                              gl: 'Ingresos ${money(entry.totalIncoming, entry.currency)} · Gastos ${money(entry.totalOutgoing, entry.currency)}',
+                              fr: 'Entrees ${money(entry.totalIncoming, entry.currency)} · Depenses ${money(entry.totalOutgoing, entry.currency)}',
+                              it: 'Entrate ${money(entry.totalIncoming, entry.currency)} · Uscite ${money(entry.totalOutgoing, entry.currency)}',
+                              pt: 'Entradas ${money(entry.totalIncoming, entry.currency)} · Gastos ${money(entry.totalOutgoing, entry.currency)}',
+                            ),
+                            amount: entry.netAmount.abs(),
+                            currency: entry.currency,
+                            accent: totalAccent,
+                            requestEnabled: entry.canRequestAll,
+                            payEnabled: entry.canPayAll,
+                            leading: const Icon(Icons.summarize_rounded),
+                            onRequest: () async {
+                              Navigator.of(sheetContext).pop();
+                              await _requestAllSettlements(context, ref, entry, currentUserId);
+                            },
+                            onPay: () async {
+                              Navigator.of(sheetContext).pop();
+                              await _recordAllSettlements(context, ref, entry, currentUserId);
+                            },
+                          );
+                        }
                         final groupDebt = entry.groupBreakdown[index];
                         final currentUserIsCreditor = groupDebt.netAmount > 0;
                         final accent = currentUserIsCreditor ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
@@ -215,13 +224,13 @@ class _CounterpartyEntry {
   final double netAmount;
   final String currency;
 
-  bool get canSettleAll {
-    if (groupBreakdown.length < 2) {
-      return false;
-    }
-    final signs = groupBreakdown.map((entry) => entry.netAmount.sign).toSet();
-    return signs.length == 1;
-  }
+  double get totalIncoming => groupBreakdown.where((entry) => entry.netAmount > 0).fold<double>(0, (sum, entry) => sum + entry.netAmount);
+
+  double get totalOutgoing => groupBreakdown.where((entry) => entry.netAmount < 0).fold<double>(0, (sum, entry) => sum + entry.netAmount.abs());
+
+  bool get canRequestAll => totalIncoming > 0.009;
+
+  bool get canPayAll => totalOutgoing > 0.009;
 }
 
 class _GroupDebtEntry {
@@ -356,7 +365,7 @@ Future<void> _requestAllSettlements(BuildContext context, WidgetRef ref, _Counte
   if (!approved) {
     return;
   }
-  for (final groupDebt in entry.groupBreakdown) {
+  for (final groupDebt in entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount > 0)) {
     await ref.read(repositoryProvider).requestReimbursement(
           groupId: groupDebt.group.id,
           requesterId: currentUserId,
@@ -388,7 +397,7 @@ Future<void> _recordAllSettlements(BuildContext context, WidgetRef ref, _Counter
   if (!context.mounted) {
     return;
   }
-  for (final groupDebt in entry.groupBreakdown) {
+  for (final groupDebt in entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount < 0)) {
     await _createSettlementExpense(
       context,
       ref,

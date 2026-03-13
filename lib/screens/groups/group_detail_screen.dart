@@ -137,20 +137,18 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                         ),
                       );
-                      if (group.isClosed) {
-                        items.add(
-                          PopupMenuItem(
-                            value: _GroupMenuAction.notifySettlements,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.campaign_rounded, size: 18),
-                                const SizedBox(width: 10),
-                                Text(tr(context, es: 'Solicitar pagos al grupo', en: 'Request payments from group', gl: 'Solicitar pagos ao grupo', fr: 'Demander les paiements du groupe', it: 'Richiedi pagamenti al gruppo', pt: 'Solicitar pagamentos ao grupo')),
-                              ],
-                            ),
+                      items.add(
+                        PopupMenuItem(
+                          value: _GroupMenuAction.notifySettlements,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.campaign_rounded, size: 18),
+                              const SizedBox(width: 10),
+                              Text(tr(context, es: 'Solicitar pagos al grupo', en: 'Request payments from group', gl: 'Solicitar pagos ao grupo', fr: 'Demander les paiements du groupe', it: 'Richiedi pagamenti al gruppo', pt: 'Solicitar pagamentos ao grupo')),
+                            ],
                           ),
-                        );
-                      }
+                        ),
+                      );
                     }
                     if (group.ownerId == widget.user.id && group.members.length > 1) {
                       items.add(
@@ -376,7 +374,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Ajustes del grupo', en: 'Group settings', gl: 'Axustes do grupo', fr: 'Parametres du groupe', it: 'Impostazioni del gruppo', pt: 'Definicoes do grupo')),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              title: Text(
+                tr(context, es: 'Ajustes del grupo', en: 'Group settings', gl: 'Axustes do grupo', fr: 'Parametres du groupe', it: 'Impostazioni del gruppo', pt: 'Definicoes do grupo'),
+                maxLines: 2,
+              ),
               content: SizedBox(
                 width: 520,
                 child: SingleChildScrollView(
@@ -787,10 +789,22 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                           child: Column(
                             children: [
-                              TextFormField(
-                                initialValue: item.name,
-                                decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
-                                onChanged: (value) => items[index] = items[index].copyWith(name: value),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      initialValue: item.name,
+                                      decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
+                                      onChanged: (value) => items[index] = items[index].copyWith(name: value),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: items.length == 1 ? null : () => setDialogState(() => items.removeAt(index)),
+                                    icon: const Icon(Icons.delete_outline_rounded),
+                                    tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                               TextFormField(
@@ -824,6 +838,26 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                         );
                       }),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              items.add(
+                                ExpenseItem(
+                                  id: uuid.v4(),
+                                  name: '',
+                                  amount: 0,
+                                  categoryId: categories.first.id,
+                                  allocations: equalAllocations(group.selectableMembers),
+                                ),
+                              );
+                            });
+                          },
+                          icon: const Icon(Icons.add_rounded),
+                          label: Text(tr(context, es: 'Añadir item', en: 'Add item', gl: 'Engadir item', fr: 'Ajouter article', it: 'Aggiungi voce', pt: 'Adicionar item')),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1479,9 +1513,14 @@ class _BalancesTab extends StatelessWidget {
 }
 
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
-  final directBalances = directBalancesForMember(group, member.userId);
-  final counterparties = directBalances.entries
-      .map((entry) => (member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key), amount: entry.value))
+  final optimizedEdges = settlementEdges(group);
+  final counterparties = optimizedEdges
+      .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
+      .map((edge) {
+        final counterpartyId = edge.fromUserId == member.userId ? edge.toUserId : edge.fromUserId;
+        final signedAmount = edge.fromUserId == member.userId ? -edge.amount : edge.amount;
+        return (member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == counterpartyId), amount: signedAmount);
+      })
       .where((entry) => entry.member != null)
       .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
@@ -1509,7 +1548,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                     ),
                     const SizedBox(height: 16),
                     if (counterparties.isEmpty)
-                      Text(tr(context, es: 'No queda ninguna deuda abierta en este grupo.', en: 'There is no open debt left in this group.', gl: 'Non queda ningunha debeda aberta neste grupo.', fr: 'Il ne reste aucune dette ouverte dans ce groupe.', it: 'Non resta alcun debito aperto in questo gruppo.', pt: 'Nao resta nenhuma divida aberta neste grupo.'))
+                      Text(tr(context, es: 'No queda ninguna transferencia pendiente en el plan mínimo de este grupo.', en: 'There is no pending transfer left in this group\'s minimum plan.', gl: 'Non queda ningunha transferencia pendente no plan minimo deste grupo.', fr: 'Il ne reste aucun transfert dans le plan minimal de ce groupe.', it: 'Non resta alcun trasferimento nel piano minimo di questo gruppo.', pt: 'Nao resta nenhuma transferencia pendente no plano minimo deste grupo.'))
                     else
                       Expanded(
                         child: ListView.separated(
@@ -1563,7 +1602,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                     children: [
                                       Expanded(
                                         child: OutlinedButton.icon(
-                                          onPressed: !currentUserIsCreditor || counterparty.isPending
+                                            onPressed: !currentUserIsCreditor || counterparty.isPending
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
@@ -1576,7 +1615,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: FilledButton.icon(
-                                          onPressed: !currentUserIsDebtor || counterparty.isPending
+                                            onPressed: !currentUserIsDebtor || counterparty.isPending
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
@@ -1634,6 +1673,29 @@ Future<void> _requestDirectSettlement(
   if (amount == null || amount <= 0) {
     return;
   }
+  if (!context.mounted) {
+    return;
+  }
+  final confirmed =
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(tr(context, es: 'Confirmar solicitud', en: 'Confirm request', gl: 'Confirmar solicitude', fr: 'Confirmer la demande', it: 'Conferma richiesta', pt: 'Confirmar pedido')),
+            content: Text(
+              tr(context, es: 'Se enviará una solicitud por ${money(amount, group.currency)}.', en: 'A request for ${money(amount, group.currency)} will be sent.', gl: 'Enviarase unha solicitude por ${money(amount, group.currency)}.', fr: 'Une demande de ${money(amount, group.currency)} sera envoyee.', it: 'Verrà inviata una richiesta di ${money(amount, group.currency)}.', pt: 'Vai ser enviado um pedido de ${money(amount, group.currency)}.'),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar'))),
+            ],
+          );
+        },
+      ) ??
+      false;
+  if (!confirmed) {
+    return;
+  }
   await ref.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: targetUserId, amount: amount);
 }
 
@@ -1669,6 +1731,29 @@ Future<void> _recordDirectSettlement(
     },
   );
   if (amount == null || amount <= 0) {
+    return;
+  }
+  if (!context.mounted) {
+    return;
+  }
+  final confirmed =
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(tr(context, es: 'Confirmar pago', en: 'Confirm payment', gl: 'Confirmar pago', fr: 'Confirmer le paiement', it: 'Conferma pagamento', pt: 'Confirmar pagamento')),
+            content: Text(
+              tr(context, es: 'Se registrará un pago de ${money(amount, group.currency)} entre $debtorName y $creditorName.', en: 'A payment of ${money(amount, group.currency)} between $debtorName and $creditorName will be recorded.', gl: 'Rexistrarase un pago de ${money(amount, group.currency)} entre $debtorName e $creditorName.', fr: 'Un paiement de ${money(amount, group.currency)} entre $debtorName et $creditorName sera enregistre.', it: 'Verrà registrato un pagamento di ${money(amount, group.currency)} tra $debtorName e $creditorName.', pt: 'Vai ser registado um pagamento de ${money(amount, group.currency)} entre $debtorName e $creditorName.'),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar'))),
+            ],
+          );
+        },
+      ) ??
+      false;
+  if (!confirmed) {
     return;
   }
 
@@ -2053,6 +2138,33 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
   bool _global = true;
   late String _memberId;
 
+  String _compactAxisAmount(BuildContext context, double value) {
+    if (value.abs() < 0.009) {
+      return '0';
+    }
+    final formatter = NumberFormat.compact(locale: localeTag(context));
+    return '${value < 0 ? '-' : ''}${formatter.format(value.abs())}';
+  }
+
+  Future<void> _showBalanceChartInfo(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(tr(context, es: 'Cómo leer este gráfico', en: 'How to read this chart', gl: 'Como ler este grafico', fr: 'Comment lire ce graphique', it: 'Come leggere questo grafico', pt: 'Como ler este grafico')),
+          content: Text(
+            _global
+                ? tr(context, es: 'Verde significa saldo a favor y rojo saldo pendiente. El plan mínimo de transferencias aparece en la pestaña anterior al tocar una persona.', en: 'Green means money to receive and red means money to pay. The minimum transfer plan appears in the previous tab when you tap a person.', gl: 'Verde significa saldo a favor e vermello saldo pendente. O plan minimo de transferencias aparece na lapela anterior ao tocar unha persoa.', fr: 'Le vert signifie un solde a recevoir et le rouge un solde a payer. Le plan minimal apparait dans l onglet precedent en touchant une personne.', it: 'Il verde indica saldo da ricevere e il rosso saldo da pagare. Il piano minimo appare nella scheda precedente toccando una persona.', pt: 'Verde significa saldo a favor e vermelho saldo por pagar. O plano minimo aparece no separador anterior ao tocar numa pessoa.')
+                : tr(context, es: 'Mide qué parte de tus gastos está cubriendo cada pagador real del grupo.', en: 'It shows how much of your share is being covered by each real payer in the group.', gl: 'Mide que parte dos teus gastos esta a cubrir cada pagador real do grupo.', fr: 'Montre quelle part de vos depenses est couverte par chaque payeur reel du groupe.', it: 'Mostra quale parte della tua quota e coperta da ciascun pagatore reale del gruppo.', pt: 'Mostra que parte da tua quota esta a ser coberta por cada pagador real do grupo.'),
+          ),
+          actions: [
+            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido'))),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2178,17 +2290,22 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _global
-                      ? tr(context, es: 'Balance neto por persona', en: 'Net balance by person', gl: 'Balance neto por persoa', fr: 'Solde net par personne', it: 'Saldo netto per persona', pt: 'Saldo liquido por pessoa')
-                      : tr(context, es: 'Quién está cubriendo tu parte', en: 'Who is covering your share', gl: 'Quen esta cubrindo a tua parte', fr: 'Qui couvre votre part', it: 'Chi sta coprendo la tua quota', pt: 'Quem esta a cobrir a tua parte'),
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _global
-                      ? tr(context, es: 'Verde significa saldo a favor y rojo saldo pendiente. Toca un balance en la pestaña anterior para ver el plan mínimo de transferencias.', en: 'Green means money to receive and red means money to pay. Tap a balance in the previous tab to see the minimum transfer plan.', gl: 'Verde significa saldo a favor e vermello saldo pendente. Toca un balance na lapela anterior para ver o plan minimo de transferencias.', fr: 'Le vert signifie un solde en votre faveur et le rouge un solde a payer. Touchez un solde dans l onglet precedent pour voir le plan minimal.', it: 'Il verde indica saldo a favore e il rosso saldo da pagare. Tocca un saldo nella scheda precedente per vedere il piano minimo.', pt: 'Verde significa saldo a favor e vermelho saldo por pagar. Toca num saldo no separador anterior para ver o plano minimo.')
-                      : tr(context, es: 'Mide qué parte de tus gastos acaba cubierta por cada pagador real del grupo.', en: 'Shows how much of your share is currently covered by each real payer in the group.', gl: 'Mide que parte dos teus gastos queda cuberta por cada pagador real do grupo.', fr: 'Montre quelle part de vos depenses est couverte par chaque payeur reel du groupe.', it: 'Mostra quale parte della tua quota e coperta da ciascun pagatore reale del gruppo.', pt: 'Mostra que parte da tua quota esta coberta por cada pagador real do grupo.'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _global
+                            ? tr(context, es: 'Balance neto por persona', en: 'Net balance by person', gl: 'Balance neto por persoa', fr: 'Solde net par personne', it: 'Saldo netto per persona', pt: 'Saldo liquido por pessoa')
+                            : tr(context, es: 'Quién está cubriendo tu parte', en: 'Who is covering your share', gl: 'Quen esta cubrindo a tua parte', fr: 'Qui couvre votre part', it: 'Chi sta coprendo la tua quota', pt: 'Quem esta a cobrir a tua parte'),
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _showBalanceChartInfo(context),
+                      icon: const Icon(Icons.help_outline_rounded),
+                      tooltip: tr(context, es: 'Cómo leer este gráfico', en: 'How to read this chart', gl: 'Como ler este grafico', fr: 'Comment lire ce graphique', it: 'Come leggere questo grafico', pt: 'Como ler este grafico'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -2203,14 +2320,34 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                             baselineY: 0,
                             gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxBarValue / 4),
                             borderData: FlBorderData(show: false),
+                            barTouchData: BarTouchData(
+                              enabled: true,
+                              touchTooltipData: BarTouchTooltipData(
+                                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                  final visible = widget.group.visibleMembers.firstWhereOrNull((entry) => entry.userId == memberEntries[group.x.toInt()].key);
+                                  if (visible == null) {
+                                    return null;
+                                  }
+                                  return BarTooltipItem('${visible.name}\n${money(rod.toY.abs(), widget.group.currency)}', const TextStyle(color: Colors.white, fontWeight: FontWeight.w700));
+                                },
+                              ),
+                            ),
                             titlesData: FlTitlesData(
                               rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                               topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 44)),
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 44,
+                                  getTitlesWidget: (value, meta) {
+                                    return Text(_compactAxisAmount(context, value), style: Theme.of(context).textTheme.labelSmall);
+                                  },
+                                ),
+                              ),
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
-                                  reservedSize: 34,
+                                  reservedSize: 40,
                                   getTitlesWidget: (value, meta) {
                                     final index = value.toInt();
                                     if (index < 0 || index >= memberEntries.length) {
@@ -2240,7 +2377,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                                   BarChartRodData(
                                     toY: entry.value,
                                     color: _global ? (entry.value >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC62828)) : const Color(0xFFE4572E),
-                                    width: 24,
+                                    width: 28,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ],
