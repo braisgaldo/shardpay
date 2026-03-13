@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ShardPay: Start Emulator",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\start-emulator.ps1"
+      ],
+      "isBackground": false,
+      "problemMatcher": []
+    },
+    {
+      "label": "ShardPay: Run Android",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\run-android.ps1"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "ShardPay: Analyze",
+      "type": "shell",
+      "command": "${workspaceFolder}\\tools\\flutter\\bin\\flutter.bat",
+      "args": [
+        "analyze",
+        "lib",
+        "test"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ShardPay: Test",
+      "type": "shell",
+      "command": "${workspaceFolder}\\tools\\flutter\\bin\\flutter.bat",
+      "args": [
+        "test"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+import '../models/app_models.dart';
+
+abstract class AppRepository {
+  bool get isFirebaseBacked;
+
+  Stream<AppUser?> authStateChanges();
+  Future<AppUser> signInWithEmail({
+    required String email,
+    required String password,
+    required bool register,
+    String? displayName,
+  });
+  Future<AppUser> signInWithGoogle();
+  Future<void> signOut();
+  Future<void> deleteUserProfile(AppUser user);
+  Stream<List<ExpenseGroup>> watchGroups(String userId);
+  Stream<ExpenseGroup?> watchGroup(String groupId);
+  Stream<List<AppNotification>> watchNotifications(String userId);
+  Future<ExpenseGroup?> previewInvite(String rawInvite);
+  Future<ExpenseGroup> createGroup({
+    required AppUser owner,
+    required String name,
+    required String iconKey,
+    required String currency,
+    required List<PendingGroupMember> pendingMembers,
+  });
+  Future<void> joinGroupByInvite({
+    required AppUser user,
+    required String rawInvite,
+    String? pendingMemberId,
+  });
+  Future<void> addExpense({required String groupId, required ExpenseRecord expense});
+  Future<void> updateExpense({required String groupId, required ExpenseRecord expense});
+  Future<void> deleteExpense({required String groupId, required String expenseId});
+  Future<void> upsertCategory({required String groupId, required ExpenseCategory category});
+  Future<void> updateGroupJoinSettings({
+    required String groupId,
+    required String name,
+    required String? description,
+    required String iconKey,
+    required List<PendingGroupMember> pendingMembers,
+    required bool allowAnonymousJoin,
+    required String currency,
+  });
+  Future<void> transferGroupOwnership({
+    required String groupId,
+    required String requesterId,
+    required String newOwnerId,
+  });
+  Future<void> setGroupClosed({
+    required String groupId,
+    required String requesterId,
+    required bool isClosed,
+  });
+  Future<void> leaveGroup({
+    required String groupId,
+    required String userId,
+  });
+  Future<void> deleteGroup({
+    required String groupId,
+    required String requesterId,
+  });
+  Future<void> updateItemAllocations({
+    required String groupId,
+    required String expenseId,
+    required String itemId,
+    required List<SplitAllocation> allocations,
+  });
+  Future<void> requestReimbursement({
+    required String groupId,
+    required String requesterId,
+    required String targetUserId,
+    required double amount,
+  });
+  Future<void> markNotificationRead({required String userId, required String notificationId});
+  Future<void> seedDemoData(AppUser user);
+}

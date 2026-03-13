@@ -1,0 +1,9 @@
+{
+  "project_id": "shardpay-brais-20260313",
+  "project_number": "574075077030",
+  "android_app_id": "1:574075077030:android:332d6824f6dab68cfa4f67",
+  "android_package_name": "com.propio.shardpay",
+  "storage_bucket": "shardpay-brais-20260313.firebasestorage.app",
+  "firestore_database": "(default)",
+  "firestore_location": "europe-west1"
+}

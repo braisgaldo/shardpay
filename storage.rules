@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberOfGroup(groupId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/groups/$(groupId))
+        && request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    match /receipts/{groupId}/{expenseId}/{fileName} {
+      allow read, write: if memberOfGroup(groupId);
+    }
+  }
+}

@@ -1,0 +1,72 @@
+# OS and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+.idea/
+.fleet/
+
+# VS Code workspace-local state
+.vscode/*.log
+
+# Dart and Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+doc/api/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# Local SDK and generated tooling
+tools/flutter/
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/key.properties
+*.jks
+*.keystore
+
+# iOS and macOS generated files
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/.symlinks/
+ios/Runner.xcworkspace/
+ios/Runner/GeneratedPluginRegistrant.*
+**/*.xcuserstate
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+
+# Firebase and local secrets
+config/firebase.local.json
+config/*.local.json
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+.firebaserc.local
+
+# Logs and reports
+*.log
+crashlytics-build.properties
+flutter_*.log
+
+# Symbolication and obfuscation
+app.*.symbols
+app.*.map.json
+
+# Misc build systems
+.build/
+.buildlog/
+.swiftpm/
+migrate_working_dir/
