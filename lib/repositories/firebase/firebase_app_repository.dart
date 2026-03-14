@@ -157,15 +157,19 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<List<ExpenseGroup>> watchGroups(String userId) {
-    return _streamWithAuthRetry(
-      () => _firestore
-          .collection('groups')
-          .where('memberIds', arrayContains: userId)
-          .snapshots()
-          .map((snapshot) => snapshot.docs
-              .map((doc) => ExpenseGroup.fromMap(doc.data()))
-              .toList()
-            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))),
+    return _watchCurrentUserScoped(
+      userId,
+      emptyValue: const <ExpenseGroup>[],
+      subscribe: () => _streamWithAuthRetry(
+        () => _firestore
+            .collection('groups')
+            .where('memberIds', arrayContains: userId)
+            .snapshots()
+            .map((snapshot) => snapshot.docs
+                .map((doc) => ExpenseGroup.fromMap(doc.data()))
+                .toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))),
+      ),
     );
   }
 
@@ -183,10 +187,14 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<List<AppNotification>> watchNotifications(String userId) {
-    return _streamWithAuthRetry(
-      () => _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-        return snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
-      }),
+    return _watchCurrentUserScoped(
+      userId,
+      emptyValue: const <AppNotification>[],
+      subscribe: () => _streamWithAuthRetry(
+        () => _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+          return snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
+        }),
+      ),
     );
   }
 
@@ -260,6 +268,9 @@ class FirebaseAppRepository implements AppRepository {
       throw StateError('El administrador debe indicar qué persona se está uniendo o activar el acceso libre por enlace.');
     }
 
+    final pendingUserId = selectedSlot == null ? null : 'pending:${selectedSlot.id}';
+    final migratedExpenses = pendingUserId == null ? group.expenses : _rebindPendingMemberReferences(group.expenses, pendingUserId, user.id);
+
     final updated = group.copyWith(
       memberIds: [...group.memberIds, user.id],
       members: [
@@ -267,6 +278,7 @@ class FirebaseAppRepository implements AppRepository {
         GroupMember(userId: user.id, name: selectedSlot?.name ?? user.displayName, email: user.email, photoUrl: user.photoUrl),
       ],
       pendingMembers: group.pendingMembers.where((entry) => entry.id != pendingMemberId).toList(),
+      expenses: migratedExpenses,
       updatedAt: DateTime.now(),
     );
 
@@ -274,6 +286,7 @@ class FirebaseAppRepository implements AppRepository {
       'memberIds': updated.memberIds,
       'members': updated.members.map((entry) => entry.toMap()).toList(),
       'pendingMembers': updated.pendingMembers.map((entry) => entry.toMap()).toList(),
+      'expenses': updated.expenses.map((entry) => entry.toMap()).toList(),
       'updatedAt': updated.updatedAt.toIso8601String(),
     });
   }
@@ -626,6 +639,19 @@ class FirebaseAppRepository implements AppRepository {
     return _firestore.collection('users').doc(userId).collection('notifications');
   }
 
+  Stream<T> _watchCurrentUserScoped<T>(
+    String userId, {
+    required T emptyValue,
+    required Stream<T> Function() subscribe,
+  }) {
+    return _auth.idTokenChanges().asyncExpand((firebaseUser) {
+      if (firebaseUser == null || firebaseUser.uid != userId) {
+        return Stream<T>.value(emptyValue);
+      }
+      return subscribe();
+    });
+  }
+
   Future<ExpenseGroup?> _resolveGroup(String groupId) async {
     final snapshot = await _firestore.collection('groups').doc(groupId).get();
     return snapshot.data() == null ? null : ExpenseGroup.fromMap(snapshot.data()!);
@@ -681,6 +707,46 @@ class FirebaseAppRepository implements AppRepository {
 
   bool _isPermissionDenied(Object error) {
     return error is FirebaseException && error.code == 'permission-denied';
+  }
+
+  List<ExpenseRecord> _rebindPendingMemberReferences(List<ExpenseRecord> expenses, String pendingUserId, String actualUserId) {
+    return expenses
+        .map(
+          (expense) => expense.copyWith(
+            payerId: expense.payerId == pendingUserId ? actualUserId : expense.payerId,
+            items: expense.items
+                .map(
+                  (item) => item.copyWith(
+                    allocations: _mergeAllocations(item.allocations, pendingUserId, actualUserId),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<SplitAllocation> _mergeAllocations(List<SplitAllocation> allocations, String pendingUserId, String actualUserId) {
+    final orderedUserIds = <String>[];
+    final percentagesByUser = <String, double>{};
+
+    for (final allocation in allocations) {
+      final targetUserId = allocation.userId == pendingUserId ? actualUserId : allocation.userId;
+      if (!percentagesByUser.containsKey(targetUserId)) {
+        orderedUserIds.add(targetUserId);
+      }
+      percentagesByUser[targetUserId] = (percentagesByUser[targetUserId] ?? 0) + allocation.percentage;
+    }
+
+    return orderedUserIds
+        .map(
+          (userId) => SplitAllocation(
+            userId: userId,
+            percentage: double.parse((percentagesByUser[userId] ?? 0).toStringAsFixed(2)),
+          ),
+        )
+        .where((allocation) => allocation.percentage > 0)
+        .toList(growable: false);
   }
 
   Future<bool> _refreshAuthSession() async {

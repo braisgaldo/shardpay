@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import 'package:image/image.dart' as img;
-import 'package:image_cropper/image_cropper.dart';
 
 import '../../app/app_text.dart';
 
@@ -23,7 +23,6 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   Uint8List? _previewBytes;
   ReceiptImageFilter _selectedFilter = ReceiptImageFilter.none;
   bool _isBusy = false;
-  int _previewRequestId = 0;
 
   @override
   void initState() {
@@ -33,17 +32,16 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   }
 
   Future<void> _refreshPreview() async {
-    final requestId = ++_previewRequestId;
     try {
       final bytes = await _buildPreviewBytes();
-      if (!mounted || requestId != _previewRequestId) {
+      if (!mounted) {
         return;
       }
       setState(() {
         _previewBytes = bytes;
       });
     } catch (_) {
-      if (!mounted || requestId != _previewRequestId) {
+      if (!mounted) {
         return;
       }
       _showEditorError(
@@ -53,11 +51,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   }
 
   Future<Uint8List> _buildPreviewBytes() async {
-    final rawBytes = await File(_workingPath).readAsBytes();
-    return compute(_buildReceiptPreviewBytes, {
-      'bytes': rawBytes,
-      'filterIndex': _selectedFilter.index,
-    });
+    return File(_workingPath).readAsBytes();
   }
 
   Future<void> _rotateImage(bool clockwise) async {
@@ -78,34 +72,20 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
     }
 
     try {
-      final cropped = await ImageCropper().cropImage(
-        sourcePath: _workingPath,
-        compressFormat: ImageCompressFormat.jpg,
-        compressQuality: 96,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
-            toolbarColor: Theme.of(context).colorScheme.surface,
-            toolbarWidgetColor: Theme.of(context).colorScheme.onSurface,
-            activeControlsWidgetColor: Theme.of(context).colorScheme.primary,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            hideBottomControls: false,
-            lockAspectRatio: false,
-          ),
-          IOSUiSettings(
-            title: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
-            doneButtonTitle: tr(context, es: 'Listo', en: 'Done', gl: 'Listo', fr: 'Pret', it: 'Fine', pt: 'Concluir'),
-            cancelButtonTitle: tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'),
-          ),
-        ],
+      if (!mounted) {
+        return;
+      }
+
+      final croppedPath = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => _ReceiptCropScreen(imagePath: _workingPath)),
       );
 
-      if (cropped == null || !mounted) {
+      if (croppedPath == null || !mounted) {
         return;
       }
 
       setState(() {
-        _workingPath = cropped.path;
+        _workingPath = croppedPath;
         _previewBytes = null;
       });
       await _refreshPreview();
@@ -165,6 +145,24 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _buildPreviewImage() {
+    if (_previewBytes == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    Widget image = Image.memory(_previewBytes!, fit: BoxFit.contain);
+    final matrix = _previewMatrixFor(_selectedFilter);
+    if (matrix != null) {
+      image = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: image);
+    }
+
+    return InteractiveViewer(
+      minScale: 0.8,
+      maxScale: 5,
+      child: image,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filterOptions = [
@@ -198,13 +196,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
-                    child: _previewBytes == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : InteractiveViewer(
-                            minScale: 0.8,
-                            maxScale: 5,
-                            child: Image.memory(_previewBytes!, fit: BoxFit.contain),
-                          ),
+                    child: _buildPreviewImage(),
                   ),
                 ),
               ),
@@ -252,13 +244,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                     selected: filter == _selectedFilter,
                     onSelected: _isBusy
                         ? null
-                        : (_) async {
-                            setState(() {
-                              _selectedFilter = filter;
-                              _previewBytes = null;
-                            });
-                            await _refreshPreview();
-                          },
+                        : (_) => setState(() => _selectedFilter = filter),
                   );
                 },
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -288,16 +274,25 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   }
 }
 
-Uint8List _buildReceiptPreviewBytes(Map<String, Object> payload) {
-  final bytes = payload['bytes']! as Uint8List;
-  final filter = ReceiptImageFilter.values[payload['filterIndex']! as int];
-  return _processReceiptBytes(bytes, filter, maxDimension: 1600);
-}
-
 Uint8List _buildReceiptExportBytes(Map<String, Object> payload) {
   final bytes = payload['bytes']! as Uint8List;
   final filter = ReceiptImageFilter.values[payload['filterIndex']! as int];
   return _processReceiptBytes(bytes, filter, maxDimension: 2400);
+}
+
+Uint8List _cropReceiptBytesFromRect(Map<String, Object> payload) {
+  final bytes = payload['bytes']! as Uint8List;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) {
+    return bytes;
+  }
+
+  final left = (payload['left']! as double).round().clamp(0, decoded.width - 1);
+  final top = (payload['top']! as double).round().clamp(0, decoded.height - 1);
+  final width = (payload['width']! as double).round().clamp(1, decoded.width - left);
+  final height = (payload['height']! as double).round().clamp(1, decoded.height - top);
+  final cropped = img.copyCrop(decoded, x: left, y: top, width: width, height: height);
+  return Uint8List.fromList(img.encodeJpg(cropped, quality: 96));
 }
 
 Uint8List _rotateReceiptBytes(Map<String, Object> payload) {
@@ -359,4 +354,136 @@ Uint8List _processReceiptBytes(Uint8List bytes, ReceiptImageFilter filter, {requ
   }
 
   return Uint8List.fromList(img.encodeJpg(working, quality: 94));
+}
+
+List<double>? _previewMatrixFor(ReceiptImageFilter filter) {
+  switch (filter) {
+    case ReceiptImageFilter.none:
+      return null;
+    case ReceiptImageFilter.grayscale:
+      return const [
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0, 0, 0, 1, 0,
+      ];
+    case ReceiptImageFilter.document:
+      return const [
+        1.5, 1.5, 1.5, 0, -180,
+        1.5, 1.5, 1.5, 0, -180,
+        1.5, 1.5, 1.5, 0, -180,
+        0, 0, 0, 1, 0,
+      ];
+    case ReceiptImageFilter.warm:
+      return const [
+        1.08, 0, 0, 0, 12,
+        0, 1.01, 0, 0, 4,
+        0, 0, 0.92, 0, -6,
+        0, 0, 0, 1, 0,
+      ];
+  }
+}
+
+class _ReceiptCropScreen extends StatefulWidget {
+  const _ReceiptCropScreen({required this.imagePath});
+
+  final String imagePath;
+
+  @override
+  State<_ReceiptCropScreen> createState() => _ReceiptCropScreenState();
+}
+
+class _ReceiptCropScreenState extends State<_ReceiptCropScreen> {
+  final ImageEditorController _editorController = ImageEditorController();
+  bool _isSaving = false;
+
+  Future<void> _applyCrop() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final cropRect = _editorController.getCropRect();
+    final state = _editorController.state;
+    if (cropRect == null || state == null) {
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final croppedBytes = await compute(_cropReceiptBytesFromRect, {
+        'bytes': state.rawImageData,
+        'left': cropRect.left,
+        'top': cropRect.top,
+        'width': cropRect.width,
+        'height': cropRect.height,
+      });
+      final file = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_receipt_crop_${DateTime.now().microsecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(croppedBytes, flush: true);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(file.path);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(tr(context, es: 'No se pudo recortar la foto del ticket.', en: 'The receipt photo could not be cropped.', gl: 'Non se puido recortar a foto do ticket.', fr: 'Impossible de recadrer la photo du ticket.', it: 'Impossibile ritagliare la foto dello scontrino.', pt: 'Nao foi possivel recortar a foto da fatura.')),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura')),
+        actions: [
+          TextButton(
+            onPressed: _isSaving ? null : _applyCrop,
+            child: Text(tr(context, es: 'Aplicar', en: 'Apply', gl: 'Aplicar', fr: 'Appliquer', it: 'Applica', pt: 'Aplicar')),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ExtendedImage.file(
+              File(widget.imagePath),
+              fit: BoxFit.contain,
+              mode: ExtendedImageMode.editor,
+              cacheRawData: true,
+              initEditorConfigHandler: (_) => EditorConfig(
+                maxScale: 8,
+                cropRectPadding: const EdgeInsets.all(20),
+                hitTestSize: 24,
+                lineColor: Colors.white,
+                cornerColor: colorScheme.primary,
+                editorMaskColorHandler: (context, pointerDown) => Colors.black.withValues(alpha: 0.42),
+                initCropRectType: InitCropRectType.imageRect,
+                controller: _editorController,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Text(
+              tr(context, es: 'Mueve las esquinas y haz zoom sobre la imagen para ajustar el recorte.', en: 'Drag the corners and zoom the image to adjust the crop.', gl: 'Move as esquinas e fai zoom sobre a imaxe para axustar o recorte.', fr: 'Deplacez les coins et zoomez sur l image pour ajuster le recadrage.', it: 'Sposta gli angoli e fai zoom sull immagine per regolare il ritaglio.', pt: 'Move os cantos e faz zoom na imagem para ajustar o recorte.'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

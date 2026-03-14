@@ -31,6 +31,7 @@ service cloud.firestore {
           'memberIds',
           'members',
           'pendingMembers',
+          'expenses',
           'updatedAt',
         ]);
     }
@@ -53,7 +54,7 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.auth.uid in request.resource.data.memberIds;
       allow get: if memberOfGroup() || signedIn();
-      allow list: if memberOfGroup() || canPreviewInvite();
+      allow list: if signedIn() || canPreviewInvite();
       allow delete: if memberOfGroup();
       allow update: if (memberOfGroup() && request.auth.uid in request.resource.data.memberIds) || joiningGroupByInvite();
     }

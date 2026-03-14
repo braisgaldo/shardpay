@@ -1827,7 +1827,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
   final planEdges = settlementEdges(group, activeAccountsOnly: false)
       .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
       .toList(growable: false);
-  final counterparties = planEdges
+  var counterparties = planEdges
       .map((edge) {
         final counterpartyId = edge.fromUserId == member.userId ? edge.toUserId : edge.fromUserId;
         final signedAmount = edge.fromUserId == member.userId ? -edge.amount : edge.amount;
@@ -1836,6 +1836,20 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
       .where((entry) => entry.member != null)
       .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
+
+  if (counterparties.isEmpty && balance.abs() > 0.009) {
+    counterparties = directBalancesForMember(group, member.userId)
+        .entries
+        .map(
+          (entry) => (
+            member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key),
+            amount: entry.value,
+          ),
+        )
+        .where((entry) => entry.member != null)
+        .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
+        .toList(growable: false);
+  }
 
   return showModalBottomSheet<void>(
     context: context,

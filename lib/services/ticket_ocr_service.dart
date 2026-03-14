@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -156,7 +157,6 @@ class TicketOcrService {
     final lines = rows.map((row) => row.fullText).where((line) => line.isNotEmpty).toList();
     final trimmedLines = _trimTrailingSummaryLines(lines);
     final items = <ExpenseItem>[];
-    final seenItems = <String>{};
     final detectedNames = <String>[];
 
     _logOcrLines(trimmedLines);
@@ -170,11 +170,6 @@ class TicketOcrService {
         if (candidateName != null) {
           detectedNames.add(candidateName);
         }
-        continue;
-      }
-
-      final seenKey = '${parsedItem.name}|${parsedItem.amount.toStringAsFixed(2)}';
-      if (!seenItems.add(seenKey)) {
         continue;
       }
 
@@ -196,7 +191,7 @@ class TicketOcrService {
 
     if (items.isEmpty && detectedNames.length >= 2 && fallbackTotal > 0) {
       final estimatedAmount = double.parse((fallbackTotal / detectedNames.length).toStringAsFixed(2));
-      for (final name in detectedNames.take(24)) {
+      for (final name in detectedNames) {
         items.add(
           ExpenseItem(
             id: _uuid.v4(),
@@ -282,8 +277,33 @@ class _OcrRow {
   final String fullText;
 
   double get centerY => fragments.fold<double>(0, (total, item) => total + item.centerY) / fragments.length;
+  double get top => fragments.fold<double>(fragments.first.top, (current, fragment) => math.min(current, fragment.top));
+  double get bottom => fragments.fold<double>(fragments.first.bottom, (current, fragment) => math.max(current, fragment.bottom));
+  double get height => bottom - top;
   String? get rightMostAmount => fragments.map((fragment) => fragment.text).where((text) => _extractLastAmount(text) != null).lastOrNull;
   bool get isAmountOnly => fragments.isNotEmpty && fragments.every((fragment) => _extractNameCandidate(fragment.text) == null) && rightMostAmount != null;
+}
+
+_OcrRow? _findNeighboringAmountRow(_OcrRow row, List<_OcrRow> allRows) {
+  final maxDistance = math.max(26, row.height * 1.8);
+  _OcrRow? bestCandidate;
+  var bestDistance = double.infinity;
+
+  for (final candidate in allRows) {
+    if (identical(candidate, row) || !candidate.isAmountOnly) {
+      continue;
+    }
+
+    final verticalDistance = (candidate.centerY - row.centerY).abs();
+    if (verticalDistance > maxDistance || verticalDistance >= bestDistance) {
+      continue;
+    }
+
+    bestCandidate = candidate;
+    bestDistance = verticalDistance;
+  }
+
+  return bestCandidate;
 }
 
 String _normalizeLine(String value) {
@@ -389,19 +409,12 @@ _ParsedReceiptItem? _parseRow(_OcrRow row, List<_OcrRow> allRows) {
     return null;
   }
 
-  _OcrRow? nextRow;
-  for (final candidate in allRows) {
-    if (candidate.centerY > row.centerY && (candidate.centerY - row.centerY) < 30 && candidate.isAmountOnly) {
-      nextRow = candidate;
-      break;
-    }
-  }
-  final nextAmount = nextRow?.rightMostAmount;
-  if (nextAmount == null) {
+  final neighboringAmount = _findNeighboringAmountRow(row, allRows)?.rightMostAmount;
+  if (neighboringAmount == null) {
     return null;
   }
 
-  final amount = _parseMoney(nextAmount);
+  final amount = _parseMoney(neighboringAmount);
   if (amount == null || amount <= 0) {
     return null;
   }

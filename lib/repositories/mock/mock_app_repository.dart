@@ -220,11 +220,13 @@ class MockAppRepository implements AppRepository {
     }
 
     final memberName = selectedSlot?.name ?? user.displayName;
+    final pendingUserId = selectedSlot == null ? null : 'pending:${selectedSlot.id}';
 
     _groups[group.id] = group.copyWith(
       memberIds: [...group.memberIds, user.id],
       members: [...group.members, GroupMember(userId: user.id, name: memberName, email: user.email, photoUrl: user.photoUrl)],
       pendingMembers: group.pendingMembers.where((entry) => entry.id != pendingMemberId).toList(),
+      expenses: pendingUserId == null ? group.expenses : _rebindPendingMemberReferences(group.expenses, pendingUserId, user.id),
       updatedAt: DateTime.now(),
     );
     _groupsController.add(null);
@@ -609,6 +611,46 @@ class MockAppRepository implements AppRepository {
     );
 
     _groupsController.add(null);
+  }
+
+  List<ExpenseRecord> _rebindPendingMemberReferences(List<ExpenseRecord> expenses, String pendingUserId, String actualUserId) {
+    return expenses
+        .map(
+          (expense) => expense.copyWith(
+            payerId: expense.payerId == pendingUserId ? actualUserId : expense.payerId,
+            items: expense.items
+                .map(
+                  (item) => item.copyWith(
+                    allocations: _mergeAllocations(item.allocations, pendingUserId, actualUserId),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<SplitAllocation> _mergeAllocations(List<SplitAllocation> allocations, String pendingUserId, String actualUserId) {
+    final orderedUserIds = <String>[];
+    final percentagesByUser = <String, double>{};
+
+    for (final allocation in allocations) {
+      final targetUserId = allocation.userId == pendingUserId ? actualUserId : allocation.userId;
+      if (!percentagesByUser.containsKey(targetUserId)) {
+        orderedUserIds.add(targetUserId);
+      }
+      percentagesByUser[targetUserId] = (percentagesByUser[targetUserId] ?? 0) + allocation.percentage;
+    }
+
+    return orderedUserIds
+        .map(
+          (userId) => SplitAllocation(
+            userId: userId,
+            percentage: double.parse((percentagesByUser[userId] ?? 0).toStringAsFixed(2)),
+          ),
+        )
+        .where((allocation) => allocation.percentage > 0)
+        .toList(growable: false);
   }
 
   void _ensureGroupOpen(ExpenseGroup group) {

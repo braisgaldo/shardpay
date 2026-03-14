@@ -24,15 +24,15 @@ final authStateProvider = StreamProvider<AppUser?>((ref) {
   return ref.watch(repositoryProvider).authStateChanges();
 });
 
-final groupsProvider = StreamProvider.family<List<ExpenseGroup>, String>((ref, userId) {
+final groupsProvider = StreamProvider.autoDispose.family<List<ExpenseGroup>, String>((ref, userId) {
   return ref.watch(repositoryProvider).watchGroups(userId);
 });
 
-final groupProvider = StreamProvider.family<ExpenseGroup?, String>((ref, groupId) {
+final groupProvider = StreamProvider.autoDispose.family<ExpenseGroup?, String>((ref, groupId) {
   return ref.watch(repositoryProvider).watchGroup(groupId);
 });
 
-final notificationsProvider = StreamProvider.family<List<AppNotification>, String>((ref, userId) {
+final notificationsProvider = StreamProvider.autoDispose.family<List<AppNotification>, String>((ref, userId) {
   return ref.watch(repositoryProvider).watchNotifications(userId);
 });
 

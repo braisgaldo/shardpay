@@ -767,7 +767,11 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       );
       if (mounted && context.mounted) {
         navigator.pop();
-        _showJoinToast(context, tr(context, es: 'Has entrado en ${group.name}.', en: 'You joined ${group.name}.', gl: 'Entraches en ${group.name}.', fr: 'Vous avez rejoint ${group.name}.', it: 'Sei entrato in ${group.name}.', pt: 'Entraste em ${group.name}.'));
+        _showJoinToast(
+          context,
+          tr(context, es: 'Has entrado en ${group.name}.', en: 'You joined ${group.name}.', gl: 'Entraches en ${group.name}.', fr: 'Vous avez rejoint ${group.name}.', it: 'Sei entrato in ${group.name}.', pt: 'Entraste em ${group.name}.'),
+          isError: false,
+        );
       }
     } catch (error) {
       if (mounted && context.mounted) {
@@ -789,7 +793,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     }
   }
 
-  void _showJoinToast(BuildContext context, String message) {
+  void _showJoinToast(BuildContext context, String message, {bool isError = true}) {
     FocusScope.of(context).unfocus();
     _joinToastTimer?.cancel();
     _removeJoinToast();
@@ -797,6 +801,8 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     final overlay = Overlay.of(this.context, rootOverlay: true);
     final mediaQuery = MediaQuery.of(this.context);
     final topOffset = mediaQuery.padding.top + 18;
+    final backgroundColor = isError ? const Color(0xFFF04438) : const Color(0xFF1E8E5A);
+    final icon = isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded;
     _joinToastEntry = OverlayEntry(
       builder: (overlayContext) {
         return Positioned(
@@ -813,7 +819,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                     constraints: const BoxConstraints(maxWidth: 520),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF04438),
+                        color: backgroundColor,
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Padding(
@@ -821,7 +827,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.error_outline_rounded, color: Colors.white),
+                            Icon(icon, color: Colors.white),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
