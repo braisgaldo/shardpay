@@ -2055,18 +2055,16 @@ class _BalancesTab extends StatelessWidget {
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
   final counterparties = settlementEdges(group, activeAccountsOnly: false)
       .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
-      .map(
-        (edge) {
-          final tappedMemberPays = edge.fromUserId == member.userId;
-          final counterpartyId = tappedMemberPays ? edge.toUserId : edge.fromUserId;
-          return (
-            userId: canonicalGroupUserId(group, counterpartyId),
-            member: resolveGroupMember(group, counterpartyId),
-            label: _groupParticipantName(context, group, counterpartyId),
-            amount: tappedMemberPays ? -edge.amount : edge.amount,
-          );
-        },
-        ),
+      .map((edge) {
+        final tappedMemberPays = edge.fromUserId == member.userId;
+        final counterpartyId = tappedMemberPays ? edge.toUserId : edge.fromUserId;
+        return (
+          userId: canonicalGroupUserId(group, counterpartyId),
+          member: resolveGroupMember(group, counterpartyId),
+          label: _groupParticipantName(context, group, counterpartyId),
+          amount: tappedMemberPays ? -edge.amount : edge.amount,
+        );
+      })
       .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
 
