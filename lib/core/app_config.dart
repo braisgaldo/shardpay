@@ -8,7 +8,7 @@ class AppConfig {
   static const firebaseStorageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
   static const firebaseAndroidAppId = String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
   static const firebaseIosAppId = String.fromEnvironment('FIREBASE_IOS_APP_ID');
-  static const firebaseIosBundleId = String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID', defaultValue: 'com.propio.shardpay');
+  static const firebaseIosBundleId = String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID', defaultValue: 'com.ghatostudio.shardpay');
   static const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
   static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
 

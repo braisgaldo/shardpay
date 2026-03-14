@@ -18,13 +18,28 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _nameController = TextEditingController();
   bool _register = false;
   bool _loading = false;
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_handlePasswordChanged);
+  }
 
   @override
   void dispose() {
+    _passwordController.removeListener(_handlePasswordChanged);
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
     super.dispose();
+  }
+
+  void _handlePasswordChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   @override
@@ -57,11 +72,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF101522), Color(0xFFE4572E)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: const Color(0xFFE4572E),
                         borderRadius: BorderRadius.circular(28),
                         boxShadow: const [
                           BoxShadow(
@@ -76,44 +87,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         children: [
                           Padding(
                             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(16),
                                   child: Image.asset(
                                     'assets/branding/app_icon.png',
-                                    width: 42,
-                                    height: 42,
+                                    width: 52,
+                                    height: 52,
                                     fit: BoxFit.cover,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'ShardPay',
-                                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    'ShardPay',
+                                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  tr(context, es: 'Comparte gastos con estilo: escanea tickets, reparte cada item con precisión y entra en tus grupos por QR o enlace.', en: 'Share expenses with style: scan receipts, split each item precisely, and join groups by QR or link.', gl: 'Comparte gastos con estilo: escanea tickets, reparte cada item con precision e entra nos teus grupos por QR ou ligazon.', fr: 'Partagez vos depenses avec style : scannez des tickets, repartissez chaque article et rejoignez vos groupes par QR ou lien.', it: 'Condividi le spese con stile: scansiona scontrini, dividi ogni voce con precisione ed entra nei gruppi tramite QR o link.', pt: 'Partilha despesas com estilo: digitaliza faturas, reparte cada item com precisao e entra nos grupos por QR ou link.'),
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: Colors.white.withValues(alpha: 0.86),
-                                    height: 1.35,
-                                  ),
-                                ),
-                                const SizedBox(height: 18),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _FeaturePill(label: tr(context, es: 'Grupos compartidos', en: 'Shared groups', gl: 'Grupos compartidos', fr: 'Groupes partages', it: 'Gruppi condivisi', pt: 'Grupos partilhados')),
-                                    _FeaturePill(label: tr(context, es: 'OCR del ticket', en: 'Receipt OCR', gl: 'OCR do ticket', fr: 'OCR du ticket', it: 'OCR scontrino', pt: 'OCR da fatura')),
-                                    _FeaturePill(label: tr(context, es: 'Reparto exacto', en: 'Exact split', gl: 'Reparto exacto', fr: 'Repartition exacte', it: 'Ripartizione precisa', pt: 'Divisao exata')),
-                                    _FeaturePill(label: tr(context, es: 'Invitaciones por QR', en: 'QR invites', gl: 'Convites por QR', fr: 'Invitations QR', it: 'Inviti QR', pt: 'Convites por QR')),
-                                  ],
                                 ),
                               ],
                             ),
@@ -226,8 +219,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                         decoration: InputDecoration(
                                           labelText: _register ? tr(context, es: 'Crea una contraseña', en: 'Create a password', gl: 'Crea un contrasinal', fr: 'Creez un mot de passe', it: 'Crea una password', pt: 'Cria uma palavra-passe') : tr(context, es: 'Tu contraseña', en: 'Your password', gl: 'O teu contrasinal', fr: 'Votre mot de passe', it: 'La tua password', pt: 'A tua palavra-passe'),
                                           hintText: _register ? tr(context, es: 'Mínimo 6 caracteres', en: 'At least 6 characters', gl: 'Minimo 6 caracteres', fr: 'Minimum 6 caracteres', it: 'Almeno 6 caratteri', pt: 'Minimo 6 caracteres') : tr(context, es: 'Escribe tu contraseña', en: 'Type your password', gl: 'Escribe o teu contrasinal', fr: 'Saisissez votre mot de passe', it: 'Digita la tua password', pt: 'Escreve a tua palavra-passe'),
+                                          suffixIcon: _passwordController.text.isEmpty
+                                              ? null
+                                              : IconButton(
+                                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                                  icon: Icon(_obscurePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                                                ),
                                         ),
-                                        obscureText: true,
+                                        obscureText: _obscurePassword,
                                         autofillHints: const [AutofillHints.password],
                                         validator: (value) {
                                           final password = value?.trim() ?? '';
@@ -344,24 +343,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       return tr(context, es: 'No se pudo contactar con el servidor. Revisa la conexión y vuelve a intentarlo.', en: 'Could not reach the server. Check your connection and try again.', gl: 'Non se puido contactar co servidor. Revisa a conexion e tenta de novo.', fr: 'Impossible de contacter le serveur. Verifiez votre connexion et reessayez.', it: 'Impossibile contattare il server. Controlla la connessione e riprova.', pt: 'Nao foi possivel contactar o servidor. Verifica a ligacao e tenta novamente.');
     }
     return tr(context, es: 'No se pudo iniciar sesión. $raw', en: 'Sign-in failed. $raw', gl: 'Non se puido iniciar sesion. $raw', fr: 'Connexion impossible. $raw', it: 'Accesso non riuscito. $raw', pt: 'Nao foi possivel iniciar sessao. $raw');
-  }
-}
-
-class _FeaturePill extends StatelessWidget {
-  const _FeaturePill({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label, style: const TextStyle(color: Colors.white)),
-    );
   }
 }
 

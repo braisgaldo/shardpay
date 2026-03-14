@@ -29,7 +29,7 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<AppUser?> authStateChanges() {
-    return _auth.authStateChanges().map((firebaseUser) {
+    return _auth.idTokenChanges().map((firebaseUser) {
       if (firebaseUser == null) {
         return null;
       }
@@ -157,31 +157,37 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<List<ExpenseGroup>> watchGroups(String userId) {
-    return _firestore
-        .collection('groups')
-        .where('memberIds', arrayContains: userId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ExpenseGroup.fromMap(doc.data()))
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)));
+    return _streamWithAuthRetry(
+      () => _firestore
+          .collection('groups')
+          .where('memberIds', arrayContains: userId)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => ExpenseGroup.fromMap(doc.data()))
+              .toList()
+            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))),
+    );
   }
 
   @override
   Stream<ExpenseGroup?> watchGroup(String groupId) {
-    return _firestore.collection('groups').doc(groupId).snapshots().map((doc) {
-      if (!doc.exists || doc.data() == null) {
-        return null;
-      }
-      return ExpenseGroup.fromMap(doc.data()!);
-    });
+    return _streamWithAuthRetry(
+      () => _firestore.collection('groups').doc(groupId).snapshots().map((doc) {
+        if (!doc.exists || doc.data() == null) {
+          return null;
+        }
+        return ExpenseGroup.fromMap(doc.data()!);
+      }),
+    );
   }
 
   @override
   Stream<List<AppNotification>> watchNotifications(String userId) {
-    return _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
-    });
+    return _streamWithAuthRetry(
+      () => _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+        return snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
+      }),
+    );
   }
 
   @override
@@ -208,6 +214,7 @@ class FirebaseAppRepository implements AppRepository {
       ownerId: owner.id,
       adminIds: const [],
       inviteCode: _uuid.v4().split('-').first.toUpperCase(),
+      joinPin: generateGroupJoinPin(),
       memberIds: [owner.id],
       members: [GroupMember(userId: owner.id, name: owner.displayName, email: owner.email, photoUrl: owner.photoUrl)],
       pendingMembers: pendingMembers,
@@ -227,6 +234,7 @@ class FirebaseAppRepository implements AppRepository {
   Future<void> joinGroupByInvite({
     required AppUser user,
     required String rawInvite,
+    required String joinPin,
     String? pendingMemberId,
   }) async {
     final group = await _resolveInvite(rawInvite);
@@ -239,6 +247,9 @@ class FirebaseAppRepository implements AppRepository {
     }
     if (group.isClosed) {
       throw StateError('El grupo está cerrado y no admite nuevas incorporaciones.');
+    }
+    if (group.joinPin != joinPin.trim()) {
+      throw StateError('El PIN del grupo no es correcto.');
     }
 
     PendingGroupMember? selectedSlot;
@@ -340,6 +351,7 @@ class FirebaseAppRepository implements AppRepository {
     required List<PendingGroupMember> pendingMembers,
     required bool allowAnonymousJoin,
     required String currency,
+    required String joinPin,
   }) async {
     final docRef = _firestore.collection('groups').doc(groupId);
     await _firestore.runTransaction((transaction) async {
@@ -355,6 +367,7 @@ class FirebaseAppRepository implements AppRepository {
           pendingMembers: pendingMembers,
           allowAnonymousJoin: allowAnonymousJoin,
           currency: currency,
+          joinPin: joinPin,
           updatedAt: DateTime.now(),
         ).toMap(),
       );
@@ -611,6 +624,72 @@ class FirebaseAppRepository implements AppRepository {
   Future<ExpenseGroup?> _resolveGroup(String groupId) async {
     final snapshot = await _firestore.collection('groups').doc(groupId).get();
     return snapshot.data() == null ? null : ExpenseGroup.fromMap(snapshot.data()!);
+  }
+
+  Stream<T> _streamWithAuthRetry<T>(Stream<T> Function() subscribe) {
+    const maxPermissionDeniedRetries = 2;
+    late final StreamController<T> controller;
+    StreamSubscription<T>? subscription;
+    var permissionDeniedRetries = 0;
+
+    Future<void> startListening() async {
+      await subscription?.cancel();
+      if (controller.isClosed) {
+        return;
+      }
+
+      subscription = subscribe().listen(
+        (event) {
+          permissionDeniedRetries = 0;
+          controller.add(event);
+        },
+        onError: (Object error, StackTrace stackTrace) async {
+          final shouldRetry = _isPermissionDenied(error) && permissionDeniedRetries < maxPermissionDeniedRetries;
+          if (shouldRetry) {
+            permissionDeniedRetries += 1;
+            final refreshed = await _refreshAuthSession();
+            if (refreshed && !controller.isClosed) {
+              await startListening();
+              return;
+            }
+          }
+
+          if (!controller.isClosed) {
+            controller.addError(error, stackTrace);
+          }
+        },
+        cancelOnError: false,
+      );
+    }
+
+    controller = StreamController<T>(
+      onListen: () {
+        unawaited(startListening());
+      },
+      onCancel: () async {
+        await subscription?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  bool _isPermissionDenied(Object error) {
+    return error is FirebaseException && error.code == 'permission-denied';
+  }
+
+  Future<bool> _refreshAuthSession() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      return false;
+    }
+
+    try {
+      await currentUser.getIdToken(true);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _ensureGroupOpen(ExpenseGroup group) {

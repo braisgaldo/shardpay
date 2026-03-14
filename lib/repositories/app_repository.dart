@@ -27,6 +27,7 @@ abstract class AppRepository {
   Future<void> joinGroupByInvite({
     required AppUser user,
     required String rawInvite,
+    required String joinPin,
     String? pendingMemberId,
   });
   Future<void> addExpense({required String groupId, required ExpenseRecord expense});
@@ -41,6 +42,7 @@ abstract class AppRepository {
     required List<PendingGroupMember> pendingMembers,
     required bool allowAnonymousJoin,
     required String currency,
+    required String joinPin,
   });
   Future<void> transferGroupOwnership({
     required String groupId,

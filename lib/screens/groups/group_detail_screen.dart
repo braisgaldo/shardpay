@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +16,7 @@ import '../../app/providers.dart';
 import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
+import '../receipts/receipt_image_editor_screen.dart';
 import '../../services/ticket_ocr_service.dart';
 import 'add_expense_screen.dart';
 
@@ -407,6 +409,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     final groupNameController = TextEditingController(text: group.name);
     final groupDescriptionController = TextEditingController(text: group.description ?? '');
     final nameController = TextEditingController();
+    final pinController = TextEditingController(text: group.joinPin);
     final pendingMembers = [...group.pendingMembers];
     var allowAnonymousJoin = group.allowAnonymousJoin;
     var currency = group.currency;
@@ -466,6 +469,28 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           );
                         }).toList(),
                         onChanged: (value) => setDialogState(() => iconKey = value ?? iconKey),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: pinController,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                              decoration: InputDecoration(
+                                labelText: tr(context, es: 'PIN de acceso al grupo', en: 'Group access PIN', gl: 'PIN de acceso ao grupo', fr: 'PIN d acces du groupe', it: 'PIN di accesso al gruppo', pt: 'PIN de acesso ao grupo'),
+                                helperText: tr(context, es: 'Se pedirá para entrar al grupo con enlace o código.', en: 'It will be required to join the group with link or code.', gl: 'Pedirase para entrar no grupo con ligazon ou codigo.', fr: 'Il sera requis pour rejoindre le groupe avec lien ou code.', it: 'Sarà richiesto per entrare nel gruppo con link o codice.', pt: 'Sera pedido para entrar no grupo com link ou codigo.'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.tonalIcon(
+                            onPressed: () => setDialogState(() => pinController.text = generateGroupJoinPin()),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: Text(tr(context, es: 'Aleatorio', en: 'Random', gl: 'Aleatorio', fr: 'Aleatoire', it: 'Casuale', pt: 'Aleatorio')),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 18),
                       Text(tr(context, es: 'Fechas del grupo', en: 'Group dates', gl: 'Datas do grupo', fr: 'Dates du groupe', it: 'Date del gruppo', pt: 'Datas do grupo'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
@@ -574,6 +599,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
                 FilledButton(
                   onPressed: () async {
+                    final normalizedPin = pinController.text.trim();
+                    if (normalizedPin.length != 4) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        SnackBar(content: Text(tr(context, es: 'El PIN del grupo debe tener 4 dígitos.', en: 'The group PIN must have 4 digits.', gl: 'O PIN do grupo debe ter 4 dixitos.', fr: 'Le PIN du groupe doit contenir 4 chiffres.', it: 'Il PIN del gruppo deve avere 4 cifre.', pt: 'O PIN do grupo deve ter 4 digitos.'))),
+                      );
+                      return;
+                    }
                     await ref.read(repositoryProvider).updateGroupJoinSettings(
                       groupId: group.id,
                       name: groupNameController.text.trim().isEmpty ? group.name : groupNameController.text.trim(),
@@ -582,6 +614,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       pendingMembers: pendingMembers,
                       allowAnonymousJoin: allowAnonymousJoin,
                       currency: currency,
+                      joinPin: normalizedPin,
                     );
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
@@ -798,12 +831,20 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       return;
     }
 
+    final editedImagePath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => ReceiptImageEditorScreen(imagePath: image.path)),
+    );
+
+    if (editedImagePath == null || !context.mounted) {
+      return;
+    }
+
     _showOcrProcessingDialog(context);
     await WidgetsBinding.instance.endOfFrame;
     await Future<void>.delayed(const Duration(milliseconds: 16));
     try {
       final parsed = await ref.read(ticketOcrServiceProvider).parseReceipt(
-            imagePath: image.path,
+            imagePath: editedImagePath,
             defaultAllocations: equalAllocations(group.selectableMembers),
             defaultCategoryId: 'food',
           );
@@ -1761,9 +1802,10 @@ class _BalancesTab extends StatelessWidget {
 }
 
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
-  final optimizedEdges = settlementEdges(group, activeAccountsOnly: false);
-  final counterparties = optimizedEdges
+  final planEdges = settlementEdges(group, activeAccountsOnly: false)
       .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
+      .toList(growable: false);
+  final counterparties = planEdges
       .map((edge) {
         final counterpartyId = edge.fromUserId == member.userId ? edge.toUserId : edge.fromUserId;
         final signedAmount = edge.fromUserId == member.userId ? -edge.amount : edge.amount;
@@ -1810,7 +1852,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                     ],
                     const SizedBox(height: 16),
                     if (counterparties.isEmpty)
-                      Text(tr(context, es: 'No queda ninguna transferencia pendiente en el plan mínimo de este grupo.', en: 'There is no pending transfer left in this group\'s minimum plan.', gl: 'Non queda ningunha transferencia pendente no plan minimo deste grupo.', fr: 'Il ne reste aucun transfert dans le plan minimal de ce groupe.', it: 'Non resta alcun trasferimento nel piano minimo di questo gruppo.', pt: 'Nao resta nenhuma transferencia pendente no plano minimo deste grupo.'))
+                      Text(tr(context, es: 'No queda ningún movimiento pendiente en el plan mínimo para esta persona.', en: 'There is no pending transfer for this person in the minimum plan.', gl: 'Non queda ningun movemento pendente no plan minimo para esta persoa.', fr: 'Il ne reste aucun mouvement en attente pour cette personne dans le plan minimum.', it: 'Non resta alcun movimento pendente per questa persona nel piano minimo.', pt: 'Nao resta nenhum movimento pendente para esta pessoa no plano minimo.'))
                     else
                       Expanded(
                         child: ListView.separated(

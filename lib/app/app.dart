@@ -33,7 +33,9 @@ class _ShardPayAppState extends ConsumerState<ShardPayApp> {
         await fcmService.dispose();
         return;
       }
-      await fcmService.initializeForUser(user);
+      try {
+        await fcmService.initializeForUser(user);
+      } catch (_) {}
     }, fireImmediately: true);
   }
 

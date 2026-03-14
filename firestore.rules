@@ -13,6 +13,28 @@ service cloud.firestore {
       return signedIn() && request.auth.uid in resource.data.memberIds;
     }
 
+    function canPreviewInvite() {
+      return signedIn() && request.query.limit != null && request.query.limit <= 1;
+    }
+
+    function joiningGroupByInvite() {
+      return signedIn()
+        && !memberOfGroup()
+        && resource.data.isClosed == false
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+        && request.resource.data.members.size() == resource.data.members.size() + 1
+        && request.resource.data.pendingMembers.size() >= resource.data.pendingMembers.size() - 1
+        && request.resource.data.inviteCode == resource.data.inviteCode
+        && request.resource.data.joinPin == resource.data.joinPin
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'memberIds',
+          'members',
+          'pendingMembers',
+          'updatedAt',
+        ]);
+    }
+
     function notificationGroup() {
       return get(/databases/$(database)/documents/groups/$(request.resource.data.groupId));
     }
@@ -30,8 +52,10 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
         && request.auth.uid in request.resource.data.memberIds;
-      allow read, delete: if memberOfGroup();
-      allow update: if memberOfGroup() && request.auth.uid in request.resource.data.memberIds;
+      allow get: if memberOfGroup() || signedIn();
+      allow list: if memberOfGroup() || canPreviewInvite();
+      allow delete: if memberOfGroup();
+      allow update: if (memberOfGroup() && request.auth.uid in request.resource.data.memberIds) || joiningGroupByInvite();
     }
 
     match /users/{userId} {

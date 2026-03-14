@@ -5,7 +5,7 @@
   "FIREBASE_STORAGE_BUCKET": "",
   "FIREBASE_ANDROID_APP_ID": "",
   "FIREBASE_IOS_APP_ID": "",
-  "FIREBASE_IOS_BUNDLE_ID": "com.propio.shardpay",
+  "FIREBASE_IOS_BUNDLE_ID": "com.ghatostudio.shardpay",
   "GOOGLE_SERVER_CLIENT_ID": "",
   "GOOGLE_IOS_CLIENT_ID": ""
 }

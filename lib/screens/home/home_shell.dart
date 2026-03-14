@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -193,13 +194,40 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
 
     _isConsumingInvite = true;
     try {
-      await _resolveJoinFlow(context, rawInvite);
+      final joinPin = await _promptJoinPin();
+      if (!mounted || joinPin == null) {
+        return;
+      }
+      await _resolveJoinFlow(context, rawInvite, joinPin);
     } finally {
       _isConsumingInvite = false;
       if (mounted) {
         widget.onInviteHandled(rawInvite);
       }
     }
+  }
+
+  Future<String?> _promptJoinPin() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(tr(context, es: 'PIN del grupo', en: 'Group PIN', gl: 'PIN do grupo', fr: 'PIN du groupe', it: 'PIN del gruppo', pt: 'PIN do grupo')),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+            decoration: InputDecoration(labelText: tr(context, es: 'Introduce el PIN de 4 dígitos', en: 'Enter the 4-digit PIN', gl: 'Introduce o PIN de 4 dixitos', fr: 'Saisissez le PIN a 4 chiffres', it: 'Inserisci il PIN a 4 cifre', pt: 'Introduz o PIN de 4 digitos')),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()), child: Text(tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar'))),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -620,6 +648,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
 
   Future<void> _showJoinGroupDialog(BuildContext context) async {
     final controller = TextEditingController();
+    final pinController = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -637,6 +666,13 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
               TextField(
                 controller: controller,
                 decoration: InputDecoration(labelText: tr(context, es: 'Pega enlace o código del grupo', en: 'Paste group link or code', gl: 'Pega a ligazon ou o codigo do grupo', fr: 'Collez le lien ou code du groupe', it: 'Incolla link o codice del gruppo', pt: 'Cola o link ou codigo do grupo')),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pinController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                decoration: InputDecoration(labelText: tr(context, es: 'PIN del grupo (4 dígitos)', en: 'Group PIN (4 digits)', gl: 'PIN do grupo (4 dixitos)', fr: 'PIN du groupe (4 chiffres)', it: 'PIN del gruppo (4 cifre)', pt: 'PIN do grupo (4 digitos)')),
               ),
               const SizedBox(height: 12),
               Row(
@@ -658,7 +694,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () async => _resolveJoinFlow(sheetContext, controller.text.trim()),
+                      onPressed: () async => _resolveJoinFlow(sheetContext, controller.text.trim(), pinController.text.trim()),
                       child: Text(tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar')),
                     ),
                   ),
@@ -671,17 +707,46 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     );
   }
 
-  Future<void> _resolveJoinFlow(BuildContext context, String rawInvite) async {
+  Future<void> _resolveJoinFlow(BuildContext context, String rawInvite, String joinPin) async {
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.of(this.context);
     try {
+      if (rawInvite.trim().isEmpty) {
+        _showJoinToast(
+          context,
+          messenger,
+          tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+        );
+        return;
+      }
+      if (joinPin.length != 4) {
+        _showJoinToast(
+          context,
+          messenger,
+          tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
+        );
+        return;
+      }
       final repository = ref.read(repositoryProvider);
       final group = await repository.previewInvite(rawInvite);
       if (!context.mounted) {
         return;
       }
       if (group == null) {
-        throw StateError(tr(context, es: 'No se encontró ningún grupo con esa invitación.', en: 'No group was found for that invite.', gl: 'Non se atopou ningun grupo con ese convite.', fr: 'Aucun groupe trouve pour cette invitation.', it: 'Nessun gruppo trovato per questo invito.', pt: 'Nenhum grupo encontrado para esse convite.'));
+        _showJoinToast(
+          context,
+          messenger,
+          tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+        );
+        return;
+      }
+      if (group.joinPin != joinPin.trim()) {
+        _showJoinToast(
+          context,
+          messenger,
+          tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
+        );
+        return;
       }
 
       String? selectedPendingMemberId;
@@ -698,6 +763,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       await repository.joinGroupByInvite(
         user: widget.user,
         rawInvite: rawInvite,
+        joinPin: joinPin,
         pendingMemberId: selectedPendingMemberId,
       );
       if (mounted && context.mounted) {
@@ -706,61 +772,76 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       }
     } catch (error) {
       if (mounted && context.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+        final message = error.toString().replaceFirst('Bad state: ', '');
+        if (message.contains('PIN del grupo no es correcto')) {
+          _showJoinToast(
+            context,
+            messenger,
+            tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
+          );
+        } else if (message.contains('No se encontró ningún grupo') || message.contains('Invitación no encontrada')) {
+          _showJoinToast(
+            context,
+            messenger,
+            tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+          );
+        } else {
+          _showJoinToast(context, messenger, message);
+        }
       }
     }
   }
 
+  void _showJoinToast(BuildContext context, ScaffoldMessengerState messenger, String message) {
+    FocusScope.of(context).unfocus();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+  }
+
   Future<String?> _pickInviteIdentity(ExpenseGroup group) {
-    String? selected = group.allowAnonymousJoin ? '__self__' : null;
     return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tr(sheetContext, es: '¿Quién eres en ${group.name}?', en: 'Who are you in ${group.name}?', gl: 'Quen es en ${group.name}?', fr: 'Qui etes-vous dans ${group.name} ?', it: 'Chi sei in ${group.name}?', pt: 'Quem es em ${group.name}?'), style: Theme.of(sheetContext).textTheme.headlineSmall),
-                  const SizedBox(height: 8),
-                  Text(
-                    group.allowAnonymousJoin
-                        ? tr(sheetContext, es: 'Puedes entrar con tu perfil actual o elegir uno de los nombres preparados por el administrador.', en: 'You can join with your current profile or pick one of the prepared names.', gl: 'Podes entrar co teu perfil actual ou escoller un dos nomes preparados pola persoa administradora.', fr: 'Vous pouvez entrer avec votre profil actuel ou choisir un des noms prepares.', it: 'Puoi entrare con il tuo profilo attuale o scegliere uno dei nomi preparati.', pt: 'Podes entrar com o teu perfil atual ou escolher um dos nomes preparados.')
-                        : tr(sheetContext, es: 'Elige uno de los nombres que preparó el administrador para vincular tu acceso.', en: 'Choose one of the names prepared by the admin to link your access.', gl: 'Escolle un dos nomes que preparou a persoa administradora para vincular o acceso.', fr: 'Choisissez un des noms prepares par l administrateur.', it: 'Scegli uno dei nomi preparati dall amministratore.', pt: 'Escolhe um dos nomes preparados pela administracao para associar o acesso.'),
-                  ),
-                  const SizedBox(height: 16),
-                  if (group.allowAnonymousJoin)
-                    _IdentityTile(
-                      selected: selected == '__self__',
-                      title: Text(tr(sheetContext, es: 'Entrar como ${widget.user.displayName}', en: 'Join as ${widget.user.displayName}', gl: 'Entrar como ${widget.user.displayName}', fr: 'Entrer comme ${widget.user.displayName}', it: 'Entra come ${widget.user.displayName}', pt: 'Entrar como ${widget.user.displayName}')),
-                      onTap: () => setModalState(() => selected = '__self__'),
-                    ),
-                  ...group.pendingMembers.map((member) {
-                    return _IdentityTile(
-                      selected: selected == member.id,
-                      title: Text(member.name),
-                      subtitle: Text(tr(sheetContext, es: 'Nombre preparado por el administrador', en: 'Prepared by the admin', gl: 'Nome preparado pola administracion', fr: 'Nom prepare par l administrateur', it: 'Nome preparato dall amministratore', pt: 'Nome preparado pela administracao')),
-                      onTap: () => setModalState(() => selected = member.id),
-                    );
-                  }),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: selected == null
-                          ? null
-                          : () => Navigator.of(sheetContext).pop(selected == '__self__' ? null : selected),
-                      child: Text(tr(sheetContext, es: 'Usar esta identidad', en: 'Use this identity', gl: 'Usar esta identidade', fr: 'Utiliser cette identite', it: 'Usa questa identita', pt: 'Usar esta identidade')),
-                    ),
-                  ),
-                ],
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr(sheetContext, es: '¿Quién eres en ${group.name}?', en: 'Who are you in ${group.name}?', gl: 'Quen es en ${group.name}?', fr: 'Qui etes-vous dans ${group.name} ?', it: 'Chi sei in ${group.name}?', pt: 'Quem es em ${group.name}?'), style: Theme.of(sheetContext).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                group.allowAnonymousJoin
+                    ? tr(sheetContext, es: 'Toca una opción y entrarás directamente al grupo.', en: 'Tap an option and you will join the group immediately.', gl: 'Toca unha opcion e entraras directamente no grupo.', fr: 'Touchez une option et vous rejoindrez directement le groupe.', it: 'Tocca un opzione ed entrerai subito nel gruppo.', pt: 'Toca numa opcao e entraras diretamente no grupo.')
+                    : tr(sheetContext, es: 'Toca el nombre que preparó el administrador para vincular tu acceso.', en: 'Tap the name prepared by the admin to link your access.', gl: 'Toca o nome que preparou a persoa administradora para vincular o acceso.', fr: 'Touchez le nom prepare par l administrateur pour lier votre acces.', it: 'Tocca il nome preparato dall amministratore per collegare il tuo accesso.', pt: 'Toca no nome preparado pela administracao para associar o acesso.'),
               ),
-            );
-          },
+              const SizedBox(height: 16),
+              if (group.allowAnonymousJoin)
+                _IdentityTile(
+                  selected: false,
+                  title: Text(tr(sheetContext, es: 'Entrar como ${widget.user.displayName}', en: 'Join as ${widget.user.displayName}', gl: 'Entrar como ${widget.user.displayName}', fr: 'Entrer comme ${widget.user.displayName}', it: 'Entra come ${widget.user.displayName}', pt: 'Entrar como ${widget.user.displayName}')),
+                  onTap: () => Navigator.of(sheetContext).pop(null),
+                ),
+              ...group.pendingMembers.map((member) {
+                return _IdentityTile(
+                  selected: false,
+                  title: Text(member.name),
+                  subtitle: Text(tr(sheetContext, es: 'Nombre preparado por el administrador', en: 'Prepared by the admin', gl: 'Nome preparado pola administracion', fr: 'Nom prepare par l administrateur', it: 'Nome preparato dall amministratore', pt: 'Nome preparado pela administracao')),
+                  onTap: () => Navigator.of(sheetContext).pop(member.id),
+                );
+              }),
+            ],
+          ),
         );
       },
     );

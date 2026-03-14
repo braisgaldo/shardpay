@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 DateTime _toDateTime(dynamic value) {
@@ -11,6 +13,27 @@ DateTime _toDateTime(dynamic value) {
     return DateTime.tryParse(value) ?? DateTime.now();
   }
   return DateTime.now();
+}
+
+String normalizeGroupJoinPin(String? value, {String? fallbackSeed}) {
+  final digitsOnly = (value ?? '').replaceAll(RegExp(r'\D'), '');
+  if (digitsOnly.length == 4) {
+    return digitsOnly;
+  }
+  return _legacyGroupJoinPin(fallbackSeed ?? 'shardpay');
+}
+
+String generateGroupJoinPin() {
+  final pin = math.Random.secure().nextInt(10000);
+  return pin.toString().padLeft(4, '0');
+}
+
+String _legacyGroupJoinPin(String seed) {
+  var hash = 0;
+  for (final codeUnit in seed.codeUnits) {
+    hash = ((hash * 31) + codeUnit) % 10000;
+  }
+  return hash.toString().padLeft(4, '0');
 }
 
 class AppUser {
@@ -433,6 +456,7 @@ class ExpenseGroup {
     required this.ownerId,
     required this.adminIds,
     required this.inviteCode,
+    required this.joinPin,
     required this.memberIds,
     required this.members,
     required this.pendingMembers,
@@ -453,6 +477,7 @@ class ExpenseGroup {
   final String ownerId;
   final List<String> adminIds;
   final String inviteCode;
+  final String joinPin;
   final List<String> memberIds;
   final List<GroupMember> members;
   final List<PendingGroupMember> pendingMembers;
@@ -506,6 +531,7 @@ class ExpenseGroup {
         'ownerId': ownerId,
         'adminIds': adminIds,
         'inviteCode': inviteCode,
+        'joinPin': joinPin,
         'memberIds': memberIds,
         'members': members.map((entry) => entry.toMap()).toList(),
         'pendingMembers': pendingMembers.map((entry) => entry.toMap()).toList(),
@@ -535,6 +561,7 @@ class ExpenseGroup {
       ownerId: map['ownerId'] as String? ?? '',
       adminIds: rawAdminIds.map((entry) => entry.toString()).where((entry) => entry != (map['ownerId'] as String? ?? '')).toList(),
       inviteCode: map['inviteCode'] as String? ?? '',
+      joinPin: normalizeGroupJoinPin(map['joinPin'] as String?, fallbackSeed: (map['id'] as String?) ?? (map['inviteCode'] as String?) ?? 'shardpay'),
       memberIds: rawMemberIds.map((entry) => entry.toString()).toList(),
       members: rawMembers.map((entry) => GroupMember.fromMap(Map<String, dynamic>.from(entry as Map))).toList(),
       pendingMembers: rawPendingMembers.map((entry) => PendingGroupMember.fromMap(Map<String, dynamic>.from(entry as Map))).toList(),
@@ -557,6 +584,7 @@ class ExpenseGroup {
     String? ownerId,
     List<String>? adminIds,
     String? inviteCode,
+    String? joinPin,
     List<String>? memberIds,
     List<GroupMember>? members,
     List<PendingGroupMember>? pendingMembers,
@@ -577,6 +605,7 @@ class ExpenseGroup {
       ownerId: ownerId ?? this.ownerId,
       adminIds: adminIds ?? this.adminIds,
       inviteCode: inviteCode ?? this.inviteCode,
+      joinPin: joinPin ?? this.joinPin,
       memberIds: memberIds ?? this.memberIds,
       members: members ?? this.members,
       pendingMembers: pendingMembers ?? this.pendingMembers,

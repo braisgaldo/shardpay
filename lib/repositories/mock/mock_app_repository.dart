@@ -173,6 +173,7 @@ class MockAppRepository implements AppRepository {
       ownerId: owner.id,
       adminIds: const [],
       inviteCode: _uuid.v4().split('-').first.toUpperCase(),
+      joinPin: generateGroupJoinPin(),
       memberIds: [owner.id],
       members: [GroupMember(userId: owner.id, name: owner.displayName, email: owner.email, photoUrl: owner.photoUrl)],
       pendingMembers: pendingMembers,
@@ -192,6 +193,7 @@ class MockAppRepository implements AppRepository {
   Future<void> joinGroupByInvite({
     required AppUser user,
     required String rawInvite,
+    required String joinPin,
     String? pendingMemberId,
   }) async {
     final group = await previewInvite(rawInvite);
@@ -201,6 +203,9 @@ class MockAppRepository implements AppRepository {
     }
     if (group.isClosed) {
       throw StateError('El grupo está cerrado y no admite nuevas incorporaciones.');
+    }
+    if (group.joinPin != joinPin.trim()) {
+      throw StateError('El PIN del grupo no es correcto.');
     }
     if (group.memberIds.contains(user.id)) {
       return;
@@ -283,6 +288,7 @@ class MockAppRepository implements AppRepository {
     required List<PendingGroupMember> pendingMembers,
     required bool allowAnonymousJoin,
     required String currency,
+    required String joinPin,
   }) async {
     final group = _groups[groupId]!;
     _ensureGroupOpen(group);
@@ -293,6 +299,7 @@ class MockAppRepository implements AppRepository {
       pendingMembers: pendingMembers,
       allowAnonymousJoin: allowAnonymousJoin,
       currency: currency,
+      joinPin: joinPin,
       updatedAt: DateTime.now(),
     );
     _groupsController.add(null);
@@ -546,6 +553,7 @@ class MockAppRepository implements AppRepository {
       ownerId: user.id,
       adminIds: const [],
       inviteCode: 'ROAD24',
+      joinPin: '2401',
       memberIds: squad.map((member) => member.userId).toList(),
       members: squad,
       pendingMembers: const [
@@ -571,6 +579,7 @@ class MockAppRepository implements AppRepository {
       ownerId: user.id,
       adminIds: const [],
       inviteCode: 'PISO777',
+      joinPin: '7710',
       memberIds: [user.id, partner.userId],
       members: [squad.first, partner],
       pendingMembers: const [],

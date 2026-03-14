@@ -147,98 +147,57 @@ List<SettlementEdge> settlementEdges(ExpenseGroup group, {bool activeAccountsOnl
       ? group.activeMembers.map((member) => member.userId).where((id) => !id.startsWith('pending:')).toSet()
       : balances.keys.toSet();
 
-  final balanceEntries = balances.entries
+  final creditors = balances.entries
       .where((entry) => eligibleIds.contains(entry.key) && entry.value.abs() > 0.009)
-      .map((entry) => MapEntry(entry.key, _toCents(entry.value)))
-      .toList();
+      .map((entry) => _UserBalanceInCents(userId: entry.key, amountInCents: _toCents(entry.value)))
+      .where((entry) => entry.amountInCents > 0)
+      .toList()
+    ..sort((left, right) => right.amountInCents.compareTo(left.amountInCents));
 
-  if (balanceEntries.isEmpty) {
+  final debtors = balances.entries
+      .where((entry) => eligibleIds.contains(entry.key) && entry.value.abs() > 0.009)
+      .map((entry) => _UserBalanceInCents(userId: entry.key, amountInCents: _toCents(entry.value)))
+      .where((entry) => entry.amountInCents < 0)
+      .map((entry) => _UserBalanceInCents(userId: entry.userId, amountInCents: entry.amountInCents.abs()))
+      .toList()
+    ..sort((left, right) => right.amountInCents.compareTo(left.amountInCents));
+
+  if (creditors.isEmpty || debtors.isEmpty) {
     return const [];
   }
 
-  final userIds = balanceEntries.map((entry) => entry.key).toList(growable: false);
-  final cents = balanceEntries.map((entry) => entry.value).toList(growable: false);
-  final solution = _settlementEdgesExact(cents, userIds, 0);
-  return solution
-      .map(
-        (entry) => SettlementEdge(
-          fromUserId: entry.fromUserId,
-          toUserId: entry.toUserId,
-          amount: entry.amountInCents / 100,
-        ),
-      )
-      .toList(growable: false);
+  final edges = <SettlementEdge>[];
+  var debtorIndex = 0;
+  var creditorIndex = 0;
+
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    final debtor = debtors[debtorIndex];
+    final creditor = creditors[creditorIndex];
+    final transferInCents = math.min(debtor.amountInCents, creditor.amountInCents);
+    if (transferInCents > 0) {
+      edges.add(SettlementEdge(fromUserId: debtor.userId, toUserId: creditor.userId, amount: transferInCents / 100));
+      debtor.amountInCents -= transferInCents;
+      creditor.amountInCents -= transferInCents;
+    }
+
+    if (debtor.amountInCents == 0) {
+      debtorIndex += 1;
+    }
+    if (creditor.amountInCents == 0) {
+      creditorIndex += 1;
+    }
+  }
+
+  return edges;
 }
 
 int _toCents(double amount) => (amount * 100).round();
 
-class _SettlementEdgeInCents {
-  const _SettlementEdgeInCents({
-    required this.fromUserId,
-    required this.toUserId,
-    required this.amountInCents,
-  });
+class _UserBalanceInCents {
+  _UserBalanceInCents({required this.userId, required this.amountInCents});
 
-  final String fromUserId;
-  final String toUserId;
-  final int amountInCents;
-}
-
-List<_SettlementEdgeInCents> _settlementEdgesExact(List<int> balances, List<String> userIds, int startIndex) {
-  var firstOpenIndex = startIndex;
-  while (firstOpenIndex < balances.length && balances[firstOpenIndex] == 0) {
-    firstOpenIndex += 1;
-  }
-
-  if (firstOpenIndex >= balances.length) {
-    return const [];
-  }
-
-  List<_SettlementEdgeInCents>? best;
-  final seen = <int>{};
-
-  for (var index = firstOpenIndex + 1; index < balances.length; index++) {
-    final first = balances[firstOpenIndex];
-    final candidate = balances[index];
-    if (first == 0 || candidate == 0 || first.sign == candidate.sign || !seen.add(candidate)) {
-      continue;
-    }
-
-    final transferInCents = math.min(first.abs(), candidate.abs());
-    final nextBalances = List<int>.from(balances);
-    _SettlementEdgeInCents currentEdge;
-
-    if (first < 0) {
-      nextBalances[firstOpenIndex] += transferInCents;
-      nextBalances[index] -= transferInCents;
-      currentEdge = _SettlementEdgeInCents(
-        fromUserId: userIds[firstOpenIndex],
-        toUserId: userIds[index],
-        amountInCents: transferInCents,
-      );
-    } else {
-      nextBalances[firstOpenIndex] -= transferInCents;
-      nextBalances[index] += transferInCents;
-      currentEdge = _SettlementEdgeInCents(
-        fromUserId: userIds[index],
-        toUserId: userIds[firstOpenIndex],
-        amountInCents: transferInCents,
-      );
-    }
-
-    final nextStartIndex = nextBalances[firstOpenIndex] == 0 ? firstOpenIndex + 1 : firstOpenIndex;
-    final tail = _settlementEdgesExact(nextBalances, userIds, nextStartIndex);
-    final candidateSolution = [currentEdge, ...tail];
-
-    if (best == null || candidateSolution.length < best.length) {
-      best = candidateSolution;
-      if (best.length == 1) {
-        break;
-      }
-    }
-  }
-
-  return best ?? const [];
+  final String userId;
+  int amountInCents;
 }
 
 extension on Map<String, double> {
