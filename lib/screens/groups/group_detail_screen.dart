@@ -279,7 +279,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onOcrCamera: () => _importTicket(context, group, ImageSource.camera),
                   onOcrGallery: () => _importTicket(context, group, ImageSource.gallery),
                   groupClosed: group.isClosed,
-                  onManagePeople: group.isAdmin(widget.user.id) ? () => _showJoinSettingsDialog(context, group) : null,
+                  onManagePeople: () => _showJoinSettingsDialog(context, group),
                 ),
                 _BalancesTab(group: group, balances: balances, currentUserId: widget.user.id),
                 _ExpensesTab(
@@ -411,7 +411,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     final groupDescriptionController = TextEditingController(text: group.description ?? '');
     final nameController = TextEditingController();
     final pinController = TextEditingController(text: group.joinPin);
+    final canManageAll = group.isAdmin(widget.user.id);
+    final members = group.members.map((entry) => entry.copyWith()).toList(growable: true);
     final pendingMembers = [...group.pendingMembers];
+    final memberNameControllers = {for (final member in members) member.userId: TextEditingController(text: member.name)};
     var allowAnonymousJoin = group.allowAnonymousJoin;
     var currency = group.currency;
     var iconKey = group.iconKey;
@@ -438,6 +441,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: groupNameController,
+                        enabled: canManageAll,
                         decoration: InputDecoration(
                           labelText: tr(context, es: 'Nombre del grupo', en: 'Group name', gl: 'Nome do grupo', fr: 'Nom du groupe', it: 'Nome del gruppo', pt: 'Nome do grupo'),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -446,6 +450,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: groupDescriptionController,
+                        enabled: canManageAll,
                         maxLines: 2,
                         decoration: InputDecoration(
                           labelText: tr(context, es: 'Descripción', en: 'Description', gl: 'Descricion', fr: 'Description', it: 'Descrizione', pt: 'Descricao'),
@@ -469,7 +474,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             ),
                           );
                         }).toList(),
-                        onChanged: (value) => setDialogState(() => iconKey = value ?? iconKey),
+                        onChanged: canManageAll ? (value) => setDialogState(() => iconKey = value ?? iconKey) : null,
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -477,6 +482,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           Expanded(
                             child: TextField(
                               controller: pinController,
+                              enabled: canManageAll,
                               keyboardType: TextInputType.number,
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
                               decoration: InputDecoration(
@@ -487,7 +493,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                           const SizedBox(width: 12),
                           FilledButton.tonalIcon(
-                            onPressed: () => setDialogState(() => pinController.text = generateGroupJoinPin()),
+                            onPressed: canManageAll ? () => setDialogState(() => pinController.text = generateGroupJoinPin()) : null,
                             icon: const Icon(Icons.refresh_rounded),
                             label: Text(tr(context, es: 'Aleatorio', en: 'Random', gl: 'Aleatorio', fr: 'Aleatoire', it: 'Casuale', pt: 'Aleatorio')),
                           ),
@@ -499,6 +505,31 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       _DateLine(label: tr(context, es: 'Creado', en: 'Created', gl: 'Creado', fr: 'Cree', it: 'Creato', pt: 'Criado'), value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.createdAt)),
                       _DateLine(label: tr(context, es: 'Última modificación', en: 'Last update', gl: 'Ultima modificacion', fr: 'Derniere mise a jour', it: 'Ultimo aggiornamento', pt: 'Ultima atualizacao'), value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.updatedAt)),
                       _DateLine(label: tr(context, es: 'Cierre', en: 'Closed at', gl: 'Peche', fr: 'Fermeture', it: 'Chiusura', pt: 'Fecho'), value: group.closedAt == null ? tr(context, es: 'Sin cierre activo', en: 'No active closure', gl: 'Sen peche activo', fr: 'Aucune fermeture active', it: 'Nessuna chiusura attiva', pt: 'Sem fecho ativo') : DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.closedAt!)),
+                      const SizedBox(height: 18),
+                      Text(
+                        canManageAll
+                            ? tr(context, es: 'Alias de miembros', en: 'Member aliases', gl: 'Alias dos membros', fr: 'Alias des membres', it: 'Alias dei membri', pt: 'Alias dos membros')
+                            : tr(context, es: 'Tu alias en este grupo', en: 'Your alias in this group', gl: 'O teu alias neste grupo', fr: 'Votre alias dans ce groupe', it: 'Il tuo alias in questo gruppo', pt: 'O teu alias neste grupo'),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      ...sortedMembersByName(members).where((member) => canManageAll || member.userId == widget.user.id).map((member) {
+                        final isEditable = canManageAll || member.userId == widget.user.id;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: TextField(
+                            controller: memberNameControllers[member.userId],
+                            enabled: isEditable,
+                            decoration: InputDecoration(
+                              labelText: canManageAll
+                                  ? '${tr(context, es: 'Alias de', en: 'Alias for', gl: 'Alias de', fr: 'Alias de', it: 'Alias di', pt: 'Alias de')} ${member.email.isEmpty ? member.name : member.email}'
+                                  : tr(context, es: 'Tu alias', en: 'Your alias', gl: 'O teu alias', fr: 'Votre alias', it: 'Il tuo alias', pt: 'O teu alias'),
+                              floatingLabelBehavior: FloatingLabelBehavior.always,
+                            ),
+                          ),
+                        );
+                      }),
+                      if (canManageAll) ...[
                       const SizedBox(height: 18),
                       Row(
                         children: [
@@ -523,7 +554,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         value: allowAnonymousJoin,
-                        onChanged: (value) => setDialogState(() => allowAnonymousJoin = value),
+                        onChanged: canManageAll ? (value) => setDialogState(() => allowAnonymousJoin = value) : null,
                         title: Row(
                           children: [
                             Expanded(
@@ -548,7 +579,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         initialValue: currency,
                         decoration: InputDecoration(labelText: tr(context, es: 'Divisa del grupo', en: 'Group currency', gl: 'Divisa do grupo', fr: 'Devise du groupe', it: 'Valuta del gruppo', pt: 'Moeda do grupo')),
                         items: currencyOptions.map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}'))).toList(),
-                        onChanged: (value) => setDialogState(() => currency = value ?? currency),
+                        onChanged: canManageAll ? (value) => setDialogState(() => currency = value ?? currency) : null,
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -556,6 +587,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           Expanded(
                             child: TextField(
                               controller: nameController,
+                              enabled: canManageAll,
                               decoration: InputDecoration(
                                 labelText: tr(context, es: 'Añadir participante', en: 'Add participant', gl: 'Engadir participante', fr: 'Ajouter un participant', it: 'Aggiungi partecipante', pt: 'Adicionar participante'),
                                 floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -564,7 +596,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                           const SizedBox(width: 12),
                           FilledButton(
-                            onPressed: () {
+                            onPressed: canManageAll ? () {
                               final value = nameController.text.trim();
                               if (value.isEmpty) {
                                 return;
@@ -573,7 +605,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                 pendingMembers.add(PendingGroupMember(id: uuid.v4(), name: value));
                                 nameController.clear();
                               });
-                            },
+                            } : null,
                             child: Text(tr(context, es: 'Añadir', en: 'Add', gl: 'Engadir', fr: 'Ajouter', it: 'Aggiungi', pt: 'Adicionar')),
                           ),
                         ],
@@ -588,10 +620,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           children: pendingMembers.map((member) {
                             return InputChip(
                               label: Text(member.name),
-                              onDeleted: () => setDialogState(() => pendingMembers.removeWhere((entry) => entry.id == member.id)),
+                              onDeleted: canManageAll ? () => setDialogState(() => pendingMembers.removeWhere((entry) => entry.id == member.id)) : null,
                             );
                           }).toList(),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -600,8 +633,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
                 FilledButton(
                   onPressed: () async {
+                    final updatedMembers = members
+                        .map(
+                          (member) => member.copyWith(
+                            name: (memberNameControllers[member.userId]?.text.trim().isEmpty ?? true) ? member.name : memberNameControllers[member.userId]!.text.trim(),
+                          ),
+                        )
+                        .toList(growable: false);
                     final normalizedPin = pinController.text.trim();
-                    if (normalizedPin.length != 4) {
+                    if (canManageAll && normalizedPin.length != 4) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(content: Text(tr(context, es: 'El PIN del grupo debe tener 4 dígitos.', en: 'The group PIN must have 4 digits.', gl: 'O PIN do grupo debe ter 4 dixitos.', fr: 'Le PIN du groupe doit contenir 4 chiffres.', it: 'Il PIN del gruppo deve avere 4 cifre.', pt: 'O PIN do grupo deve ter 4 digitos.'))),
                       );
@@ -609,13 +649,14 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     }
                     await ref.read(repositoryProvider).updateGroupJoinSettings(
                       groupId: group.id,
-                      name: groupNameController.text.trim().isEmpty ? group.name : groupNameController.text.trim(),
-                      description: groupDescriptionController.text.trim(),
-                      iconKey: iconKey,
+                      name: canManageAll && groupNameController.text.trim().isNotEmpty ? groupNameController.text.trim() : group.name,
+                      description: canManageAll ? groupDescriptionController.text.trim() : group.description,
+                      iconKey: canManageAll ? iconKey : group.iconKey,
+                      members: updatedMembers,
                       pendingMembers: pendingMembers,
-                      allowAnonymousJoin: allowAnonymousJoin,
-                      currency: currency,
-                      joinPin: normalizedPin,
+                      allowAnonymousJoin: canManageAll ? allowAnonymousJoin : group.allowAnonymousJoin,
+                      currency: canManageAll ? currency : group.currency,
+                      joinPin: canManageAll ? normalizedPin : group.joinPin,
                     );
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
@@ -629,6 +670,14 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         );
       },
     );
+
+    for (final controller in memberNameControllers.values) {
+      controller.dispose();
+    }
+    groupNameController.dispose();
+    groupDescriptionController.dispose();
+    nameController.dispose();
+    pinController.dispose();
   }
 
   Future<void> _showTransferOwnershipDialog(BuildContext context, ExpenseGroup group) async {
@@ -1798,7 +1847,7 @@ class _OverviewTab extends StatelessWidget {
                     final isOwner = !member.isPending && member.userId == group.ownerId;
                     final isAdmin = !member.isPending && group.adminIds.contains(member.userId);
                     final suffix = member.isPending
-                        ? tr(context, es: 'pendiente', en: 'pending', gl: 'pendente', fr: 'en attente', it: 'in attesa', pt: 'pendente')
+                        ? null
                       : member.isDeletedAccount
                         ? tr(context, es: 'cuenta eliminada', en: 'deleted account', gl: 'conta eliminada', fr: 'compte supprime', it: 'account eliminato', pt: 'conta eliminada')
                         : member.isArchived
@@ -1843,7 +1892,7 @@ class _OverviewTab extends StatelessWidget {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: group.pendingMembers.map((member) => Chip(label: Text('${member.name} · ${tr(context, es: 'pendiente', en: 'pending', gl: 'pendente', fr: 'en attente', it: 'in attesa', pt: 'pendente')}'))).toList(),
+                      children: group.pendingMembers.map((member) => Chip(label: Text(member.name))).toList(),
                     ),
                 ],
               ),
@@ -1958,7 +2007,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
       .entries
       .map(
         (entry) => (
-          member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key),
+          member: resolveGroupMember(group, entry.key),
           amount: entry.value,
         ),
       )
@@ -2456,7 +2505,7 @@ class _ExpensesTabState extends State<_ExpensesTab> {
         if (filteredExpenses.isEmpty)
           Card(child: Padding(padding: const EdgeInsets.all(20), child: Text(tr(context, es: 'No hay gastos que coincidan con los filtros.', en: 'No expenses match the filters.', gl: 'Non hai gastos que coincidan cos filtros.', fr: 'Aucune depense ne correspond aux filtres.', it: 'Nessuna spesa corrisponde ai filtri.', pt: 'Nenhuma despesa corresponde aos filtros.')))),
         ...filteredExpenses.map((expense) {
-          final payer = widget.group.visibleMembers.firstWhereOrNull((member) => member.userId == expense.payerId);
+          final payer = resolveGroupMember(widget.group, expense.payerId);
           final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
           final isPayer = expense.payerId == widget.currentUserId;
           final isParticipant = expense.items.any((item) => item.allocations.any((allocation) => allocation.userId == widget.currentUserId && allocation.percentage > 0));
@@ -2534,8 +2583,8 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                   ...expense.items.map((item) {
                     final category = widget.categories.firstWhereOrNull((entry) => entry.id == item.categoryId);
                     final participants = item.allocations.where((allocation) => allocation.percentage > 0).map((allocation) {
-                      final member = widget.group.visibleMembers.firstWhereOrNull((entry) => entry.userId == allocation.userId);
-                      return '${member?.name ?? allocation.userId} ${allocation.percentage.toStringAsFixed(0)}%';
+                      final member = resolveGroupMember(widget.group, allocation.userId);
+                      return '${member?.name ?? tr(context, es: 'Miembro', en: 'Member', gl: 'Membro', fr: 'Membre', it: 'Membro', pt: 'Membro')} ${allocation.percentage.toStringAsFixed(0)}%';
                     }).join(' · ');
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),

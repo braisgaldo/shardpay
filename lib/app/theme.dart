@@ -118,7 +118,8 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
     chipTheme: ChipThemeData(
       backgroundColor: option.accent.withValues(alpha: 0.10),
       selectedColor: option.accent.withValues(alpha: 0.18),
-      labelStyle: textTheme.labelMedium!.copyWith(color: scheme.onPrimaryContainer),
+      labelStyle: textTheme.labelMedium!.copyWith(color: colorOn(option.accent.withValues(alpha: 0.10), dark: option.ink)),
+      secondaryLabelStyle: textTheme.labelMedium!.copyWith(color: colorOn(option.accent.withValues(alpha: 0.18), dark: option.ink)),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),

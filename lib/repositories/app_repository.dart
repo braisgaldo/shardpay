@@ -39,6 +39,7 @@ abstract class AppRepository {
     required String name,
     required String? description,
     required String iconKey,
+    required List<GroupMember> members,
     required List<PendingGroupMember> pendingMembers,
     required bool allowAnonymousJoin,
     required String currency,
