@@ -1975,16 +1975,25 @@ class _BalancesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final summaries = {
-      for (final summary in groupBalanceSummaries(group)) summary.memberId: summary,
+    final incomingByMember = <String, double>{
+      for (final member in group.visibleMembers) member.userId: 0,
     };
+    final outgoingByMember = <String, double>{
+      for (final member in group.visibleMembers) member.userId: 0,
+    };
+
+    for (final edge in settlementEdges(group, activeAccountsOnly: false)) {
+      outgoingByMember.update(edge.fromUserId, (value) => value + edge.amount, ifAbsent: () => edge.amount);
+      incomingByMember.update(edge.toUserId, (value) => value + edge.amount, ifAbsent: () => edge.amount);
+    }
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: sortedMembersByName(group.visibleMembers).map((member) {
         final balance = balances[member.userId] ?? 0;
-        final summary = summaries[member.userId];
+        final incomingAmount = double.parse((incomingByMember[member.userId] ?? 0).toStringAsFixed(2));
+        final outgoingAmount = double.parse((outgoingByMember[member.userId] ?? 0).toStringAsFixed(2));
         final palette = _balanceTilePalette(context, balance);
         final status = balance > 0 ? tr(context, es: 'Recibe', en: 'Gets back', gl: 'Recibe', fr: 'Recoit', it: 'Riceve', pt: 'Recebe') : balance < 0 ? tr(context, es: 'Debe', en: 'Owes', gl: 'Debe', fr: 'Doit', it: 'Deve', pt: 'Deve') : tr(context, es: 'A cero', en: 'Settled', gl: 'A cero', fr: 'A zero', it: 'In pari', pt: 'A zero');
         return Padding(
@@ -2017,16 +2026,16 @@ class _BalancesTab extends StatelessWidget {
                             ),
                           ),
                           Text(status, style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600)),
-                          if (summary != null)
+                          if (incomingAmount > 0.009 || outgoingAmount > 0.009)
                             Text(
                               tr(
                                 context,
-                                es: 'A favor ${money(summary.incomingAmount, group.currency)} · Debe ${money(summary.outgoingAmount, group.currency)}',
-                                en: 'Gets ${money(summary.incomingAmount, group.currency)} · Owes ${money(summary.outgoingAmount, group.currency)}',
-                                gl: 'A favor ${money(summary.incomingAmount, group.currency)} · Debe ${money(summary.outgoingAmount, group.currency)}',
-                                fr: 'Recoit ${money(summary.incomingAmount, group.currency)} · Doit ${money(summary.outgoingAmount, group.currency)}',
-                                it: 'Riceve ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
-                                pt: 'Recebe ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
+                                es: 'A favor ${money(incomingAmount, group.currency)} · Debe ${money(outgoingAmount, group.currency)}',
+                                en: 'Gets ${money(incomingAmount, group.currency)} · Owes ${money(outgoingAmount, group.currency)}',
+                                gl: 'A favor ${money(incomingAmount, group.currency)} · Debe ${money(outgoingAmount, group.currency)}',
+                                fr: 'Recoit ${money(incomingAmount, group.currency)} · Doit ${money(outgoingAmount, group.currency)}',
+                                it: 'Riceve ${money(incomingAmount, group.currency)} · Deve ${money(outgoingAmount, group.currency)}',
+                                pt: 'Recebe ${money(incomingAmount, group.currency)} · Deve ${money(outgoingAmount, group.currency)}',
                               ),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.subtitle),
                             ),
@@ -2119,7 +2128,9 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                             final debtorId = tappedMemberPays ? member.userId : entry.userId;
                             final creditorId = tappedMemberPays ? entry.userId : member.userId;
                             final currentUserIsInvolved = currentUserId == creditorId || currentUserId == debtorId;
-                            final requestEnabled = currentUserIsInvolved && counterparty != null && !counterparty.isPending && !counterparty.isDeletedAccount;
+                            final currentUserCanManageSettlement = currentUserIsInvolved || group.isAdmin(currentUserId);
+                            final requestEnabled = currentUserCanManageSettlement && counterparty != null && !counterparty.isPending && !counterparty.isDeletedAccount;
+                            final payEnabled = currentUserCanManageSettlement && !group.isClosed;
                             final amount = entry.amount.abs();
                             final accent = tappedMemberPays ? const Color(0xFFC77600) : const Color(0xFF1E8E5A);
                             return Container(
@@ -2173,7 +2184,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: FilledButton.icon(
-                                            onPressed: group.isClosed
+                                            onPressed: !payEnabled
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
@@ -2389,6 +2400,14 @@ Future<void> _recordDirectSettlement(
     ],
   );
   await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+  try {
+    await ref
+        .read(repositoryProvider)
+        .watchGroup(group.id)
+        .firstWhere((updatedGroup) => updatedGroup?.expenses.any((entry) => entry.id == expense.id) ?? false)
+        .timeout(const Duration(seconds: 5));
+  } catch (_) {}
+  ref.invalidate(groupProvider(group.id));
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -3115,7 +3134,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                         ),
                 ),
                 if (categoryEntries.isNotEmpty) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 22),
                   _readableChipWrap(
                     context,
                     children: categoryEntries.take(5).mapIndexed((index, entry) {
@@ -3225,7 +3244,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                         ),
                 ),
                 if (payerEntries.isNotEmpty) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 22),
                   _readableChipWrap(
                     context,
                     children: payerEntries.take(5).mapIndexed((index, entry) {
