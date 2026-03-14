@@ -2795,7 +2795,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ? null
       : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
     final topPayerEntry = payerEntries.firstWhereOrNull((entry) => entry.key.trim().isNotEmpty);
-    final topPayer = topPayerEntry == null ? null : visibleMembers.firstWhereOrNull((member) => member.userId == topPayerEntry.key);
+    final topPayer = topPayerEntry == null ? null : _resolveMemberAlias(visibleMembers, topPayerEntry.key);
     final topCategory = categoryEntries.isEmpty ? null : categoryMap[categoryEntries.first.key];
     final settlementCount = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.settlement).length;
     final noDataText = tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados');
@@ -2812,9 +2812,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ),
       _InsightTileData(
         label: tr(context, es: 'Más pagó', en: 'Top payer', gl: 'Máis pagou', fr: 'Principal payeur', it: 'Chi ha pagato di piu', pt: 'Quem mais pagou'),
-        value: topPayerEntry == null
-            ? noDataText
-            : '${topPayer?.name ?? tr(context, es: 'Miembro no disponible', en: 'Unavailable member', gl: 'Membro non dispoñible', fr: 'Membre indisponible', it: 'Membro non disponibile', pt: 'Membro indisponivel')} · ${money(topPayerEntry.value, widget.group.currency)}',
+        value: topPayerEntry == null || topPayer == null ? noDataText : '${topPayer.name} · ${money(topPayerEntry.value, widget.group.currency)}',
         icon: Icons.emoji_events_rounded,
       ),
       _InsightTileData(
@@ -3458,4 +3456,16 @@ class _SummaryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+GroupMember? _resolveMemberAlias(List<GroupMember> members, String rawUserId) {
+  final normalizedUserId = rawUserId.trim();
+  if (normalizedUserId.isEmpty) {
+    return null;
+  }
+
+  final legacyPendingId = normalizedUserId.startsWith('pending:') ? normalizedUserId.substring('pending:'.length) : normalizedUserId;
+  return members.firstWhereOrNull(
+    (member) => member.userId == normalizedUserId || member.userId == 'pending:$legacyPendingId',
+  );
 }

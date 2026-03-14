@@ -614,10 +614,12 @@ class MockAppRepository implements AppRepository {
   }
 
   List<ExpenseRecord> _rebindPendingMemberReferences(List<ExpenseRecord> expenses, String pendingUserId, String actualUserId) {
+    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
+
     return expenses
         .map(
           (expense) => expense.copyWith(
-            payerId: expense.payerId == pendingUserId ? actualUserId : expense.payerId,
+            payerId: expense.payerId == pendingUserId || expense.payerId == legacyPendingUserId ? actualUserId : expense.payerId,
             items: expense.items
                 .map(
                   (item) => item.copyWith(
@@ -631,11 +633,12 @@ class MockAppRepository implements AppRepository {
   }
 
   List<SplitAllocation> _mergeAllocations(List<SplitAllocation> allocations, String pendingUserId, String actualUserId) {
+    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
     final orderedUserIds = <String>[];
     final percentagesByUser = <String, double>{};
 
     for (final allocation in allocations) {
-      final targetUserId = allocation.userId == pendingUserId ? actualUserId : allocation.userId;
+      final targetUserId = allocation.userId == pendingUserId || allocation.userId == legacyPendingUserId ? actualUserId : allocation.userId;
       if (!percentagesByUser.containsKey(targetUserId)) {
         orderedUserIds.add(targetUserId);
       }

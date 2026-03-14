@@ -907,18 +907,23 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final background = backgroundColor ?? colorScheme.surface;
+    final labelColor = colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.72);
+    final resolvedValueColor = valueColor ?? colorOn(background, dark: colorScheme.onSurface);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor ?? Theme.of(context).colorScheme.surface,
+        color: background,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: labelColor)),
           const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: valueColor)),
+          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor)),
         ],
       ),
     );
