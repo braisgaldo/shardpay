@@ -16,6 +16,7 @@ import '../../app/theme.dart';
 import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
+import '../../widgets/brand_mark.dart';
 import '../../widgets/manual/user_manual_sheet.dart';
 import '../balances/global_balances_screen.dart';
 import '../groups/group_detail_screen.dart';
@@ -268,15 +269,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                     CircleAvatar(
                       radius: 22,
                       backgroundColor: Colors.white,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: Image.asset(
-                          'assets/branding/app_icon.png',
-                          width: 32,
-                          height: 32,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
+                      child: const ShardPayBrandMark(size: 32),
                     ),
                     const SizedBox(width: 14),
                     Expanded(

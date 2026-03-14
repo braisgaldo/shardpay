@@ -4,8 +4,8 @@
     <application
         android:label="ShardPay"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher">
+        android:icon="@mipmap/shardpay_launcher"
+        android:roundIcon="@mipmap/shardpay_launcher_round">
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="shardpay_messages" />

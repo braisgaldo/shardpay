@@ -7,6 +7,7 @@ import 'app_text.dart';
 import '../models/app_models.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/home/home_shell.dart';
+import '../widgets/brand_mark.dart';
 import 'providers.dart';
 import 'theme.dart';
 
@@ -225,15 +226,7 @@ class _BrandGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Image.asset(
-        'assets/branding/app_icon.png',
-        width: 80,
-        height: 80,
-        fit: BoxFit.cover,
-      ),
-    );
+    return const ShardPayBrandMark(size: 80);
   }
 }
 

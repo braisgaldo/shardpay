@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_text.dart';
 import '../../app/providers.dart';
+import '../../widgets/brand_mark.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -91,12 +92,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(16),
-                                  child: Image.asset(
-                                    'assets/branding/app_icon.png',
-                                    width: 52,
-                                    height: 52,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  child: const ShardPayBrandMark(size: 52),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(

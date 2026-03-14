@@ -1708,7 +1708,7 @@ class _OverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final myBalance = balances[user.id] ?? 0;
-    final balancePalette = _summaryBalancePalette(myBalance);
+    final balancePalette = _summaryBalancePalette(context, myBalance);
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -1722,6 +1722,7 @@ class _OverviewTab extends StatelessWidget {
               child: _SummaryCard(
                 label: tr(context, es: 'Tu balance', en: 'Your balance', gl: 'O teu balance', fr: 'Votre solde', it: 'Il tuo saldo', pt: 'O teu saldo'),
                 value: '${myBalance >= 0 ? '+' : ''}${money(myBalance, group.currency)}',
+                labelColor: balancePalette.label,
                 valueColor: balancePalette.foreground,
                 backgroundColor: balancePalette.background,
                 borderColor: balancePalette.border,
@@ -1885,8 +1886,7 @@ class _BalancesTab extends StatelessWidget {
       children: sortedMembersByName(group.visibleMembers).map((member) {
         final balance = balances[member.userId] ?? 0;
         final summary = summaries[member.userId];
-        final tone = balance > 0 ? const Color(0xFFDFF7E8) : balance < 0 ? const Color(0xFFFFE0E0) : const Color(0xFFE9EEF5);
-        final foreground = balance > 0 ? const Color(0xFF1E8E3E) : balance < 0 ? const Color(0xFFC62828) : const Color(0xFF607D8B);
+        final palette = _balanceTilePalette(context, balance);
         final status = balance > 0 ? tr(context, es: 'Recibe', en: 'Gets back', gl: 'Recibe', fr: 'Recoit', it: 'Riceve', pt: 'Recebe') : balance < 0 ? tr(context, es: 'Debe', en: 'Owes', gl: 'Debe', fr: 'Doit', it: 'Deve', pt: 'Deve') : tr(context, es: 'A cero', en: 'Settled', gl: 'A cero', fr: 'A zero', it: 'In pari', pt: 'A zero');
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -1897,7 +1897,11 @@ class _BalancesTab extends StatelessWidget {
               onTap: () => _showBalanceSettlementDialog(context, group, member, balance, currentUserId),
               child: Ink(
                 padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(24)),
+                decoration: BoxDecoration(
+                  color: palette.background,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: palette.border),
+                ),
                 child: Row(
                   children: [
                     CircleAvatar(child: Text(member.name.substring(0, 1).toUpperCase())),
@@ -1906,8 +1910,14 @@ class _BalancesTab extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(member.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                          Text(status, style: TextStyle(color: foreground)),
+                          Text(
+                            member.name,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: palette.title,
+                            ),
+                          ),
+                          Text(status, style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600)),
                           if (summary != null)
                             Text(
                               tr(
@@ -1919,7 +1929,7 @@ class _BalancesTab extends StatelessWidget {
                                 it: 'Riceve ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
                                 pt: 'Recebe ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
                               ),
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.subtitle),
                             ),
                         ],
                       ),
@@ -1929,7 +1939,7 @@ class _BalancesTab extends StatelessWidget {
                       child: Text(
                         '${balance >= 0 ? '+' : ''}${money(balance, group.currency)}',
                         textAlign: TextAlign.right,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: foreground),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: palette.foreground),
                       ),
                     ),
                   ],
@@ -2479,13 +2489,24 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       child: Icon(categoryIconForKey(primaryCategory?.iconKey ?? 'receipt'), size: 18, color: colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E')),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(expense.title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+                    Expanded(
+                      child: Text(
+                        expense.title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colors.title,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${payer?.name ?? tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem')} · ${DateFormat('dd/MM/yyyy', localeTag(context)).format(expense.createdAt)}'),
+                    Text(
+                      '${payer?.name ?? tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem')} · ${DateFormat('dd/MM/yyyy', localeTag(context)).format(expense.createdAt)}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.subtitle),
+                    ),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -2504,7 +2525,10 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       alignment: Alignment.centerLeft,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(expense.note!),
+                        child: Text(
+                          expense.note!,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.subtitle),
+                        ),
                       ),
                     ),
                   ...expense.items.map((item) {
@@ -2591,25 +2615,36 @@ class _ExpensesTabState extends State<_ExpensesTab> {
 
 enum _ExpenseStatus { paid, participated, outside }
 
-({Color background, Color border, Color accent}) _expenseStatusPalette(BuildContext context, _ExpenseStatus status) {
+({Color background, Color border, Color accent, Color title, Color subtitle}) _expenseStatusPalette(BuildContext context, _ExpenseStatus status) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
   switch (status) {
     case _ExpenseStatus.paid:
+      final background = isDark ? const Color(0xFF153326) : const Color(0xFFE8F7EF);
       return (
-        background: const Color(0xFFE8F7EF),
-        border: const Color(0xFF6CC08B),
+        background: background,
+        border: isDark ? const Color(0xFF2D8D61) : const Color(0xFF6CC08B),
         accent: const Color(0xFF1E8E5A),
+        title: colorOn(background, dark: colorScheme.onSurface),
+        subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
       );
     case _ExpenseStatus.participated:
+      final background = isDark ? const Color(0xFF3C2914) : const Color(0xFFFFF3E2);
       return (
-        background: const Color(0xFFFFF3E2),
-        border: const Color(0xFFF0B15C),
+        background: background,
+        border: isDark ? const Color(0xFFE2A142) : const Color(0xFFF0B15C),
         accent: const Color(0xFFC77600),
+        title: colorOn(background, dark: colorScheme.onSurface),
+        subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
       );
     case _ExpenseStatus.outside:
       return (
-        background: Theme.of(context).colorScheme.surfaceContainerHigh,
-        border: Theme.of(context).colorScheme.outlineVariant,
-        accent: Theme.of(context).colorScheme.onSurfaceVariant,
+        background: colorScheme.surfaceContainerHigh,
+        border: colorScheme.outlineVariant,
+        accent: colorScheme.onSurfaceVariant,
+        title: colorScheme.onSurface,
+        subtitle: colorScheme.onSurfaceVariant,
       );
   }
 }
@@ -3309,33 +3344,74 @@ class _DateLine extends StatelessWidget {
   }
 }
 
-({Color background, Color border, Color foreground}) _summaryBalancePalette(double balance) {
+({Color background, Color border, Color foreground, Color label}) _summaryBalancePalette(BuildContext context, double balance) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
   if (balance > 0.009) {
     return (
-      background: const Color(0xFFE8F7EF),
-      border: const Color(0xFFB7E4C7),
+      background: isDark ? const Color(0xFF153326) : const Color(0xFFE8F7EF),
+      border: isDark ? const Color(0xFF2D8D61) : const Color(0xFFB7E4C7),
       foreground: const Color(0xFF1E8E5A),
+      label: isDark ? Colors.white.withValues(alpha: 0.82) : const Color(0xFF305744),
     );
   }
   if (balance < -0.009) {
     return (
-      background: const Color(0xFFFFE8E8),
-      border: const Color(0xFFF3B5B5),
+      background: isDark ? const Color(0xFF3A1D1D) : const Color(0xFFFFE8E8),
+      border: isDark ? const Color(0xFFB85757) : const Color(0xFFF3B5B5),
       foreground: const Color(0xFFC62828),
+      label: isDark ? Colors.white.withValues(alpha: 0.82) : const Color(0xFF6B3E3E),
     );
   }
   return (
-    background: const Color(0xFFE9EEF5),
-    border: const Color(0xFFD2DCE8),
-    foreground: const Color(0xFF607D8B),
+    background: isDark ? const Color(0xFF1E2933) : const Color(0xFFE9EEF5),
+    border: isDark ? const Color(0xFF4D6373) : const Color(0xFFD2DCE8),
+    foreground: isDark ? const Color(0xFFB8CAD6) : const Color(0xFF607D8B),
+    label: isDark ? Colors.white.withValues(alpha: 0.82) : const Color(0xFF475965),
+  );
+}
+
+({Color background, Color border, Color foreground, Color title, Color subtitle}) _balanceTilePalette(BuildContext context, double balance) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+  if (balance > 0.009) {
+    final background = isDark ? const Color(0xFF153326) : const Color(0xFFDFF7E8);
+    return (
+      background: background,
+      border: isDark ? const Color(0xFF2D8D61) : const Color(0xFFB7E4C7),
+      foreground: const Color(0xFF1E8E3E),
+      title: colorOn(background, dark: colorScheme.onSurface),
+      subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
+    );
+  }
+  if (balance < -0.009) {
+    final background = isDark ? const Color(0xFF3A1D1D) : const Color(0xFFFFE0E0);
+    return (
+      background: background,
+      border: isDark ? const Color(0xFFB85757) : const Color(0xFFF3B5B5),
+      foreground: const Color(0xFFC62828),
+      title: colorOn(background, dark: colorScheme.onSurface),
+      subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
+    );
+  }
+
+  final background = isDark ? const Color(0xFF1E2933) : const Color(0xFFE9EEF5);
+  return (
+    background: background,
+    border: isDark ? const Color(0xFF4D6373) : const Color(0xFFD2DCE8),
+    foreground: isDark ? const Color(0xFFB8CAD6) : const Color(0xFF607D8B),
+    title: colorOn(background, dark: colorScheme.onSurface),
+    subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
   );
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.label, required this.value, this.valueColor, this.backgroundColor, this.borderColor});
+  const _SummaryCard({required this.label, required this.value, this.labelColor, this.valueColor, this.backgroundColor, this.borderColor});
 
   final String label;
   final String value;
+  final Color? labelColor;
   final Color? valueColor;
   final Color? backgroundColor;
   final Color? borderColor;
@@ -3352,7 +3428,7 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: labelColor)),
           const SizedBox(height: 8),
           Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: valueColor)),
         ],
