@@ -2062,6 +2062,7 @@ class _BalancesTab extends StatelessWidget {
 }
 
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
+  final container = ProviderScope.containerOf(context, listen: false);
   final counterparties = settlementEdges(group, activeAccountsOnly: false)
       .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
       .map((edge) {
@@ -2082,9 +2083,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
     isScrollControlled: true,
     showDragHandle: true,
     builder: (dialogContext) {
-      return Consumer(
-        builder: (dialogContext, ref, _) {
-          return FractionallySizedBox(
+      return FractionallySizedBox(
             heightFactor: 0.84,
             child: SafeArea(
               child: Padding(
@@ -2175,7 +2174,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
-                                                  await _requestDirectSettlement(context, ref, group, creditorId, debtorId, amount);
+                                                  await _requestDirectSettlement(context, container, group, creditorId, debtorId, amount);
                                                 },
                                           icon: const Icon(Icons.notifications_active_rounded),
                                           label: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
@@ -2188,7 +2187,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
-                                                  await _recordDirectSettlement(context, ref, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterpartyName, creditorName: tappedMemberPays ? counterpartyName : member.name);
+                                                  await _recordDirectSettlement(context, container, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterpartyName, creditorName: tappedMemberPays ? counterpartyName : member.name);
                                                 },
                                           icon: const Icon(Icons.check_circle_rounded),
                                           label: Text(tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
@@ -2207,15 +2206,13 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
               ),
             ),
           );
-        },
-      );
     },
   );
 }
 
 Future<void> _requestDirectSettlement(
   BuildContext context,
-  WidgetRef ref,
+  ProviderContainer container,
   ExpenseGroup group,
   String requesterId,
   String targetUserId,
@@ -2285,7 +2282,7 @@ Future<void> _requestDirectSettlement(
     }
     return;
   }
-  await ref.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: canonicalTargetUserId, amount: amount);
+  await container.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: canonicalTargetUserId, amount: amount);
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -2299,7 +2296,7 @@ Future<void> _requestDirectSettlement(
 
 Future<void> _recordDirectSettlement(
   BuildContext context,
-  WidgetRef ref,
+  ProviderContainer container,
   ExpenseGroup group,
   String debtorId,
   String creditorId,
@@ -2400,9 +2397,9 @@ Future<void> _recordDirectSettlement(
     ],
   );
   try {
-    await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
-    ref.invalidate(groupProvider(group.id));
-    final updatedGroup = await ref.read(groupProvider(group.id).future).timeout(const Duration(seconds: 5));
+    await container.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+    container.invalidate(groupProvider(group.id));
+    final updatedGroup = await container.read(groupProvider(group.id).future).timeout(const Duration(seconds: 5));
     final settlementWasPersisted = updatedGroup?.expenses.any((entry) => entry.id == expense.id) ?? false;
     if (!settlementWasPersisted) {
       if (context.mounted) {
