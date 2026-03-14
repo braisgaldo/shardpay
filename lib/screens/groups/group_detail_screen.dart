@@ -2750,14 +2750,21 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
     final monthlyTotals = <DateTime, double>{};
 
     for (final expense in spendingExpenses) {
-      final payerId = expense.payerId.trim();
+      final payerId = canonicalGroupUserId(widget.group, expense.payerId);
       if (payerId.isNotEmpty) {
         payerTotals.update(payerId, (current) => current + totalExpense(expense), ifAbsent: () => totalExpense(expense));
       }
       final monthBucket = DateTime(expense.createdAt.year, expense.createdAt.month);
       monthlyTotals.update(monthBucket, (current) => current + totalExpense(expense), ifAbsent: () => totalExpense(expense));
       for (final item in expense.items) {
-        final value = _global ? item.amount : ((item.allocations.firstWhereOrNull((entry) => entry.userId == selectedMemberId)?.percentage ?? 0) / 100) * item.amount;
+        final value = _global
+            ? item.amount
+            : ((item.allocations.firstWhereOrNull(
+                      (entry) => canonicalGroupUserId(widget.group, entry.userId) == canonicalGroupUserId(widget.group, selectedMemberId),
+                    )?.percentage ??
+                    0) /
+                100) *
+                item.amount;
         if (value <= 0) {
           continue;
         }
@@ -2775,11 +2782,15 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       }
     } else {
       for (final expense in widget.group.expenses) {
-        final selectedShare = memberOwedInExpense(expense, selectedMemberId);
+        final selectedShare = memberOwedInExpense(expense, selectedMemberId, group: widget.group);
         if (selectedShare <= 0) {
           continue;
         }
-        memberBars.update(expense.payerId, (current) => current + selectedShare, ifAbsent: () => selectedShare);
+        final payerId = canonicalGroupUserId(widget.group, expense.payerId);
+        if (payerId.isEmpty) {
+          continue;
+        }
+        memberBars.update(payerId, (current) => current + selectedShare, ifAbsent: () => selectedShare);
       }
     }
 
@@ -2795,7 +2806,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ? null
       : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
     final topPayerEntry = payerEntries.firstWhereOrNull((entry) => entry.key.trim().isNotEmpty);
-    final topPayer = topPayerEntry == null ? null : _resolveMemberAlias(visibleMembers, topPayerEntry.key);
+    final topPayer = topPayerEntry == null ? null : resolveGroupMember(widget.group, topPayerEntry.key);
     final topCategory = categoryEntries.isEmpty ? null : categoryMap[categoryEntries.first.key];
     final settlementCount = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.settlement).length;
     final noDataText = tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados');
@@ -3093,7 +3104,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: payerEntries.take(5).mapIndexed((index, entry) {
-                      final payer = visibleMembers.firstWhereOrNull((member) => member.userId == entry.key);
+                      final payer = resolveGroupMember(widget.group, entry.key);
                       return Chip(
                         avatar: CircleAvatar(radius: 7, backgroundColor: _chartPalette[index % _chartPalette.length]),
                         label: Text('${payer?.name ?? entry.key} · ${money(entry.value, widget.group.currency)}'),
@@ -3152,7 +3163,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                                   enabled: true,
                                   touchTooltipData: BarTouchTooltipData(
                                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                      final visible = widget.group.visibleMembers.firstWhereOrNull((entry) => entry.userId == memberEntries[group.x.toInt()].key);
+                                      final visible = resolveGroupMember(widget.group, memberEntries[group.x.toInt()].key);
                                       if (visible == null) {
                                         return null;
                                       }
@@ -3181,7 +3192,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                                         if (index < 0 || index >= memberEntries.length) {
                                           return const SizedBox.shrink();
                                         }
-                                        final visible = widget.group.visibleMembers.firstWhereOrNull((entry) => entry.userId == memberEntries[index].key);
+                                        final visible = resolveGroupMember(widget.group, memberEntries[index].key);
                                         return Padding(
                                           padding: const EdgeInsets.only(top: 8),
                                           child: SizedBox(
@@ -3439,33 +3450,26 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final background = backgroundColor ?? Theme.of(context).colorScheme.surface;
+    final resolvedLabelColor = labelColor ?? colorOn(background, dark: Theme.of(context).colorScheme.onSurface).withValues(alpha: 0.74);
+    final resolvedValueColor = valueColor ?? colorOn(background, dark: Theme.of(context).colorScheme.onSurface);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: backgroundColor ?? Theme.of(context).colorScheme.surface,
+        color: background,
         borderRadius: BorderRadius.circular(24),
         border: borderColor == null ? null : Border.all(color: borderColor!),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: labelColor)),
+          Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: resolvedLabelColor)),
           const SizedBox(height: 8),
-          Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: valueColor)),
+          Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor)),
         ],
       ),
     );
   }
 }
 
-GroupMember? _resolveMemberAlias(List<GroupMember> members, String rawUserId) {
-  final normalizedUserId = rawUserId.trim();
-  if (normalizedUserId.isEmpty) {
-    return null;
-  }
-
-  final legacyPendingId = normalizedUserId.startsWith('pending:') ? normalizedUserId.substring('pending:'.length) : normalizedUserId;
-  return members.firstWhereOrNull(
-    (member) => member.userId == normalizedUserId || member.userId == 'pending:$legacyPendingId',
-  );
-}

@@ -110,9 +110,46 @@ List<SplitAllocation> equalAllocations(List<GroupMember> members) {
   return allocations;
 }
 
-double memberOwedInExpense(ExpenseRecord expense, String userId) {
+String canonicalGroupUserId(ExpenseGroup group, String rawUserId) {
+  final normalizedUserId = rawUserId.trim();
+  if (normalizedUserId.isEmpty) {
+    return '';
+  }
+
+  final exactMatch = group.visibleMembers.firstWhereOrNull((member) => member.userId == normalizedUserId);
+  if (exactMatch != null) {
+    return exactMatch.userId;
+  }
+
+  final legacyPendingId = normalizedUserId.startsWith('pending:') ? normalizedUserId.substring('pending:'.length) : normalizedUserId;
+  final pendingMatch = group.pendingMembers.firstWhereOrNull((member) => member.id == legacyPendingId);
+  if (pendingMatch != null) {
+    return 'pending:$legacyPendingId';
+  }
+
+  return normalizedUserId;
+}
+
+GroupMember? resolveGroupMember(ExpenseGroup group, String rawUserId) {
+  final canonicalUserId = canonicalGroupUserId(group, rawUserId);
+  if (canonicalUserId.isEmpty) {
+    return null;
+  }
+
+  return group.visibleMembers.firstWhereOrNull((member) => member.userId == canonicalUserId);
+}
+
+double memberOwedInExpense(ExpenseRecord expense, String userId, {ExpenseGroup? group}) {
+  final normalizedUserId = group == null ? userId.trim() : canonicalGroupUserId(group, userId);
+  if (normalizedUserId.isEmpty) {
+    return 0;
+  }
+
   return expense.items.fold(0, (sum, item) {
-    final allocation = item.allocations.firstWhereOrNull((entry) => entry.userId == userId);
+    final allocation = item.allocations.firstWhereOrNull((entry) {
+      final allocationUserId = group == null ? entry.userId.trim() : canonicalGroupUserId(group, entry.userId);
+      return allocationUserId == normalizedUserId;
+    });
     return sum + ((allocation?.percentage ?? 0) / 100) * item.amount;
   });
 }
@@ -123,9 +160,13 @@ Map<String, double> memberBalances(ExpenseGroup group) {
   };
 
   for (final expense in group.expenses) {
-    balances.update(expense.payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+    final payerId = canonicalGroupUserId(group, expense.payerId);
+    if (payerId.isNotEmpty) {
+      balances.update(payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+    }
     for (final member in group.visibleMembers) {
-      balances.update(member.userId, (value) => value - memberOwedInExpense(expense, member.userId), ifAbsent: () => -memberOwedInExpense(expense, member.userId));
+      final owedAmount = memberOwedInExpense(expense, member.userId, group: group);
+      balances.update(member.userId, (value) => value - owedAmount, ifAbsent: () => -owedAmount);
     }
   }
 
@@ -134,11 +175,14 @@ Map<String, double> memberBalances(ExpenseGroup group) {
 
 Map<String, double> directBalancesForMember(ExpenseGroup group, String memberId) {
   final balances = <String, double>{};
+  final canonicalMemberId = canonicalGroupUserId(group, memberId);
 
   for (final expense in group.expenses) {
+    final canonicalPayerId = canonicalGroupUserId(group, expense.payerId);
     for (final item in expense.items) {
       for (final allocation in item.allocations) {
-        if (allocation.userId == expense.payerId || allocation.percentage <= 0) {
+        final canonicalAllocationUserId = canonicalGroupUserId(group, allocation.userId);
+        if (canonicalAllocationUserId == canonicalPayerId || allocation.percentage <= 0) {
           continue;
         }
 
@@ -147,11 +191,11 @@ Map<String, double> directBalancesForMember(ExpenseGroup group, String memberId)
           continue;
         }
 
-        if (allocation.userId == memberId) {
-          balances.update(expense.payerId, (value) => value - amount, ifAbsent: () => -amount);
+        if (canonicalAllocationUserId == canonicalMemberId) {
+          balances.update(canonicalPayerId, (value) => value - amount, ifAbsent: () => -amount);
         }
-        if (expense.payerId == memberId) {
-          balances.update(allocation.userId, (value) => value + amount, ifAbsent: () => amount);
+        if (canonicalPayerId == canonicalMemberId) {
+          balances.update(canonicalAllocationUserId, (value) => value + amount, ifAbsent: () => amount);
         }
       }
     }
