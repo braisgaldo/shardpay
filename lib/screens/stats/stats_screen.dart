@@ -10,7 +10,7 @@ import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
 
-enum _StatsChartKind { insights, categories, groups, monthly, people }
+enum _StatsChartKind { insights, categories, groups, monthly, people, tickets, weekdays }
 
 class _ChartOption {
   const _ChartOption({required this.kind, required this.icon});
@@ -25,6 +25,8 @@ const _chartOptions = [
   _ChartOption(kind: _StatsChartKind.groups, icon: Icons.stacked_bar_chart_rounded),
   _ChartOption(kind: _StatsChartKind.monthly, icon: Icons.show_chart_rounded),
   _ChartOption(kind: _StatsChartKind.people, icon: Icons.groups_rounded),
+  _ChartOption(kind: _StatsChartKind.tickets, icon: Icons.receipt_long_rounded),
+  _ChartOption(kind: _StatsChartKind.weekdays, icon: Icons.calendar_view_week_rounded),
 ];
 
 class StatsScreen extends ConsumerStatefulWidget {
@@ -39,6 +41,11 @@ class StatsScreen extends ConsumerStatefulWidget {
 class _StatsScreenState extends ConsumerState<StatsScreen> {
   _StatsChartKind _selectedChart = _StatsChartKind.insights;
   final Set<String> _selectedGroupIds = <String>{};
+
+  Future<void> _refreshGroups() async {
+    ref.invalidate(groupsProvider(widget.user.id));
+    await ref.read(groupsProvider(widget.user.id).future);
+  }
 
   String _groupFilterSummary(BuildContext context, List<ExpenseGroup> sortedGroups) {
     if (_selectedGroupIds.isEmpty) {
@@ -155,7 +162,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           final monthly = monthlySpend(selectedGroups).entries.toList();
           final groupSpend = {for (final group in selectedGroups) group.name: totalGroupSpend(group)}.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
+          final ticketCounts = {for (final group in selectedGroups) group.name: group.expenses.where((expense) => expense.kind == ExpenseRecordKind.expense).length}.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
           final memberSpend = <String, double>{};
+          final weekdaySpend = <int, double>{};
           final memberNames = {
             for (final group in selectedGroups)
               for (final member in group.visibleMembers) member.userId: member.name,
@@ -163,19 +173,34 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
 
           for (final group in selectedGroups) {
             for (final expense in group.expenses) {
+              if (expense.kind != ExpenseRecordKind.expense) {
+                continue;
+              }
               memberSpend.update(expense.payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+              weekdaySpend.update(expense.createdAt.weekday, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
             }
           }
 
           final memberEntries = memberSpend.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          final weekdayEntries = weekdaySpend.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
           final totalSpend = selectedGroups.fold<double>(0, (accumulatedSpend, group) => accumulatedSpend + totalGroupSpend(group));
           final expensesCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.expenses.length);
           final peopleCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.totalDisplayedMembers);
           final headlineCurrency = selectedGroups.isEmpty ? (groups.isEmpty ? 'EUR' : groups.first.currency) : selectedGroups.first.currency;
+          final averageExpense = expensesCount == 0 ? 0.0 : totalSpend / expensesCount;
+          final topCategory = categoryData.firstOrNull;
+          final topGroup = groupSpend.firstOrNull;
+          final topPerson = memberEntries.firstOrNull;
+          final busiestWeekday = weekdayEntries.isEmpty ? null : weekdayEntries.reduce((left, right) => left.value >= right.value ? left : right);
+          final topMonth = monthly.isEmpty ? null : monthly.reduce((left, right) => left.value >= right.value ? left : right);
+          final selectedGroupsLabel = selectedGroups.length == sortedGroups.length ? tr(context, es: 'Todos los grupos', en: 'All groups', gl: 'Todos os grupos', fr: 'Tous les groupes', it: 'Tutti i gruppi', pt: 'Todos os grupos') : '${selectedGroups.length}';
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refreshGroups,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -259,15 +284,25 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 expensesCount: expensesCount,
                 peopleCount: peopleCount,
                 groupsCount: selectedGroups.length,
+                selectedGroupsLabel: selectedGroupsLabel,
                 headlineCurrency: headlineCurrency,
+                averageExpense: averageExpense,
                 categoryData: categoryData,
                 categoryMap: categoryMap,
+                topCategory: topCategory,
                 groupSpend: groupSpend,
+                topGroup: topGroup,
                 monthly: monthly,
+                topMonth: topMonth,
                 memberEntries: memberEntries,
                 memberNames: memberNames,
+                topPerson: topPerson,
+                ticketCounts: ticketCounts,
+                weekdayEntries: weekdayEntries,
+                busiestWeekday: busiestWeekday,
               ),
             ],
+          ),
           );
         },
           error: (error, _) => Center(child: Text(error.toString())),
@@ -283,13 +318,22 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     required int expensesCount,
     required int peopleCount,
     required int groupsCount,
+    required String selectedGroupsLabel,
     required String headlineCurrency,
+    required double averageExpense,
     required List<MapEntry<String, double>> categoryData,
     required Map<String, ExpenseCategory> categoryMap,
+    required MapEntry<String, double>? topCategory,
     required List<MapEntry<String, double>> groupSpend,
+    required MapEntry<String, double>? topGroup,
     required List<MapEntry<DateTime, double>> monthly,
+    required MapEntry<DateTime, double>? topMonth,
     required List<MapEntry<String, double>> memberEntries,
     required Map<String, String> memberNames,
+    required MapEntry<String, double>? topPerson,
+    required List<MapEntry<String, int>> ticketCounts,
+    required List<MapEntry<int, double>> weekdayEntries,
+    required MapEntry<int, double>? busiestWeekday,
   }) {
     switch (_selectedChart) {
       case _StatsChartKind.insights:
@@ -316,10 +360,66 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 runSpacing: 10,
                 children: [
                   _StatPill(label: tr(context, es: 'Gasto total', en: 'Total spend', gl: 'Gasto total', fr: 'Depense totale', it: 'Spesa totale', pt: 'Despesa total'), value: money(totalSpend, headlineCurrency)),
+                  _StatPill(label: tr(context, es: 'Ticket medio', en: 'Average receipt', gl: 'Ticket medio', fr: 'Ticket moyen', it: 'Scontrino medio', pt: 'Ticket medio'), value: money(averageExpense, headlineCurrency)),
                   _StatPill(label: tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos'), value: '$groupsCount'),
                   _StatPill(label: tr(context, es: 'Movimientos', en: 'Entries', gl: 'Movementos', fr: 'Mouvements', it: 'Movimenti', pt: 'Movimentos'), value: '$expensesCount'),
                   _StatPill(label: tr(context, es: 'Personas visibles', en: 'Visible people', gl: 'Persoas visibles', fr: 'Personnes visibles', it: 'Persone visibili', pt: 'Pessoas visiveis'), value: '$peopleCount'),
                 ],
+              ),
+              const SizedBox(height: 18),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 640;
+                  final cardWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: cardWidth,
+                        child: _InsightPanel(
+                          title: tr(context, es: 'Mayor categoría', en: 'Top category', gl: 'Maior categoria', fr: 'Categorie principale', it: 'Categoria principale', pt: 'Categoria principal'),
+                          value: topCategory == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${categoryMap[topCategory.key]?.name ?? topCategory.key} · ${money(topCategory.value, headlineCurrency)}',
+                          icon: categoryIconForKey(categoryMap[topCategory?.key]?.iconKey ?? 'receipt'),
+                        ),
+                      ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: _InsightPanel(
+                          title: tr(context, es: 'Grupo más activo', en: 'Most active group', gl: 'Grupo máis activo', fr: 'Groupe le plus actif', it: 'Gruppo piu attivo', pt: 'Grupo mais ativo'),
+                          value: topGroup == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${topGroup.key} · ${money(topGroup.value, headlineCurrency)}',
+                          icon: Icons.local_fire_department_rounded,
+                        ),
+                      ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: _InsightPanel(
+                          title: tr(context, es: 'Quién adelanta más', en: 'Who advances the most', gl: 'Quen adianta máis', fr: 'Qui avance le plus', it: 'Chi anticipa di piu', pt: 'Quem adianta mais'),
+                          value: topPerson == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${memberNames[topPerson.key] ?? topPerson.key} · ${money(topPerson.value, headlineCurrency)}',
+                          icon: Icons.emoji_events_rounded,
+                        ),
+                      ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: _InsightPanel(
+                          title: tr(context, es: 'Pico temporal', en: 'Peak period', gl: 'Pico temporal', fr: 'Pic temporel', it: 'Picco temporale', pt: 'Pico temporal'),
+                          value: topMonth == null
+                              ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados')
+                              : '${DateFormat.MMMM(localeTag(context)).format(topMonth.key)} · ${money(topMonth.value, headlineCurrency)}',
+                          icon: Icons.timeline_rounded,
+                        ),
+                      ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: _InsightPanel(
+                          title: tr(context, es: 'Día más cargado', en: 'Busiest weekday', gl: 'Dia máis cargado', fr: 'Jour le plus charge', it: 'Giorno piu intenso', pt: 'Dia mais carregado'),
+                          value: busiestWeekday == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${_weekdayLabel(context, busiestWeekday.key)} · ${money(busiestWeekday.value, headlineCurrency)}',
+                          icon: Icons.calendar_today_rounded,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -529,6 +629,153 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   ),
           ),
         );
+      case _StatsChartKind.tickets:
+        return _ChartCard(
+          title: _chartTitle(context, _selectedChart),
+          child: SizedBox(
+            height: 300,
+            child: ticketCounts.isEmpty
+                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay tickets registrados.', en: 'There are no receipts yet.', gl: 'Ainda non hai tickets rexistrados.', fr: 'Il n y a pas encore de tickets.', it: 'Non ci sono ancora scontrini registrati.', pt: 'Ainda nao ha faturas registadas.'))
+                : BarChart(
+                    BarChartData(
+                      maxY: clampChartMax(ticketCounts.map((entry) => entry.value.toDouble())),
+                      alignment: BarChartAlignment.spaceAround,
+                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(ticketCounts.map((entry) => entry.value.toDouble())) / 4),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 34,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.toInt();
+                              if (index < 0 || index >= ticketCounts.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: SizedBox(
+                                  width: 58,
+                                  child: Text(ticketCounts[index].key, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      barGroups: ticketCounts.mapIndexed((index, entry) {
+                        return BarChartGroupData(
+                          x: index,
+                          barRods: [
+                            BarChartRodData(
+                              toY: entry.value.toDouble(),
+                              width: 24,
+                              gradient: const LinearGradient(colors: [Color(0xFF2D6CDF), Color(0xFF90CAF9)]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+          ),
+        );
+      case _StatsChartKind.weekdays:
+        return _ChartCard(
+          title: _chartTitle(context, _selectedChart),
+          child: SizedBox(
+            height: 300,
+            child: weekdayEntries.isEmpty
+                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay gasto suficiente por día.', en: 'There is not enough weekday data yet.', gl: 'Ainda non hai gasto suficiente por dia.', fr: 'Pas assez de donnees par jour.', it: 'Non ci sono ancora dati sufficienti per giorno.', pt: 'Ainda nao ha dados suficientes por dia.'))
+                : BarChart(
+                    BarChartData(
+                      maxY: clampChartMax(weekdayEntries.map((entry) => entry.value)),
+                      alignment: BarChartAlignment.spaceAround,
+                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(weekdayEntries.map((entry) => entry.value)) / 4),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 44)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 34,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.toInt();
+                              if (index < 0 || index >= weekdayEntries.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(_weekdayShortLabel(context, weekdayEntries[index].key)),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      barGroups: weekdayEntries.mapIndexed((index, entry) {
+                        return BarChartGroupData(
+                          x: index,
+                          barRods: [
+                            BarChartRodData(
+                              toY: entry.value,
+                              width: 24,
+                              gradient: const LinearGradient(colors: [Color(0xFF1B998B), Color(0xFFF3C677)]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+          ),
+        );
+    }
+  }
+
+  String _weekdayShortLabel(BuildContext context, int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return tr(context, es: 'Lun', en: 'Mon', gl: 'Lun', fr: 'Lun', it: 'Lun', pt: 'Seg');
+      case DateTime.tuesday:
+        return tr(context, es: 'Mar', en: 'Tue', gl: 'Mar', fr: 'Mar', it: 'Mar', pt: 'Ter');
+      case DateTime.wednesday:
+        return tr(context, es: 'Mié', en: 'Wed', gl: 'Mér', fr: 'Mer', it: 'Mer', pt: 'Qua');
+      case DateTime.thursday:
+        return tr(context, es: 'Jue', en: 'Thu', gl: 'Xov', fr: 'Jeu', it: 'Gio', pt: 'Qui');
+      case DateTime.friday:
+        return tr(context, es: 'Vie', en: 'Fri', gl: 'Ven', fr: 'Ven', it: 'Ven', pt: 'Sex');
+      case DateTime.saturday:
+        return tr(context, es: 'Sáb', en: 'Sat', gl: 'Sab', fr: 'Sam', it: 'Sab', pt: 'Sab');
+      case DateTime.sunday:
+        return tr(context, es: 'Dom', en: 'Sun', gl: 'Dom', fr: 'Dim', it: 'Dom', pt: 'Dom');
+      default:
+        return '';
+    }
+  }
+
+  String _weekdayLabel(BuildContext context, int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return tr(context, es: 'Lunes', en: 'Monday', gl: 'Luns', fr: 'Lundi', it: 'Lunedi', pt: 'Segunda');
+      case DateTime.tuesday:
+        return tr(context, es: 'Martes', en: 'Tuesday', gl: 'Martes', fr: 'Mardi', it: 'Martedi', pt: 'Terca');
+      case DateTime.wednesday:
+        return tr(context, es: 'Miércoles', en: 'Wednesday', gl: 'Mércores', fr: 'Mercredi', it: 'Mercoledi', pt: 'Quarta');
+      case DateTime.thursday:
+        return tr(context, es: 'Jueves', en: 'Thursday', gl: 'Xoves', fr: 'Jeudi', it: 'Giovedi', pt: 'Quinta');
+      case DateTime.friday:
+        return tr(context, es: 'Viernes', en: 'Friday', gl: 'Venres', fr: 'Vendredi', it: 'Venerdi', pt: 'Sexta');
+      case DateTime.saturday:
+        return tr(context, es: 'Sábado', en: 'Saturday', gl: 'Sabado', fr: 'Samedi', it: 'Sabato', pt: 'Sabado');
+      case DateTime.sunday:
+        return tr(context, es: 'Domingo', en: 'Sunday', gl: 'Domingo', fr: 'Dimanche', it: 'Domenica', pt: 'Domingo');
+      default:
+        return '';
     }
   }
 
@@ -544,6 +791,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         return tr(context, es: 'Gasto mensual', en: 'Monthly spend', gl: 'Gasto mensual', fr: 'Depense mensuelle', it: 'Spesa mensile', pt: 'Despesa mensal');
       case _StatsChartKind.people:
         return tr(context, es: 'Quién está adelantando más', en: 'Who is advancing the most', gl: 'Quen esta adiantando mais', fr: 'Qui avance le plus', it: 'Chi anticipa di piu', pt: 'Quem esta a adiantar mais');
+      case _StatsChartKind.tickets:
+        return tr(context, es: 'Tickets por grupo', en: 'Receipts per group', gl: 'Tickets por grupo', fr: 'Tickets par groupe', it: 'Scontrini per gruppo', pt: 'Faturas por grupo');
+      case _StatsChartKind.weekdays:
+        return tr(context, es: 'Gasto por día', en: 'Spend by weekday', gl: 'Gasto por dia', fr: 'Depense par jour', it: 'Spesa per giorno', pt: 'Despesa por dia');
     }
   }
 }
@@ -604,6 +855,49 @@ class _StatPill extends StatelessWidget {
           Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightPanel extends StatelessWidget {
+  const _InsightPanel({required this.title, required this.value, required this.icon});
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 4),
+                Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -425,6 +425,10 @@ class MockAppRepository implements AppRepository {
   @override
   Future<void> requestReimbursement({required String groupId, required String requesterId, required String targetUserId, required double amount}) async {
     final group = _groups[groupId]!;
+    final targetMember = group.visibleMembers.firstWhereOrNull((entry) => entry.userId == targetUserId);
+    if (targetUserId.startsWith('pending:') || (targetMember?.isPending ?? false) || (targetMember?.isDeletedAccount ?? false)) {
+      return;
+    }
     final requester = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
     _pushNotification(
       AppNotification(
@@ -448,16 +452,16 @@ class MockAppRepository implements AppRepository {
     if (!group.isAdmin(requesterId)) {
       throw StateError('Solo la persona administradora puede solicitar el cierre de pagos.');
     }
-    if (!group.isClosed) {
-      throw StateError('Cierra el grupo antes de pedir que se salden las deudas.');
-    }
 
+    final edges = settlementEdges(group, activeAccountsOnly: false);
     final balances = memberBalances(group);
     final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
+    final recipientIds = edges.expand((edge) => [edge.fromUserId, edge.toUserId]).where((userId) => userId != requesterId && !userId.startsWith('pending:')).toSet();
     var sent = 0;
 
-    for (final member in group.activeMembers.where((entry) => entry.userId != requesterId)) {
-      final amount = -(balances[member.userId] ?? 0);
+    for (final member in group.visibleMembers.where((entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount)) {
+      final balance = balances[member.userId] ?? 0;
+      final amount = balance.abs();
       if (amount <= 0.009) {
         continue;
       }
@@ -467,8 +471,10 @@ class MockAppRepository implements AppRepository {
           id: _uuid.v4(),
           userId: member.userId,
           type: AppNotificationType.groupSettlementRequested,
-          title: 'Cierre de cuentas pendiente',
-          message: '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.',
+          title: 'Liquidación del grupo',
+          message: balance < 0
+              ? '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.'
+              : '${admin?.name ?? 'La persona administradora'} te avisa de que tienes ${amount.toStringAsFixed(2)} ${group.currency} a favor en ${group.name}.',
           createdAt: DateTime.now(),
           groupId: group.id,
           fromUserId: requesterId,
@@ -603,10 +609,10 @@ class MockAppRepository implements AppRepository {
   }
 
   void _ensureGroupAllowsExpense(ExpenseGroup group, ExpenseRecord expense) {
-    if (!group.isClosed || expense.kind == ExpenseRecordKind.settlement) {
+    if (!group.isClosed) {
       return;
     }
-    throw StateError('El grupo está cerrado. Solo se pueden registrar liquidaciones hasta que la persona administradora lo reabra.');
+    throw StateError('El grupo está cerrado. Reábrelo antes de registrar pagos o nuevos gastos.');
   }
 
   void _pushNotification(AppNotification notification) {
@@ -619,7 +625,7 @@ class MockAppRepository implements AppRepository {
   Future<void> _notifyExpenseEvent({required ExpenseGroup group, required ExpenseRecord expense}) async {
     final payer = group.members.firstWhereOrNull((entry) => entry.userId == expense.payerId);
     if (expense.kind == ExpenseRecordKind.expense) {
-      for (final member in group.activeMembers.where((entry) => entry.userId != expense.payerId)) {
+      for (final member in group.activeMembers.where((entry) => entry.userId != expense.payerId && !entry.isDeletedAccount && !entry.userId.startsWith('pending:'))) {
         _pushNotification(
           AppNotification(
             id: _uuid.v4(),

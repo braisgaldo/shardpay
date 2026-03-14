@@ -29,15 +29,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   late String _categoryId;
 
   List<GroupMember> get _sortedSelectableMembers => sortedMembersByName(widget.group.selectableMembers);
-  List<GroupMember> get _sortedPayerMembers => sortedMembersByName(widget.group.activeMembers);
+  List<GroupMember> get _sortedPayerMembers => sortedMembersByName(widget.group.visibleMembers);
 
   @override
   void initState() {
     super.initState();
     _selectedMembers = {for (final member in widget.group.selectableMembers) member.userId};
-    _payerId = widget.group.activeMembers.any((member) => member.userId == widget.user.id)
+    _payerId = widget.group.visibleMembers.any((member) => member.userId == widget.user.id)
         ? widget.user.id
-        : widget.group.activeMembers.first.userId;
+      : widget.group.visibleMembers.first.userId;
     _categoryId = 'food';
   }
 
@@ -84,7 +84,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 children: [
                   Text(tr(context, es: 'Resumen del gasto', en: 'Expense summary', gl: 'Resumo do gasto', fr: 'Resume de la depense', it: 'Riepilogo spesa', pt: 'Resumo da despesa'), style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 16),
-                  TextField(controller: _titleController, decoration: InputDecoration(labelText: tr(context, es: 'Concepto principal', en: 'Main concept', gl: 'Concepto principal', fr: 'Concept principal', it: 'Voce principale', pt: 'Conceito principal'), hintText: tr(context, es: 'Cena, gasolina, compra...', en: 'Dinner, fuel, groceries...', gl: 'Cea, gasolina, compra...', fr: 'Diner, essence, courses...', it: 'Cena, carburante, spesa...', pt: 'Jantar, combustivel, compras...'))),
+                  TextField(
+                    controller: _titleController,
+                    decoration: InputDecoration(
+                      labelText: tr(context, es: 'Concepto principal', en: 'Main concept', gl: 'Concepto principal', fr: 'Concept principal', it: 'Voce principale', pt: 'Conceito principal'),
+                      hintText: tr(context, es: 'Cena, gasolina, compra...', en: 'Dinner, fuel, groceries...', gl: 'Cea, gasolina, compra...', fr: 'Diner, essence, courses...', it: 'Cena, carburante, spesa...', pt: 'Jantar, combustivel, compras...'),
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _amountController,
@@ -109,14 +116,40 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   DropdownButtonFormField<String>(
                     initialValue: _payerId,
                     decoration: InputDecoration(labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por')),
-                    items: _sortedPayerMembers.map((member) => DropdownMenuItem(value: member.userId, child: Text(member.name))).toList(),
+                    items: _sortedPayerMembers
+                        .map(
+                          (member) => DropdownMenuItem(
+                            value: member.userId,
+                            child: Row(
+                              children: [
+                                Icon(member.isPending ? Icons.person_outline_rounded : Icons.person_rounded, size: 18),
+                                const SizedBox(width: 10),
+                                SizedBox(width: 180, child: Text(member.name, overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (value) => setState(() => _payerId = value ?? _payerId),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _categoryId,
                     decoration: InputDecoration(labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria')),
-                    items: categories.map((category) => DropdownMenuItem(value: category.id, child: Text(category.name))).toList(),
+                    items: categories
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category.id,
+                            child: Row(
+                              children: [
+                                Icon(categoryIconForKey(category.iconKey), size: 18, color: colorFromHex(category.colorHex)),
+                                const SizedBox(width: 10),
+                                SizedBox(width: 160, child: Text(category.name, overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (value) => setState(() => _categoryId = value ?? _categoryId),
                   ),
                 ],

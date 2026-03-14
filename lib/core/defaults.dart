@@ -119,6 +119,8 @@ const Map<String, String> groupIconLabels = {
 
 IconData groupIconForKey(String key) => groupIcons[key] ?? Icons.groups_rounded;
 
+IconData categoryIconForKey(String key) => categoryIcons[key] ?? Icons.receipt_long_rounded;
+
 String groupIconLabelForKey(String key) => groupIconLabels[key] ?? 'Grupo';
 
 List<ExpenseCategory> buildDefaultCategories() {

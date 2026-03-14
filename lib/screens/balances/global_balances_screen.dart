@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/app_text.dart';
@@ -21,6 +22,11 @@ class GlobalBalancesScreen extends ConsumerStatefulWidget {
 class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
   bool _includePendingUsers = false;
 
+  Future<void> _refreshGroups() async {
+    ref.invalidate(groupsProvider(widget.user.id));
+    await ref.read(groupsProvider(widget.user.id).future);
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupsState = ref.watch(groupsProvider(widget.user.id));
@@ -30,9 +36,12 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
         data: (groups) {
           final entries = _buildEntries(groups, widget.user.id, includePendingUsers: _includePendingUsers);
           if (entries.isEmpty) {
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
+            return RefreshIndicator(
+              onRefresh: _refreshGroups,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                children: [
                 _PendingToggleCard(
                   value: _includePendingUsers,
                   onChanged: (value) => setState(() => _includePendingUsers = value),
@@ -46,12 +55,16 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                   ),
                 ),
               ],
+            ),
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refreshGroups,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
               _PendingToggleCard(
                 value: _includePendingUsers,
                 onChanged: (value) => setState(() => _includePendingUsers = value),
@@ -119,6 +132,7 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                 );
               }),
             ],
+          ),
           );
         },
         error: (error, _) => Center(child: Text(error.toString())),
@@ -147,6 +161,15 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                     entry.netAmount >= 0 ? '+${money(entry.netAmount.abs(), entry.currency)}' : '-${money(entry.netAmount.abs(), entry.currency)}',
                     style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showBalanceHistorySheet(sheetContext, entry, currentUserId),
+                      icon: const Icon(Icons.history_rounded),
+                      label: Text(tr(sheetContext, es: 'Ver historial', en: 'View history', gl: 'Ver historial', fr: 'Voir historique', it: 'Vedi storico', pt: 'Ver historico')),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Expanded(
                     child: ListView.separated(
@@ -170,7 +193,9 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                             currency: entry.currency,
                             accent: totalAccent,
                             requestEnabled: entry.canRequestAll,
-                            payEnabled: entry.canPayAll,
+                            payEnabled: entry.canPayAll && entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount.abs() > 0.009).every((groupDebt) => !groupDebt.group.isClosed),
+                            requestLabel: tr(sheetContext, es: 'Solicitar todo', en: 'Request all', gl: 'Solicitar todo', fr: 'Demander tout', it: 'Richiedi tutto', pt: 'Solicitar tudo'),
+                            payLabel: tr(sheetContext, es: 'Saldar todo', en: 'Settle all', gl: 'Saldar todo', fr: 'Regler tout', it: 'Saldare tutto', pt: 'Liquidar tudo'),
                             leading: const Icon(Icons.summarize_rounded),
                             onRequest: () async {
                               Navigator.of(sheetContext).pop();
@@ -193,7 +218,7 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                           accent: accent,
                           leading: Icon(groupIconForKey(groupDebt.group.iconKey), color: accent),
                           requestEnabled: currentUserIsCreditor,
-                          payEnabled: !currentUserIsCreditor,
+                          payEnabled: !groupDebt.group.isClosed,
                           onRequest: () async {
                             Navigator.of(sheetContext).pop();
                             await _requestGroupSettlement(context, ref, groupDebt, currentUserId);
@@ -205,6 +230,81 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                         );
                       },
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showBalanceHistorySheet(BuildContext context, _CounterpartyEntry entry, String currentUserId) async {
+    final historyEntries = _buildHistoryEntries(entry, currentUserId);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.82,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr(sheetContext, es: 'Historial con ${entry.counterparty.name}', en: 'History with ${entry.counterparty.name}', gl: 'Historial con ${entry.counterparty.name}', fr: 'Historique avec ${entry.counterparty.name}', it: 'Storico con ${entry.counterparty.name}', pt: 'Historico com ${entry.counterparty.name}'), style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: historyEntries.isEmpty
+                        ? Center(
+                            child: Text(tr(sheetContext, es: 'Todavía no hay movimientos entre ambas personas.', en: 'There are no movements between both people yet.', gl: 'Ainda non hai movementos entre ambas persoas.', fr: 'Il n y a pas encore de mouvements entre ces deux personnes.', it: 'Non ci sono ancora movimenti tra le due persone.', pt: 'Ainda nao ha movimentos entre ambas as pessoas.')),
+                          )
+                        : ListView.separated(
+                            itemCount: historyEntries.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 10),
+                            itemBuilder: (_, index) {
+                              final item = historyEntries[index];
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(22),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(item.title, style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: item.amount >= 0 ? const Color(0xFFE8F7EF) : const Color(0xFFFFF3E2),
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            '${item.amount >= 0 ? '+' : '-'}${money(item.amount.abs(), item.currency)}',
+                                            style: TextStyle(color: item.amount >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600), fontWeight: FontWeight.w800),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text('${item.groupName} · ${DateFormat('dd/MM/yyyy HH:mm', localeTag(sheetContext)).format(item.createdAt)}'),
+                                    if (item.note != null && item.note!.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text(item.note!),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
@@ -230,7 +330,7 @@ class _CounterpartyEntry {
 
   bool get canRequestAll => totalIncoming > 0.009;
 
-  bool get canPayAll => totalOutgoing > 0.009;
+  bool get canPayAll => groupBreakdown.any((entry) => entry.netAmount.abs() > 0.009);
 }
 
 class _GroupDebtEntry {
@@ -239,6 +339,81 @@ class _GroupDebtEntry {
   final ExpenseGroup group;
   final GroupMember counterparty;
   final double netAmount;
+}
+
+class _BalanceHistoryEntry {
+  const _BalanceHistoryEntry({
+    required this.groupName,
+    required this.title,
+    required this.createdAt,
+    required this.amount,
+    required this.currency,
+    this.note,
+  });
+
+  final String groupName;
+  final String title;
+  final DateTime createdAt;
+  final double amount;
+  final String currency;
+  final String? note;
+}
+
+List<_BalanceHistoryEntry> _buildHistoryEntries(_CounterpartyEntry entry, String currentUserId) {
+  final history = <_BalanceHistoryEntry>[];
+
+  for (final groupDebt in entry.groupBreakdown) {
+    for (final expense in groupDebt.group.expenses) {
+      final counterpartAllocations = expense.items.expand((item) => item.allocations).where((allocation) => allocation.userId == entry.counterparty.userId && allocation.percentage > 0);
+      final currentAllocations = expense.items.expand((item) => item.allocations).where((allocation) => allocation.userId == currentUserId && allocation.percentage > 0);
+      final involvesBoth = expense.payerId == currentUserId
+          ? counterpartAllocations.isNotEmpty
+          : expense.payerId == entry.counterparty.userId
+              ? currentAllocations.isNotEmpty
+              : counterpartAllocations.isNotEmpty && currentAllocations.isNotEmpty;
+      if (!involvesBoth) {
+        continue;
+      }
+
+      double signedAmount;
+      if (expense.kind == ExpenseRecordKind.settlement) {
+        final paidToCounterparty = expense.payerId == currentUserId && counterpartAllocations.isNotEmpty;
+        final receivedFromCounterparty = expense.payerId == entry.counterparty.userId && currentAllocations.isNotEmpty;
+        final settlementAmount = totalExpense(expense);
+        signedAmount = receivedFromCounterparty ? settlementAmount : paidToCounterparty ? -settlementAmount : 0;
+      } else {
+        final paidByCurrent = expense.payerId == currentUserId;
+        final paidByCounterparty = expense.payerId == entry.counterparty.userId;
+        final currentShare = memberOwedInExpense(expense, currentUserId);
+        final counterpartyShare = memberOwedInExpense(expense, entry.counterparty.userId);
+        if (paidByCurrent) {
+          signedAmount = counterpartyShare;
+        } else if (paidByCounterparty) {
+          signedAmount = -currentShare;
+        } else {
+          signedAmount = 0;
+        }
+      }
+
+      if (signedAmount.abs() <= 0.009) {
+        continue;
+      }
+
+      history.add(
+        _BalanceHistoryEntry(
+          groupName: groupDebt.group.name,
+          title: expense.title,
+          createdAt: expense.createdAt,
+          amount: double.parse(signedAmount.toStringAsFixed(2)),
+          currency: groupDebt.group.currency,
+          note: expense.note,
+        ),
+      );
+    }
+  }
+
+  history.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+  return history;
 }
 
 List<_CounterpartyEntry> _buildEntries(List<ExpenseGroup> groups, String currentUserId, {required bool includePendingUsers}) {
@@ -250,15 +425,15 @@ List<_CounterpartyEntry> _buildEntries(List<ExpenseGroup> groups, String current
     for (final member in members) {
       userById[member.userId] = member;
     }
-    final debts = outstandingExpenseDebts(group, activeAccountsOnly: !includePendingUsers);
-    for (final debt in debts.where((entry) => entry.fromUserId == currentUserId || entry.toUserId == currentUserId)) {
-      final counterpartyId = debt.fromUserId == currentUserId ? debt.toUserId : debt.fromUserId;
+    final edges = settlementEdges(group, activeAccountsOnly: !includePendingUsers);
+    for (final edge in edges.where((entry) => entry.fromUserId == currentUserId || entry.toUserId == currentUserId)) {
+      final counterpartyId = edge.fromUserId == currentUserId ? edge.toUserId : edge.fromUserId;
       final counterparty = userById[counterpartyId] ?? members.firstWhereOrNull((member) => member.userId == counterpartyId);
       if (counterparty == null) {
         continue;
       }
       final key = '$counterpartyId|${group.currency}';
-      final netDelta = debt.toUserId == currentUserId ? debt.amount : -debt.amount;
+      final netDelta = edge.toUserId == currentUserId ? edge.amount : -edge.amount;
       final perGroup = perUserAndCurrency.putIfAbsent(key, () => {});
       final current = perGroup[group.id];
       perGroup[group.id] = _GroupDebtEntry(group: group, counterparty: counterparty, netAmount: double.parse(((current?.netAmount ?? 0) + netDelta).toStringAsFixed(2)));
@@ -335,15 +510,16 @@ Future<void> _recordGroupSettlement(BuildContext context, WidgetRef ref, _GroupD
   if (!context.mounted) {
     return;
   }
+  final currentUserIsDebtor = entry.netAmount < 0;
   await _createSettlementExpense(
     context,
     ref,
     group: entry.group,
-    debtorId: currentUserId,
-    creditorId: entry.counterparty.userId,
+    debtorId: currentUserIsDebtor ? currentUserId : entry.counterparty.userId,
+    creditorId: currentUserIsDebtor ? entry.counterparty.userId : currentUserId,
     amount: amount,
-    debtorName: youLabel,
-    creditorName: entry.counterparty.name,
+    debtorName: currentUserIsDebtor ? youLabel : entry.counterparty.name,
+    creditorName: currentUserIsDebtor ? entry.counterparty.name : youLabel,
   );
 }
 
@@ -397,16 +573,17 @@ Future<void> _recordAllSettlements(BuildContext context, WidgetRef ref, _Counter
   if (!context.mounted) {
     return;
   }
-  for (final groupDebt in entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount < 0)) {
+  for (final groupDebt in entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount.abs() > 0.009)) {
+    final currentUserIsDebtor = groupDebt.netAmount < 0;
     await _createSettlementExpense(
       context,
       ref,
       group: groupDebt.group,
-      debtorId: currentUserId,
-      creditorId: groupDebt.counterparty.userId,
+      debtorId: currentUserIsDebtor ? currentUserId : groupDebt.counterparty.userId,
+      creditorId: currentUserIsDebtor ? groupDebt.counterparty.userId : currentUserId,
       amount: groupDebt.netAmount.abs(),
-      debtorName: youLabel,
-      creditorName: groupDebt.counterparty.name,
+      debtorName: currentUserIsDebtor ? youLabel : groupDebt.counterparty.name,
+      creditorName: currentUserIsDebtor ? groupDebt.counterparty.name : youLabel,
     );
   }
 }
@@ -421,6 +598,14 @@ Future<void> _createSettlementExpense(
   required String debtorName,
   required String creditorName,
 }) async {
+  if (group.isClosed) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(tr(context, es: 'Reabre el grupo antes de registrar una liquidación.', en: 'Reopen the group before recording a settlement.', gl: 'Reabre o grupo antes de rexistrar unha liquidacion.', fr: 'Rouvrez le groupe avant d enregistrer une liquidation.', it: 'Riapri il gruppo prima di registrare una liquidazione.', pt: 'Reabre o grupo antes de registar uma liquidacao.')),
+      ),
+    );
+    return;
+  }
   final uuid = const Uuid();
   final expense = ExpenseRecord(
     id: uuid.v4(),
@@ -457,6 +642,8 @@ class _SettlementCard extends StatelessWidget {
     required this.onRequest,
     required this.onPay,
     this.leading,
+    this.requestLabel,
+    this.payLabel,
   });
 
   final String title;
@@ -469,6 +656,8 @@ class _SettlementCard extends StatelessWidget {
   final Future<void> Function() onRequest;
   final Future<void> Function() onPay;
   final Widget? leading;
+  final String? requestLabel;
+  final String? payLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -512,7 +701,7 @@ class _SettlementCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: requestEnabled ? onRequest : null,
                   icon: const Icon(Icons.notifications_active_rounded),
-                  label: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+                  label: Text(requestLabel ?? tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -520,7 +709,7 @@ class _SettlementCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: payEnabled ? onPay : null,
                   icon: const Icon(Icons.check_circle_rounded),
-                  label: Text(tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
+                  label: Text(payLabel ?? tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
                 ),
               ),
             ],

@@ -179,19 +179,9 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Stream<List<AppNotification>> watchNotifications(String userId) {
-    return (() async* {
-      try {
-        await for (final snapshot in _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots()) {
-          yield snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
-        }
-      } on FirebaseException catch (error) {
-        if (error.code == 'permission-denied') {
-          yield const <AppNotification>[];
-          return;
-        }
-        rethrow;
-      }
-    })();
+    return _notificationsRef(userId).orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => AppNotification.fromMap(doc.data())).toList();
+    });
   }
 
   @override
@@ -287,7 +277,9 @@ class FirebaseAppRepository implements AppRepository {
     });
     final group = await _resolveGroup(groupId);
     if (group != null) {
-      await _notifyExpenseEvent(group: group, expense: expense);
+      try {
+        await _notifyExpenseEvent(group: group, expense: expense);
+      } catch (_) {}
     }
   }
 
@@ -527,6 +519,10 @@ class FirebaseAppRepository implements AppRepository {
     if (group == null) {
       throw StateError('Grupo no encontrado.');
     }
+    final targetMember = group.visibleMembers.firstWhereOrNull((entry) => entry.userId == targetUserId);
+    if (targetUserId.startsWith('pending:') || (targetMember?.isPending ?? false) || (targetMember?.isDeletedAccount ?? false)) {
+      return;
+    }
     final requester = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
     await _createNotification(
       AppNotification(
@@ -553,34 +549,45 @@ class FirebaseAppRepository implements AppRepository {
     if (!group.isAdmin(requesterId)) {
       throw StateError('Solo la persona administradora puede solicitar el cierre de pagos.');
     }
-    if (!group.isClosed) {
-      throw StateError('Cierra el grupo antes de pedir que se salden las deudas.');
-    }
 
+    final edges = settlementEdges(group, activeAccountsOnly: false);
     final balances = memberBalances(group);
     final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
-    final recipients = group.activeMembers.where((entry) => entry.userId != requesterId).where((entry) => -((balances[entry.userId] ?? 0)) > 0.009).toList();
+    final recipientIds = edges.expand((edge) => [edge.fromUserId, edge.toUserId]).where((userId) => userId != requesterId && !userId.startsWith('pending:')).toSet();
+    final recipients = group.visibleMembers.where((entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount).toList();
+    var sent = 0;
 
     await Future.wait(
       recipients.map(
-        (member) => _createNotification(
-          AppNotification(
-            id: _uuid.v4(),
-            userId: member.userId,
-            type: AppNotificationType.groupSettlementRequested,
-            title: 'Cierre de cuentas pendiente',
-            message: '${admin?.name ?? 'La persona administradora'} te pide saldar ${(-((balances[member.userId] ?? 0))).toStringAsFixed(2)} ${group.currency} en ${group.name}.',
-            createdAt: DateTime.now(),
-            groupId: group.id,
-            fromUserId: requesterId,
-            relatedUserId: member.userId,
-            amount: -((balances[member.userId] ?? 0)),
-          ),
-        ),
+        (member) async {
+          final balance = balances[member.userId] ?? 0;
+          final amount = balance.abs();
+          if (amount <= 0.009) {
+            return;
+          }
+          sent += 1;
+          final message = balance < 0
+              ? '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.'
+              : '${admin?.name ?? 'La persona administradora'} te avisa de que tienes ${amount.toStringAsFixed(2)} ${group.currency} a favor en ${group.name}.';
+          await _createNotification(
+            AppNotification(
+              id: _uuid.v4(),
+              userId: member.userId,
+              type: AppNotificationType.groupSettlementRequested,
+              title: 'Liquidación del grupo',
+              message: message,
+              createdAt: DateTime.now(),
+              groupId: group.id,
+              fromUserId: requesterId,
+              relatedUserId: member.userId,
+              amount: amount,
+            ),
+          );
+        },
       ),
     );
 
-    return recipients.length;
+    return sent;
   }
 
   @override
@@ -613,10 +620,10 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   void _ensureGroupAllowsExpense(ExpenseGroup group, ExpenseRecord expense) {
-    if (!group.isClosed || expense.kind == ExpenseRecordKind.settlement) {
+    if (!group.isClosed) {
       return;
     }
-    throw StateError('El grupo está cerrado. Solo se pueden registrar liquidaciones hasta que la persona administradora lo reabra.');
+    throw StateError('El grupo está cerrado. Reábrelo antes de registrar pagos o nuevos gastos.');
   }
 
   Future<void> _createNotification(AppNotification notification) {
@@ -624,8 +631,9 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   Future<void> _notifyExpenseEvent({required ExpenseGroup group, required ExpenseRecord expense}) async {
-    final recipients = group.activeMembers.where((entry) => entry.userId != expense.payerId).toList();
+    final recipients = group.activeMembers.where((entry) => entry.userId != expense.payerId && !entry.isPending && !entry.isDeletedAccount && !entry.userId.startsWith('pending:')).toList();
     final payer = group.members.firstWhereOrNull((entry) => entry.userId == expense.payerId);
+    final actorUserId = _auth.currentUser?.uid ?? expense.payerId;
 
     if (expense.kind == ExpenseRecordKind.expense) {
       await Future.wait(
@@ -640,7 +648,7 @@ class FirebaseAppRepository implements AppRepository {
               createdAt: DateTime.now(),
               groupId: group.id,
               expenseId: expense.id,
-              fromUserId: expense.payerId,
+              fromUserId: actorUserId,
             ),
           ),
         ),
@@ -666,7 +674,7 @@ class FirebaseAppRepository implements AppRepository {
             createdAt: DateTime.now(),
             groupId: group.id,
             expenseId: expense.id,
-            fromUserId: expense.payerId,
+            fromUserId: actorUserId,
             relatedUserId: userId,
           ),
         ),

@@ -79,7 +79,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 30),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.asset(
+                                    'assets/branding/app_icon.png',
+                                    width: 42,
+                                    height: 42,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'ShardPay',

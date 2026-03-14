@@ -160,6 +160,11 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
   _SearchScope _searchScope = _SearchScope.groups;
   bool _isConsumingInvite = false;
 
+  Future<void> _refreshGroups() async {
+    ref.invalidate(groupsProvider(widget.user.id));
+    await ref.read(groupsProvider(widget.user.id).future);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -213,9 +218,12 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
             return haystack.contains(_query.toLowerCase());
           }).toList();
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refreshGroups,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
@@ -226,7 +234,16 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                   children: [
                     CircleAvatar(
                       radius: 22,
-                      child: Text(widget.user.displayName.substring(0, 1).toUpperCase()),
+                      backgroundColor: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: Image.asset(
+                          'assets/branding/app_icon.png',
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -450,6 +467,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                 );
               }),
             ],
+          ),
           );
         },
         error: (error, _) => Center(child: Text(error.toString())),
@@ -481,7 +499,10 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                     children: [
                       TextField(
                         controller: controller,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Nombre del grupo', en: 'Group name', gl: 'Nome do grupo', fr: 'Nom du groupe', it: 'Nome del gruppo', pt: 'Nome do grupo')),
+                        decoration: InputDecoration(
+                          labelText: tr(context, es: 'Nombre del grupo', en: 'Group name', gl: 'Nome do grupo', fr: 'Nom du groupe', it: 'Nome del gruppo', pt: 'Nome do grupo'),
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -519,7 +540,10 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                           Expanded(
                             child: TextField(
                               controller: pendingController,
-                              decoration: InputDecoration(labelText: tr(context, es: 'Añadir participante', en: 'Add participant', gl: 'Engadir participante', fr: 'Ajouter un participant', it: 'Aggiungi partecipante', pt: 'Adicionar participante')),
+                              decoration: InputDecoration(
+                                labelText: tr(context, es: 'Añadir participante', en: 'Add participant', gl: 'Engadir participante', fr: 'Ajouter un participant', it: 'Aggiungi partecipante', pt: 'Adicionar participante'),
+                                floatingLabelBehavior: FloatingLabelBehavior.always,
+                              ),
                               onSubmitted: (_) {
                                 final value = pendingController.text.trim();
                                 if (value.isEmpty) {
@@ -775,14 +799,14 @@ class _MetricCard extends StatelessWidget {
 
 enum _SearchScope { groups, people }
 
-(Color, Color) _balanceTone(double balance) {
+(Color?, Color?) _balanceTone(double balance) {
   if (balance > 0.009) {
     return (const Color(0xFF1E8E5A), const Color(0xFFE8F7EF));
   }
   if (balance < -0.009) {
-    return (const Color(0xFFC77600), const Color(0xFFFFF3E2));
+    return (const Color(0xFFC62828), const Color(0xFFFFE3E3));
   }
-  return (const Color(0xFF607D8B), const Color(0xFFE9EEF5));
+  return (null, null);
 }
 
 class _IdentityTile extends StatelessWidget {

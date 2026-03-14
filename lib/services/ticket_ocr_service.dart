@@ -67,87 +67,25 @@ class TicketOcrService {
     required String defaultCategoryId,
   }) async {
     final preparedImagePath = await _prepareImageForOcr(imagePath);
-    final inputImage = InputImage.fromFile(File(preparedImagePath));
-    final result = await _recognizer.processImage(inputImage);
-    final fragments = _extractFragments(result);
-    final rows = _buildRows(fragments);
-    final lines = rows.map((row) => row.fullText).where((line) => line.isNotEmpty).toList();
-    final trimmedLines = _trimTrailingSummaryLines(lines);
-    final items = <ExpenseItem>[];
-    final seenItems = <String>{};
-    final detectedNames = <String>[];
-
-    _logOcrLines(trimmedLines);
-
-    final trimmedRows = rows.where((row) => trimmedLines.contains(row.fullText)).toList();
-
-    for (final row in trimmedRows) {
-      final parsedItem = _parseRow(row, trimmedRows);
-      if (parsedItem == null) {
-        final candidateName = _extractNameCandidate(row.fullText);
-        if (candidateName != null) {
-          detectedNames.add(candidateName);
-        }
-        continue;
-      }
-
-      final seenKey = '${parsedItem.name}|${parsedItem.amount.toStringAsFixed(2)}';
-      if (!seenItems.add(seenKey)) {
-        continue;
-      }
-
-      items.add(
-        ExpenseItem(
-          id: _uuid.v4(),
-          name: parsedItem.name,
-          amount: parsedItem.amount,
-          categoryId: defaultCategoryId,
-          allocations: defaultAllocations,
-        ),
+    final candidates = <_ReceiptParseCandidate>[
+      await _parseCandidateImage(imagePath, defaultAllocations: defaultAllocations, defaultCategoryId: defaultCategoryId, source: 'original'),
+    ];
+    if (preparedImagePath != imagePath) {
+      candidates.add(
+        await _parseCandidateImage(preparedImagePath, defaultAllocations: defaultAllocations, defaultCategoryId: defaultCategoryId, source: 'preprocessed'),
       );
-
-      _logAcceptedItem(parsedItem);
     }
 
-    final fallbackTitle = _detectReceiptTitle(lines);
-    final fallbackTotal = lines
-        .map(_extractLastAmount)
-        .whereType<double>()
-        .fold<double>(0, (currentMax, amount) => amount > currentMax ? amount : currentMax);
-
-    if (items.isEmpty && detectedNames.length >= 2 && fallbackTotal > 0) {
-      final estimatedAmount = double.parse((fallbackTotal / detectedNames.length).toStringAsFixed(2));
-      for (final name in detectedNames.take(24)) {
-        items.add(
-          ExpenseItem(
-            id: _uuid.v4(),
-            name: name,
-            amount: estimatedAmount,
-            categoryId: defaultCategoryId,
-            allocations: defaultAllocations,
-          ),
-        );
-      }
-    }
-
-    if (items.isEmpty) {
-      items.add(
-        ExpenseItem(
-          id: _uuid.v4(),
-          name: fallbackTitle,
-          amount: fallbackTotal > 0 ? fallbackTotal : 0,
-          categoryId: defaultCategoryId,
-          allocations: defaultAllocations,
-        ),
-      );
+    candidates.sort((left, right) => right.score.compareTo(left.score));
+    final selected = candidates.first;
+    if (kDebugMode) {
+      debugPrint('[OCR] Using ${selected.source} candidate with score ${selected.score} and ${selected.items.length} items');
     }
 
     return ParsedReceipt(
-      title: fallbackTitle,
-      note: items.length >= 2 && detectedNames.isNotEmpty && items.every((item) => item.amount == items.first.amount)
-          ? 'Añadido con OCR · revisa importes estimados'
-          : 'Añadido con OCR',
-      items: items,
+      title: selected.title,
+      note: selected.note,
+      items: selected.items,
     );
   }
 
@@ -205,6 +143,97 @@ class TicketOcrService {
     }
   }
 
+  Future<_ReceiptParseCandidate> _parseCandidateImage(
+    String imagePath, {
+    required List<SplitAllocation> defaultAllocations,
+    required String defaultCategoryId,
+    required String source,
+  }) async {
+    final inputImage = InputImage.fromFile(File(imagePath));
+    final result = await _recognizer.processImage(inputImage);
+    final fragments = _extractFragments(result);
+    final rows = _buildRows(fragments);
+    final lines = rows.map((row) => row.fullText).where((line) => line.isNotEmpty).toList();
+    final trimmedLines = _trimTrailingSummaryLines(lines);
+    final items = <ExpenseItem>[];
+    final seenItems = <String>{};
+    final detectedNames = <String>[];
+
+    _logOcrLines(trimmedLines);
+
+    final trimmedRows = rows.where((row) => trimmedLines.contains(row.fullText)).toList();
+
+    for (final row in trimmedRows) {
+      final parsedItem = _parseRow(row, trimmedRows);
+      if (parsedItem == null) {
+        final candidateName = _extractNameCandidate(row.fullText);
+        if (candidateName != null) {
+          detectedNames.add(candidateName);
+        }
+        continue;
+      }
+
+      final seenKey = '${parsedItem.name}|${parsedItem.amount.toStringAsFixed(2)}';
+      if (!seenItems.add(seenKey)) {
+        continue;
+      }
+
+      items.add(
+        ExpenseItem(
+          id: _uuid.v4(),
+          name: parsedItem.name,
+          amount: parsedItem.amount,
+          categoryId: defaultCategoryId,
+          allocations: defaultAllocations,
+        ),
+      );
+
+      _logAcceptedItem(parsedItem);
+    }
+
+    final fallbackTitle = _detectReceiptTitle(lines);
+    final fallbackTotal = lines.map(_extractLastAmount).whereType<double>().fold<double>(0, (currentMax, amount) => amount > currentMax ? amount : currentMax);
+
+    if (items.isEmpty && detectedNames.length >= 2 && fallbackTotal > 0) {
+      final estimatedAmount = double.parse((fallbackTotal / detectedNames.length).toStringAsFixed(2));
+      for (final name in detectedNames.take(24)) {
+        items.add(
+          ExpenseItem(
+            id: _uuid.v4(),
+            name: name,
+            amount: estimatedAmount,
+            categoryId: defaultCategoryId,
+            allocations: defaultAllocations,
+          ),
+        );
+      }
+    }
+
+    if (items.isEmpty) {
+      items.add(
+        ExpenseItem(
+          id: _uuid.v4(),
+          name: fallbackTitle,
+          amount: fallbackTotal > 0 ? fallbackTotal : 0,
+          categoryId: defaultCategoryId,
+          allocations: defaultAllocations,
+        ),
+      );
+    }
+
+    final note = items.length >= 2 && detectedNames.isNotEmpty && items.every((item) => item.amount == items.first.amount)
+        ? 'Añadido con OCR · revisa importes estimados'
+        : 'Añadido con OCR';
+
+    return _ReceiptParseCandidate(
+      source: source,
+      title: fallbackTitle,
+      note: note,
+      items: items,
+      score: (items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).length * 1000) + trimmedLines.length,
+    );
+  }
+
   void dispose() {
     _recognizer.close();
   }
@@ -215,6 +244,22 @@ class _ParsedReceiptItem {
 
   final String name;
   final double amount;
+}
+
+class _ReceiptParseCandidate {
+  const _ReceiptParseCandidate({
+    required this.source,
+    required this.title,
+    required this.note,
+    required this.items,
+    required this.score,
+  });
+
+  final String source;
+  final String title;
+  final String note;
+  final List<ExpenseItem> items;
+  final int score;
 }
 
 class _OcrFragment {

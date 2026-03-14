@@ -1,9 +1,13 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'local_preferences_store.dart';
 import 'preferences.dart';
 import '../models/app_models.dart';
 import '../repositories/app_repository.dart';
+import '../services/fcm_service.dart';
+import '../services/local_notification_service.dart';
 import '../services/receipt_storage_service.dart';
 import '../services/ticket_ocr_service.dart';
 import 'bootstrap.dart';
@@ -30,6 +34,23 @@ final groupProvider = StreamProvider.family<ExpenseGroup?, String>((ref, groupId
 
 final notificationsProvider = StreamProvider.family<List<AppNotification>, String>((ref, userId) {
   return ref.watch(repositoryProvider).watchNotifications(userId);
+});
+
+final localNotificationServiceProvider = Provider<LocalNotificationService>((ref) {
+  return LocalNotificationService();
+});
+
+final fcmServiceProvider = Provider<FcmService?>((ref) {
+  final bootstrap = ref.watch(bootstrapProvider);
+  if (!bootstrap.firebaseReady) {
+    return null;
+  }
+
+  return FcmService(
+    firestore: FirebaseFirestore.instance,
+    messaging: FirebaseMessaging.instance,
+    localNotifications: ref.watch(localNotificationServiceProvider),
+  );
 });
 
 final ticketOcrServiceProvider = Provider<TicketOcrService>((ref) {
