@@ -2750,7 +2750,10 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
     final monthlyTotals = <DateTime, double>{};
 
     for (final expense in spendingExpenses) {
-      payerTotals.update(expense.payerId, (current) => current + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+      final payerId = expense.payerId.trim();
+      if (payerId.isNotEmpty) {
+        payerTotals.update(payerId, (current) => current + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+      }
       final monthBucket = DateTime(expense.createdAt.year, expense.createdAt.month);
       monthlyTotals.update(monthBucket, (current) => current + totalExpense(expense), ifAbsent: () => totalExpense(expense));
       for (final item in expense.items) {
@@ -2782,7 +2785,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
 
     final categoryEntries = categoryTotalsData.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final memberEntries = memberBars.entries.toList()..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
-    final payerEntries = payerTotals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final payerEntries = payerTotals.entries.where((entry) => entry.key.trim().isNotEmpty).toList()..sort((a, b) => b.value.compareTo(a.value));
     final monthlyEntries = monthlyTotals.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
     final emptyChartText = tr(context, es: 'Todavía no hay datos suficientes.', en: 'Not enough data yet.', gl: 'Ainda non hai datos suficientes.', fr: 'Pas assez de donnees pour le moment.', it: 'Non ci sono ancora dati sufficienti.', pt: 'Ainda nao ha dados suficientes.');
     final maxBarValue = memberEntries.isEmpty ? 100.0 : clampChartMax(memberEntries.map((entry) => entry.value.abs()));
@@ -2791,7 +2794,8 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
     final largestExpense = spendingExpenses.isEmpty
       ? null
       : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
-    final topPayer = payerEntries.isEmpty ? null : visibleMembers.firstWhereOrNull((member) => member.userId == payerEntries.first.key);
+    final topPayerEntry = payerEntries.firstWhereOrNull((entry) => entry.key.trim().isNotEmpty);
+    final topPayer = topPayerEntry == null ? null : visibleMembers.firstWhereOrNull((member) => member.userId == topPayerEntry.key);
     final topCategory = categoryEntries.isEmpty ? null : categoryMap[categoryEntries.first.key];
     final settlementCount = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.settlement).length;
     final noDataText = tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados');
@@ -2808,7 +2812,9 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ),
       _InsightTileData(
         label: tr(context, es: 'Más pagó', en: 'Top payer', gl: 'Máis pagou', fr: 'Principal payeur', it: 'Chi ha pagato di piu', pt: 'Quem mais pagou'),
-        value: topPayer == null ? noDataText : '${topPayer.name} · ${money(payerEntries.first.value, widget.group.currency)}',
+        value: topPayerEntry == null
+            ? noDataText
+            : '${topPayer?.name ?? tr(context, es: 'Miembro no disponible', en: 'Unavailable member', gl: 'Membro non dispoñible', fr: 'Membre indisponible', it: 'Membro non disponibile', pt: 'Membro indisponivel')} · ${money(topPayerEntry.value, widget.group.currency)}',
         icon: Icons.emoji_events_rounded,
       ),
       _InsightTileData(
@@ -3254,11 +3260,17 @@ class _InsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final background = colorScheme.surfaceContainerHighest;
+    final titleColor = colorOn(background, dark: colorScheme.onSurface);
+    final subtitleColor = titleColor.withValues(alpha: 0.72);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: background,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -3276,9 +3288,20 @@ class _InsightCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(data.label, style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  data.label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: subtitleColor),
+                ),
                 const SizedBox(height: 4),
-                Text(data.value, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  data.value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: titleColor,
+                  ),
+                ),
               ],
             ),
           ),

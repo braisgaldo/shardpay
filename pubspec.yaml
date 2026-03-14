@@ -75,13 +75,3 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   uses-material-design: true
-  assets:
-    - assets/branding/app_icon.png
-
-flutter_launcher_icons:
-  android: true
-  ios: false
-  image_path: assets/branding/app_icon.png
-  adaptive_icon_foreground: assets/branding/app_icon.png
-  adaptive_icon_background: "#FFF4EA"
-  min_sdk_android: 21
