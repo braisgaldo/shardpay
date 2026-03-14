@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../../app/app_text.dart';
 import '../../app/preferences.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
@@ -802,6 +803,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     final mediaQuery = MediaQuery.of(this.context);
     final topOffset = mediaQuery.padding.top + 18;
     final backgroundColor = isError ? const Color(0xFFF04438) : const Color(0xFF1E8E5A);
+    final foregroundColor = colorOn(backgroundColor);
     final icon = isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded;
     _joinToastEntry = OverlayEntry(
       builder: (overlayContext) {
@@ -827,13 +829,13 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(icon, color: Colors.white),
+                            Icon(icon, color: foregroundColor),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 message,
                                 style: Theme.of(overlayContext).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.white,
+                                  color: foregroundColor,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),

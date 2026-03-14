@@ -3,11 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'preferences.dart';
 
+Color colorOn(Color background, {Color light = Colors.white, Color dark = const Color(0xFF101522)}) {
+  final lightContrast = ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
+  return lightContrast ? light : dark;
+}
+
 ThemeData buildShardPayTheme(AppThemeOption option) {
   final textTheme = GoogleFonts.spaceGroteskTextTheme().apply(
     bodyColor: option.ink,
     displayColor: option.ink,
   );
+  final onAccent = colorOn(option.accent, dark: option.ink);
+  final onSecondary = colorOn(option.secondary, dark: option.ink);
 
   final scheme = ColorScheme.fromSeed(
     seedColor: option.accent,
@@ -18,7 +25,10 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
     secondary: option.secondary,
     surface: option.card,
     onSurface: option.ink,
-    onPrimary: option.brightness == Brightness.dark ? option.canvas : Colors.white,
+    onPrimary: onAccent,
+    onSecondary: onSecondary,
+    onPrimaryContainer: colorOn(option.accent.withValues(alpha: 0.18), dark: option.ink),
+    onSecondaryContainer: colorOn(option.secondary.withValues(alpha: 0.18), dark: option.ink),
   );
 
   return ThemeData(
@@ -37,9 +47,37 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: option.card,
       indicatorColor: option.accent.withValues(alpha: 0.14),
+      iconTheme: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return IconThemeData(color: scheme.onPrimaryContainer);
+        }
+        return IconThemeData(color: scheme.onSurfaceVariant);
+      }),
       labelTextStyle: WidgetStatePropertyAll(
         textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
+        disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
+        textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
     ),
     cardTheme: CardThemeData(
       color: option.card,
@@ -80,7 +118,7 @@ ThemeData buildShardPayTheme(AppThemeOption option) {
     chipTheme: ChipThemeData(
       backgroundColor: option.accent.withValues(alpha: 0.10),
       selectedColor: option.accent.withValues(alpha: 0.18),
-      labelStyle: textTheme.labelMedium!,
+      labelStyle: textTheme.labelMedium!.copyWith(color: scheme.onPrimaryContainer),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),

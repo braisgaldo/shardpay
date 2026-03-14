@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -91,18 +90,33 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                                 children: [
                                   Text(entry.counterparty.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                                   const SizedBox(height: 4),
-                                  Text(isTheyOweYou ? tr(context, es: 'Te debe dinero', en: 'Owes you money', gl: 'Debeche diñeiro', fr: 'Vous doit de l argent', it: 'Ti deve denaro', pt: 'Deve-te dinheiro') : tr(context, es: 'Le debes dinero', en: 'You owe money', gl: 'Debeslle diñeiro', fr: 'Vous lui devez de l argent', it: 'Gli devi denaro', pt: 'Deves-lhe dinheiro')),
+                                  Text(
+                                    entry.groupSubtitle ??
+                                        (isTheyOweYou
+                                            ? tr(context, es: 'Te debe dinero', en: 'Owes you money', gl: 'Debeche diñeiro', fr: 'Vous doit de l argent', it: 'Ti deve denaro', pt: 'Deve-te dinheiro')
+                                            : tr(context, es: 'Le debes dinero', en: 'You owe money', gl: 'Debeslle diñeiro', fr: 'Vous lui devez de l argent', it: 'Gli devi denaro', pt: 'Deves-lhe dinheiro')),
+                                  ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    tr(
-                                      context,
-                                      es: '${entry.groupBreakdown.length} grupos pendientes',
-                                      en: '${entry.groupBreakdown.length} pending groups',
-                                      gl: '${entry.groupBreakdown.length} grupos pendentes',
-                                      fr: '${entry.groupBreakdown.length} groupes en attente',
-                                      it: '${entry.groupBreakdown.length} gruppi pendenti',
-                                      pt: '${entry.groupBreakdown.length} grupos pendentes',
-                                    ),
+                                    entry.isScopedToGroup
+                                        ? tr(
+                                            context,
+                                            es: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
+                                            en: 'Gets ${money(entry.totalIncoming, entry.currency)} · Owes ${money(entry.totalOutgoing, entry.currency)}',
+                                            gl: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
+                                            fr: 'Recoit ${money(entry.totalIncoming, entry.currency)} · Doit ${money(entry.totalOutgoing, entry.currency)}',
+                                            it: 'Riceve ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
+                                            pt: 'Recebe ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
+                                          )
+                                        : tr(
+                                            context,
+                                            es: '${entry.groupBreakdown.length} grupos · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
+                                            en: '${entry.groupBreakdown.length} groups · gets ${money(entry.totalIncoming, entry.currency)} · owes ${money(entry.totalOutgoing, entry.currency)}',
+                                            gl: '${entry.groupBreakdown.length} grupos · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
+                                            fr: '${entry.groupBreakdown.length} groupes · recoit ${money(entry.totalIncoming, entry.currency)} · doit ${money(entry.totalOutgoing, entry.currency)}',
+                                            it: '${entry.groupBreakdown.length} gruppi · riceve ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
+                                            pt: '${entry.groupBreakdown.length} grupos · recebe ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
+                                          ),
                                     style: Theme.of(context).textTheme.bodySmall,
                                   ),
                                 ],
@@ -317,12 +331,21 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
 }
 
 class _CounterpartyEntry {
-  const _CounterpartyEntry({required this.counterparty, required this.groupBreakdown, required this.netAmount, required this.currency});
+  const _CounterpartyEntry({
+    required this.counterparty,
+    required this.groupBreakdown,
+    required this.netAmount,
+    required this.currency,
+    this.groupSubtitle,
+  });
 
   final GroupMember counterparty;
   final List<_GroupDebtEntry> groupBreakdown;
   final double netAmount;
   final String currency;
+  final String? groupSubtitle;
+
+  bool get isScopedToGroup => groupSubtitle != null;
 
   double get totalIncoming => groupBreakdown.where((entry) => entry.netAmount > 0).fold<double>(0, (sum, entry) => sum + entry.netAmount);
 
@@ -417,41 +440,43 @@ List<_BalanceHistoryEntry> _buildHistoryEntries(_CounterpartyEntry entry, String
 }
 
 List<_CounterpartyEntry> _buildEntries(List<ExpenseGroup> groups, String currentUserId, {required bool includePendingUsers}) {
-  final perUserAndCurrency = <String, Map<String, _GroupDebtEntry>>{};
   final userById = <String, GroupMember>{};
+  final groupById = <String, ExpenseGroup>{};
 
   for (final group in groups) {
-    final members = includePendingUsers ? group.visibleMembers : group.activeMembers;
-    for (final member in members) {
+    groupById[group.id] = group;
+    for (final member in group.visibleMembers) {
       userById[member.userId] = member;
-    }
-    final edges = settlementEdges(group, activeAccountsOnly: !includePendingUsers);
-    for (final edge in edges.where((entry) => entry.fromUserId == currentUserId || entry.toUserId == currentUserId)) {
-      final counterpartyId = edge.fromUserId == currentUserId ? edge.toUserId : edge.fromUserId;
-      final counterparty = userById[counterpartyId] ?? members.firstWhereOrNull((member) => member.userId == counterpartyId);
-      if (counterparty == null) {
-        continue;
-      }
-      final key = '$counterpartyId|${group.currency}';
-      final netDelta = edge.toUserId == currentUserId ? edge.amount : -edge.amount;
-      final perGroup = perUserAndCurrency.putIfAbsent(key, () => {});
-      final current = perGroup[group.id];
-      perGroup[group.id] = _GroupDebtEntry(group: group, counterparty: counterparty, netAmount: double.parse(((current?.netAmount ?? 0) + netDelta).toStringAsFixed(2)));
     }
   }
 
-  return perUserAndCurrency.entries.map((entry) {
-    final keyParts = entry.key.split('|');
-    final counterparty = userById[keyParts.first]!;
-    final groupBreakdown = entry.value.values.where((item) => item.netAmount.abs() > 0.009).sorted((a, b) => b.netAmount.abs().compareTo(a.netAmount.abs())).toList();
-    final netAmount = groupBreakdown.fold<double>(0, (total, item) => total + item.netAmount);
-    return _CounterpartyEntry(
-      counterparty: counterparty,
-      groupBreakdown: groupBreakdown,
-      netAmount: double.parse(netAmount.toStringAsFixed(2)),
-      currency: keyParts.last,
-    );
-  }).where((entry) => entry.netAmount.abs() > 0.009).sorted((a, b) => b.netAmount.abs().compareTo(a.netAmount.abs())).toList();
+  return globalCounterpartyBalances(groups, currentUserId, includePendingUsers: includePendingUsers)
+      .map((entry) {
+        final counterparty = userById[entry.counterpartyId];
+        if (counterparty == null) {
+          return null;
+        }
+
+        final groupBreakdown = entry.groupBreakdown
+            .map(
+              (item) => _GroupDebtEntry(
+                group: item.group,
+                counterparty: userById[item.counterpartyId] ?? counterparty,
+                netAmount: item.netAmount,
+              ),
+            )
+            .toList(growable: false);
+
+        return _CounterpartyEntry(
+          counterparty: counterparty,
+          groupBreakdown: groupBreakdown,
+          netAmount: entry.netAmount,
+          currency: entry.currency,
+          groupSubtitle: entry.isScopedToGroup ? groupById[entry.scopedGroupId!]?.name : null,
+        );
+      })
+      .whereType<_CounterpartyEntry>()
+      .toList(growable: false);
 }
 
 Future<void> _requestGroupSettlement(BuildContext context, WidgetRef ref, _GroupDebtEntry entry, String currentUserId) async {

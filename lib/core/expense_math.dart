@@ -32,6 +32,58 @@ class OutstandingExpenseDebt {
   final List<String> itemNames;
 }
 
+class GroupCounterpartyBalance {
+  const GroupCounterpartyBalance({
+    required this.group,
+    required this.counterpartyId,
+    required this.netAmount,
+  });
+
+  final ExpenseGroup group;
+  final String counterpartyId;
+  final double netAmount;
+}
+
+class GlobalCounterpartyBalance {
+  const GlobalCounterpartyBalance({
+    required this.counterpartyId,
+    required this.currency,
+    required this.groupBreakdown,
+    this.scopedGroupId,
+  });
+
+  final String counterpartyId;
+  final String currency;
+  final List<GroupCounterpartyBalance> groupBreakdown;
+  final String? scopedGroupId;
+
+  bool get isScopedToGroup => scopedGroupId != null;
+
+  double get netAmount => double.parse(groupBreakdown.fold<double>(0, (sum, entry) => sum + entry.netAmount).toStringAsFixed(2));
+
+  double get totalIncoming => double.parse(groupBreakdown.where((entry) => entry.netAmount > 0).fold<double>(0, (sum, entry) => sum + entry.netAmount).toStringAsFixed(2));
+
+  double get totalOutgoing => double.parse(groupBreakdown.where((entry) => entry.netAmount < 0).fold<double>(0, (sum, entry) => sum + entry.netAmount.abs()).toStringAsFixed(2));
+}
+
+class BalanceSummary {
+  const BalanceSummary({
+    required this.memberId,
+    required this.currency,
+    required this.netAmount,
+    required this.incomingAmount,
+    required this.outgoingAmount,
+    this.scopedGroupId,
+  });
+
+  final String memberId;
+  final String currency;
+  final double netAmount;
+  final double incomingAmount;
+  final double outgoingAmount;
+  final String? scopedGroupId;
+}
+
 double totalExpense(ExpenseRecord expense) {
   return expense.items.fold(0, (sum, item) => sum + item.amount);
 }
@@ -106,6 +158,108 @@ Map<String, double> directBalancesForMember(ExpenseGroup group, String memberId)
   }
 
   return balances.map((key, value) => MapEntry(key, double.parse(value.toStringAsFixed(2)))).removeNearZero();
+}
+
+List<GroupCounterpartyBalance> groupCounterpartyBalances(
+  ExpenseGroup group,
+  String currentUserId, {
+  required bool includePendingUsers,
+}) {
+  final eligibleIds = (includePendingUsers ? group.visibleMembers : group.activeMembers)
+      .map((member) => member.userId)
+      .where((userId) => includePendingUsers || !userId.startsWith('pending:'))
+      .toSet();
+
+  return directBalancesForMember(group, currentUserId)
+      .entries
+      .where((entry) => eligibleIds.contains(entry.key) && entry.value.abs() > 0.009)
+      .map(
+        (entry) => GroupCounterpartyBalance(
+          group: group,
+          counterpartyId: entry.key,
+          netAmount: entry.value,
+        ),
+      )
+      .sorted((left, right) => right.netAmount.abs().compareTo(left.netAmount.abs()))
+      .toList(growable: false);
+}
+
+List<GlobalCounterpartyBalance> globalCounterpartyBalances(
+  Iterable<ExpenseGroup> groups,
+  String currentUserId, {
+  required bool includePendingUsers,
+}) {
+  final grouped = <String, List<GroupCounterpartyBalance>>{};
+  final scopedGroupIds = <String, String?>{};
+
+  for (final group in groups) {
+    for (final balance in groupCounterpartyBalances(group, currentUserId, includePendingUsers: includePendingUsers)) {
+      final isPendingCounterparty = balance.counterpartyId.startsWith('pending:');
+      final key = isPendingCounterparty ? '${balance.counterpartyId}|${group.currency}|${group.id}' : '${balance.counterpartyId}|${group.currency}';
+      grouped.putIfAbsent(key, () => <GroupCounterpartyBalance>[]).add(balance);
+      scopedGroupIds[key] = isPendingCounterparty ? group.id : null;
+    }
+  }
+
+  return grouped.entries
+      .map(
+        (entry) {
+          final parts = entry.key.split('|');
+          return GlobalCounterpartyBalance(
+            counterpartyId: parts.first,
+            currency: parts[1],
+            groupBreakdown: entry.value.sorted((left, right) => right.netAmount.abs().compareTo(left.netAmount.abs())).toList(growable: false),
+            scopedGroupId: scopedGroupIds[entry.key],
+          );
+        },
+      )
+      .where((entry) => entry.netAmount.abs() > 0.009)
+      .sorted((left, right) => right.netAmount.abs().compareTo(left.netAmount.abs()))
+      .toList(growable: false);
+}
+
+List<BalanceSummary> groupBalanceSummaries(ExpenseGroup group, {bool includePendingUsers = true}) {
+  final eligibleMembers = includePendingUsers ? group.visibleMembers : group.activeMembers;
+  final eligibleIds = eligibleMembers
+      .map((member) => member.userId)
+      .where((userId) => includePendingUsers || !userId.startsWith('pending:'))
+      .toSet();
+  final netBalances = memberBalances(group);
+
+  return eligibleMembers
+      .map((member) {
+        final direct = directBalancesForMember(group, member.userId).entries.where((entry) => eligibleIds.contains(entry.key));
+        final incomingAmount = direct.where((entry) => entry.value > 0).fold<double>(0, (sum, entry) => sum + entry.value);
+        final outgoingAmount = direct.where((entry) => entry.value < 0).fold<double>(0, (sum, entry) => sum + entry.value.abs());
+        return BalanceSummary(
+          memberId: member.userId,
+          currency: group.currency,
+          netAmount: double.parse((netBalances[member.userId] ?? 0).toStringAsFixed(2)),
+          incomingAmount: double.parse(incomingAmount.toStringAsFixed(2)),
+          outgoingAmount: double.parse(outgoingAmount.toStringAsFixed(2)),
+        );
+      })
+      .sorted((left, right) => right.netAmount.abs().compareTo(left.netAmount.abs()))
+      .toList(growable: false);
+}
+
+List<BalanceSummary> globalBalanceSummaries(
+  Iterable<ExpenseGroup> groups,
+  String currentUserId, {
+  required bool includePendingUsers,
+}) {
+  return globalCounterpartyBalances(groups, currentUserId, includePendingUsers: includePendingUsers)
+      .map(
+        (entry) => BalanceSummary(
+          memberId: entry.counterpartyId,
+          currency: entry.currency,
+          netAmount: entry.netAmount,
+          incomingAmount: entry.totalIncoming,
+          outgoingAmount: entry.totalOutgoing,
+          scopedGroupId: entry.scopedGroupId,
+        ),
+      )
+      .toList(growable: false);
 }
 
 Map<String, double> categoryTotals(Iterable<ExpenseGroup> groups) {

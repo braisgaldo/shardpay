@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app/app_text.dart';
 import '../../app/preferences.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../models/app_models.dart';
 import '../../widgets/language_flag.dart';
 import '../../widgets/manual/user_manual_sheet.dart';
@@ -316,7 +317,7 @@ class SettingsScreen extends ConsumerWidget {
                 TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
                 FilledButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828), foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828), foregroundColor: colorOn(const Color(0xFFC62828))),
                   child: Text(tr(context, es: 'Eliminar', en: 'Delete', gl: 'Eliminar', fr: 'Supprimer', it: 'Elimina', pt: 'Eliminar')),
                 ),
               ],

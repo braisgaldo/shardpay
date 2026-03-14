@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/app_text.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
@@ -699,7 +700,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onPressed: group.ownerId == widget.user.id && group.members.length > 1 ? null : () => Navigator.of(dialogContext).pop(true),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF9B1C1C),
-                    foregroundColor: Colors.white,
+                    foregroundColor: colorOn(const Color(0xFF9B1C1C)),
                   ),
                   icon: const Icon(Icons.logout_rounded),
                   label: Text(tr(context, es: 'Salir', en: 'Leave', gl: 'Saír', fr: 'Quitter', it: 'Esci', pt: 'Sair')),
@@ -739,7 +740,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onPressed: () => Navigator.of(dialogContext).pop(true),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFC62828),
-                    foregroundColor: Colors.white,
+                    foregroundColor: colorOn(const Color(0xFFC62828)),
                   ),
                   icon: const Icon(Icons.delete_forever_rounded),
                   label: Text(tr(context, es: 'Eliminar', en: 'Delete', gl: 'Eliminar', fr: 'Supprimer', it: 'Elimina', pt: 'Eliminar')),
@@ -1001,10 +1002,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           ),
                         ),
                       ...items.asMap().entries.map((entry) {
-                        final index = entry.key;
                         final item = entry.value;
+                        final itemId = item.id;
                         final category = categories.firstWhereOrNull((cat) => cat.id == item.categoryId) ?? categories.first;
                         return Container(
+                          key: ValueKey(itemId),
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -1017,14 +1019,20 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                 children: [
                                   Expanded(
                                     child: TextFormField(
+                                      key: ValueKey('receipt-name-$itemId'),
                                       initialValue: item.name,
                                       decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
-                                      onChanged: (value) => items[index] = items[index].copyWith(name: value),
+                                      onChanged: (value) {
+                                        final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                        if (currentIndex >= 0) {
+                                          items[currentIndex] = items[currentIndex].copyWith(name: value);
+                                        }
+                                      },
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    onPressed: () => setDialogState(() => items.removeAt(index)),
+                                    onPressed: () => setDialogState(() => items.removeWhere((entry) => entry.id == itemId)),
                                     icon: const Icon(Icons.delete_outline_rounded),
                                     tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
                                   ),
@@ -1032,13 +1040,20 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               ),
                               const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('receipt-amount-$itemId'),
                                 initialValue: item.amount.toStringAsFixed(2),
                                 decoration: InputDecoration(labelText: tr(context, es: 'Importe', en: 'Amount', gl: 'Importe', fr: 'Montant', it: 'Importo', pt: 'Valor')),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                onChanged: (value) => items[index] = items[index].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? item.amount),
+                                onChanged: (value) {
+                                  final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                  if (currentIndex >= 0) {
+                                    items[currentIndex] = items[currentIndex].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount);
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<String>(
+                                key: ValueKey('receipt-category-$itemId'),
                                 initialValue: category.id,
                                 decoration: InputDecoration(labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria')),
                                 items: categories
@@ -1055,7 +1070,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                       ),
                                     )
                                     .toList(),
-                                onChanged: (value) => items[index] = items[index].copyWith(categoryId: value ?? category.id),
+                                onChanged: (value) {
+                                  final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                  if (currentIndex >= 0) {
+                                    items[currentIndex] = items[currentIndex].copyWith(categoryId: value ?? category.id);
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               Align(
@@ -1064,7 +1084,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   onPressed: () async {
                                     final allocations = await _showAllocationEditor(context, group, item.allocations);
                                     if (allocations != null) {
-                                      setDialogState(() => items[index] = items[index].copyWith(allocations: allocations));
+                                      setDialogState(() {
+                                        final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                        if (currentIndex >= 0) {
+                                          items[currentIndex] = items[currentIndex].copyWith(allocations: allocations);
+                                        }
+                                      });
                                     }
                                   },
                                   icon: const Icon(Icons.tune_rounded),
@@ -1258,10 +1283,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       ),
                       const SizedBox(height: 10),
                       ...items.asMap().entries.map((entry) {
-                        final index = entry.key;
                         final item = entry.value;
+                        final itemId = item.id;
                         final category = categories.firstWhereOrNull((cat) => cat.id == item.categoryId) ?? categories.first;
                         return Container(
+                          key: ValueKey(itemId),
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -1274,14 +1300,20 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                 children: [
                                   Expanded(
                                     child: TextFormField(
+                                      key: ValueKey('expense-name-$itemId'),
                                       initialValue: item.name,
                                       decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
-                                      onChanged: (value) => items[index] = items[index].copyWith(name: value),
+                                      onChanged: (value) {
+                                        final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                        if (currentIndex >= 0) {
+                                          items[currentIndex] = items[currentIndex].copyWith(name: value);
+                                        }
+                                      },
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    onPressed: items.length == 1 ? null : () => setDialogState(() => items.removeAt(index)),
+                                    onPressed: items.length == 1 ? null : () => setDialogState(() => items.removeWhere((entry) => entry.id == itemId)),
                                     icon: const Icon(Icons.delete_outline_rounded),
                                     tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
                                   ),
@@ -1289,13 +1321,20 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               ),
                               const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('expense-amount-$itemId'),
                                 initialValue: item.amount.toStringAsFixed(2),
                                 decoration: InputDecoration(labelText: tr(context, es: 'Importe', en: 'Amount', gl: 'Importe', fr: 'Montant', it: 'Importo', pt: 'Valor')),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                onChanged: (value) => items[index] = items[index].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? item.amount),
+                                onChanged: (value) {
+                                  final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                  if (currentIndex >= 0) {
+                                    items[currentIndex] = items[currentIndex].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount);
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<String>(
+                                key: ValueKey('expense-category-$itemId'),
                                 initialValue: category.id,
                                 decoration: InputDecoration(labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria')),
                                 items: categories
@@ -1312,7 +1351,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                       ),
                                     )
                                     .toList(),
-                                onChanged: (value) => items[index] = items[index].copyWith(categoryId: value ?? category.id),
+                                onChanged: (value) {
+                                  final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                  if (currentIndex >= 0) {
+                                    items[currentIndex] = items[currentIndex].copyWith(categoryId: value ?? category.id);
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               Align(
@@ -1321,7 +1365,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   onPressed: () async {
                                     final allocations = await _showAllocationEditor(context, group, item.allocations);
                                     if (allocations != null) {
-                                      setDialogState(() => items[index] = items[index].copyWith(allocations: allocations));
+                                      setDialogState(() {
+                                        final currentIndex = items.indexWhere((entry) => entry.id == itemId);
+                                        if (currentIndex >= 0) {
+                                          items[currentIndex] = items[currentIndex].copyWith(allocations: allocations);
+                                        }
+                                      });
                                     }
                                   },
                                   icon: const Icon(Icons.tune_rounded),
@@ -1410,7 +1459,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
                 FilledButton.icon(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828), foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828), foregroundColor: colorOn(const Color(0xFFC62828))),
                   icon: const Icon(Icons.delete_forever_rounded),
                   label: Text(tr(context, es: 'Eliminar', en: 'Delete', gl: 'Eliminar', fr: 'Supprimer', it: 'Elimina', pt: 'Eliminar')),
                 ),
@@ -1436,63 +1485,116 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         ),
     };
 
-    return showDialog<List<SplitAllocation>>(
+    final includedUserIds = current.where((entry) => entry.percentage > 0).map((entry) => entry.userId).toSet();
+    if (includedUserIds.isEmpty) {
+      includedUserIds.addAll(members.map((member) => member.userId));
+    }
+
+    void applyEqualSplitToIncludedMembers() {
+      final includedMembers = members.where((member) => includedUserIds.contains(member.userId)).toList();
+      final equal = equalAllocations(includedMembers);
+      for (final member in members) {
+        controllers[member.userId]?.text = '0';
+      }
+      for (final allocation in equal) {
+        controllers[allocation.userId]?.text = allocation.percentage.toStringAsFixed(2).replaceFirst(RegExp(r'\.00$'), '');
+      }
+    }
+
+    final result = await showDialog<List<SplitAllocation>>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(tr(context, es: 'Reparto avanzado', en: 'Advanced split', gl: 'Reparto avanzado', fr: 'Repartition avancee', it: 'Ripartizione avanzata', pt: 'Divisao avancada')),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(tr(context, es: 'Decide qué porcentaje paga cada persona. La suma total debe dar 100%.', en: 'Set the percentage paid by each person. The total must be 100%.', gl: 'Decide que porcentaxe paga cada persoa. A suma total debe dar 100%.', fr: 'Decidez quel pourcentage paie chaque personne. Le total doit faire 100 %.', it: 'Decidi quale percentuale paga ogni persona. Il totale deve essere 100%.', pt: 'Decide que percentagem paga cada pessoa. O total deve ser 100%.'), style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 12),
-                ...members.map((member) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: TextField(
-                      controller: controllers[member.userId],
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(labelText: '${member.name} (%)'),
-                    ),
-                  );
-                }),
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: Text(tr(context, es: 'Reparto avanzado', en: 'Advanced split', gl: 'Reparto avanzado', fr: 'Repartition avancee', it: 'Ripartizione avanzata', pt: 'Divisao avancada')),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(tr(context, es: 'Decide qué porcentaje paga cada persona. La suma total debe dar 100%.', en: 'Set the percentage paid by each person. The total must be 100%.', gl: 'Decide que porcentaxe paga cada persoa. A suma total debe dar 100%.', fr: 'Decidez quel pourcentage paie chaque personne. Le total doit faire 100 %.', it: 'Decidi quale percentuale paga ogni persona. Il totale deve essere 100%.', pt: 'Decide que percentagem paga cada pessoa. O total deve ser 100%.'), style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    Text(tr(context, es: 'Si una persona no tiene este gasto, márcala como sin gasto: se pondrá a 0 y se recalculará el resto.', en: 'If someone is not part of this expense, mark them as no expense: they will be set to 0 and the rest will be recalculated.', gl: 'Se unha persoa non ten este gasto, marcaa sen gasto: porase a 0 e recalcularase o resto.', fr: 'Si une personne ne participe pas a cette depense, marquez-la sans depense : elle passera a 0 et le reste sera recalcule.', it: 'Se una persona non partecipa a questa spesa, segnala nessuna spesa: verra impostata a 0 e il resto verra ricalcolato.', pt: 'Se uma pessoa nao entra nesta despesa, marca-a sem despesa: fica a 0 e o resto sera recalculado.'), style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 12),
+                    ...members.map((member) {
+                      final included = includedUserIds.contains(member.userId);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: controllers[member.userId],
+                                enabled: included,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: InputDecoration(labelText: '${member.name} (%)'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () {
+                                if (included && includedUserIds.length == 1) {
+                                  return;
+                                }
+                                setDialogState(() {
+                                  if (included) {
+                                    includedUserIds.remove(member.userId);
+                                    controllers[member.userId]?.text = '0';
+                                  } else {
+                                    includedUserIds.add(member.userId);
+                                  }
+                                  applyEqualSplitToIncludedMembers();
+                                });
+                              },
+                              child: Text(included ? tr(context, es: 'Tiene gasto', en: 'Included', gl: 'Ten gasto', fr: 'Inclus', it: 'Incluso', pt: 'Incluido') : tr(context, es: 'Sin gasto', en: 'No expense', gl: 'Sen gasto', fr: 'Sans depense', it: 'Senza spesa', pt: 'Sem despesa')),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setDialogState(applyEqualSplitToIncludedMembers);
+                  },
+                  child: Text(tr(context, es: 'Equitativo', en: 'Equal split', gl: 'Equitativo', fr: 'Egalitaire', it: 'Equo', pt: 'Equitativo')),
+                ),
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                FilledButton(
+                  onPressed: () {
+                    final allocations = members.map((member) {
+                      final included = includedUserIds.contains(member.userId);
+                      return SplitAllocation(
+                        userId: member.userId,
+                        percentage: included ? (double.tryParse(controllers[member.userId]!.text.replaceAll(',', '.')) ?? 0) : 0,
+                      );
+                    }).toList();
+                    final sum = allocations.fold<double>(0, (value, item) => value + item.percentage);
+                    if ((sum - 100).abs() > 0.01) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'La suma de porcentajes debe ser 100%.', en: 'The percentage sum must be 100%.', gl: 'A suma de porcentaxes debe ser 100%.', fr: 'La somme des pourcentages doit etre de 100 %.', it: 'La somma delle percentuali deve essere 100%.', pt: 'A soma das percentagens deve ser 100%.'))));
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(allocations);
+                  },
+                  child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
+                ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                final equal = equalAllocations(members);
-                for (final allocation in equal) {
-                  controllers[allocation.userId]?.text = allocation.percentage.toStringAsFixed(0);
-                }
-              },
-              child: Text(tr(context, es: 'Equitativo', en: 'Equal split', gl: 'Equitativo', fr: 'Egalitaire', it: 'Equo', pt: 'Equitativo')),
-            ),
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-            FilledButton(
-              onPressed: () {
-                final allocations = members.map((member) {
-                  return SplitAllocation(
-                    userId: member.userId,
-                    percentage: double.tryParse(controllers[member.userId]!.text.replaceAll(',', '.')) ?? 0,
-                  );
-                }).toList();
-                final sum = allocations.fold<double>(0, (value, item) => value + item.percentage);
-                if ((sum - 100).abs() > 0.01) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'La suma de porcentajes debe ser 100%.', en: 'The percentage sum must be 100%.', gl: 'A suma de porcentaxes debe ser 100%.', fr: 'La somme des pourcentages doit etre de 100 %.', it: 'La somma delle percentuali deve essere 100%.', pt: 'A soma das percentagens deve ser 100%.'))));
-                  return;
-                }
-                Navigator.of(dialogContext).pop(allocations);
-              },
-              child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
-            ),
-          ],
+            );
+          },
         );
       },
     );
+
+    for (final controller in controllers.values) {
+      controller.dispose();
+    }
+
+    return result;
   }
 
   Future<void> _toggleGroupClosed(BuildContext context, ExpenseGroup group) async {
@@ -1773,11 +1875,16 @@ class _BalancesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final summaries = {
+      for (final summary in groupBalanceSummaries(group)) summary.memberId: summary,
+    };
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: sortedMembersByName(group.visibleMembers).map((member) {
         final balance = balances[member.userId] ?? 0;
+        final summary = summaries[member.userId];
         final tone = balance > 0 ? const Color(0xFFDFF7E8) : balance < 0 ? const Color(0xFFFFE0E0) : const Color(0xFFE9EEF5);
         final foreground = balance > 0 ? const Color(0xFF1E8E3E) : balance < 0 ? const Color(0xFFC62828) : const Color(0xFF607D8B);
         final status = balance > 0 ? tr(context, es: 'Recibe', en: 'Gets back', gl: 'Recibe', fr: 'Recoit', it: 'Riceve', pt: 'Recebe') : balance < 0 ? tr(context, es: 'Debe', en: 'Owes', gl: 'Debe', fr: 'Doit', it: 'Deve', pt: 'Deve') : tr(context, es: 'A cero', en: 'Settled', gl: 'A cero', fr: 'A zero', it: 'In pari', pt: 'A zero');
@@ -1801,6 +1908,19 @@ class _BalancesTab extends StatelessWidget {
                         children: [
                           Text(member.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                           Text(status, style: TextStyle(color: foreground)),
+                          if (summary != null)
+                            Text(
+                              tr(
+                                context,
+                                es: 'A favor ${money(summary.incomingAmount, group.currency)} · Debe ${money(summary.outgoingAmount, group.currency)}',
+                                en: 'Gets ${money(summary.incomingAmount, group.currency)} · Owes ${money(summary.outgoingAmount, group.currency)}',
+                                gl: 'A favor ${money(summary.incomingAmount, group.currency)} · Debe ${money(summary.outgoingAmount, group.currency)}',
+                                fr: 'Recoit ${money(summary.incomingAmount, group.currency)} · Doit ${money(summary.outgoingAmount, group.currency)}',
+                                it: 'Riceve ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
+                                pt: 'Recebe ${money(summary.incomingAmount, group.currency)} · Deve ${money(summary.outgoingAmount, group.currency)}',
+                              ),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                         ],
                       ),
                     ),
@@ -1824,32 +1944,17 @@ class _BalancesTab extends StatelessWidget {
 }
 
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
-  final planEdges = settlementEdges(group, activeAccountsOnly: false)
-      .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
-      .toList(growable: false);
-  var counterparties = planEdges
-      .map((edge) {
-        final counterpartyId = edge.fromUserId == member.userId ? edge.toUserId : edge.fromUserId;
-        final signedAmount = edge.fromUserId == member.userId ? -edge.amount : edge.amount;
-        return (member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == counterpartyId), amount: signedAmount);
-      })
+  final counterparties = directBalancesForMember(group, member.userId)
+      .entries
+      .map(
+        (entry) => (
+          member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key),
+          amount: entry.value,
+        ),
+      )
       .where((entry) => entry.member != null)
       .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
-
-  if (counterparties.isEmpty && balance.abs() > 0.009) {
-    counterparties = directBalancesForMember(group, member.userId)
-        .entries
-        .map(
-          (entry) => (
-            member: group.visibleMembers.firstWhereOrNull((candidate) => candidate.userId == entry.key),
-            amount: entry.value,
-          ),
-        )
-        .where((entry) => entry.member != null)
-        .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
-        .toList(growable: false);
-  }
 
   return showModalBottomSheet<void>(
     context: context,
