@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_cropper/image_cropper.dart';
@@ -23,6 +23,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   Uint8List? _previewBytes;
   ReceiptImageFilter _selectedFilter = ReceiptImageFilter.none;
   bool _isBusy = false;
+  int _previewRequestId = 0;
 
   @override
   void initState() {
@@ -32,71 +33,41 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   }
 
   Future<void> _refreshPreview() async {
-    final bytes = await _buildPreviewBytes();
-    if (!mounted) {
-      return;
+    final requestId = ++_previewRequestId;
+    try {
+      final bytes = await _buildPreviewBytes();
+      if (!mounted || requestId != _previewRequestId) {
+        return;
+      }
+      setState(() {
+        _previewBytes = bytes;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _previewRequestId) {
+        return;
+      }
+      _showEditorError(
+        tr(context, es: 'No se pudo preparar la vista previa del ticket.', en: 'The receipt preview could not be prepared.', gl: 'Non se puido preparar a vista previa do ticket.', fr: 'Impossible de preparer l apercu du ticket.', it: 'Impossibile preparare l anteprima dello scontrino.', pt: 'Nao foi possivel preparar a pre-visualizacao da fatura.'),
+      );
     }
-    setState(() {
-      _previewBytes = bytes;
-    });
   }
 
   Future<Uint8List> _buildPreviewBytes() async {
     final rawBytes = await File(_workingPath).readAsBytes();
-    return _applyFilter(rawBytes, _selectedFilter);
-  }
-
-  Uint8List _applyFilter(Uint8List bytes, ReceiptImageFilter filter) {
-    if (filter == ReceiptImageFilter.none) {
-      return bytes;
-    }
-
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      return bytes;
-    }
-
-    img.Image filtered;
-    switch (filter) {
-      case ReceiptImageFilter.none:
-        filtered = decoded;
-      case ReceiptImageFilter.grayscale:
-        filtered = img.grayscale(decoded);
-      case ReceiptImageFilter.document:
-        filtered = img.grayscale(decoded);
-        filtered = img.adjustColor(filtered, contrast: 2.2, brightness: 0.08, gamma: 0.92);
-        filtered = img.gaussianBlur(filtered, radius: 1);
-        for (final pixel in filtered) {
-          final luminance = img.getLuminance(pixel);
-          final binary = luminance >= 170 ? 255 : 0;
-          pixel
-            ..r = binary
-            ..g = binary
-            ..b = binary;
-        }
-      case ReceiptImageFilter.warm:
-        filtered = img.adjustColor(decoded, saturation: 1.08, contrast: 1.12, brightness: 0.02);
-        for (final pixel in filtered) {
-          pixel
-            ..r = (pixel.r * 1.06).clamp(0, 255).toInt()
-            ..g = (pixel.g * 1.01).clamp(0, 255).toInt()
-            ..b = (pixel.b * 0.95).clamp(0, 255).toInt();
-        }
-    }
-
-    return Uint8List.fromList(img.encodeJpg(filtered, quality: 96));
+    return compute(_buildReceiptPreviewBytes, {
+      'bytes': rawBytes,
+      'filterIndex': _selectedFilter.index,
+    });
   }
 
   Future<void> _rotateImage(bool clockwise) async {
     await _runBusyTask(() async {
       final rawBytes = await File(_workingPath).readAsBytes();
-      final decoded = img.decodeImage(rawBytes);
-      if (decoded == null) {
-        return;
-      }
-
-      final rotated = img.copyRotate(decoded, angle: clockwise ? 90 : -90);
-      _workingPath = await _writeTempImage(Uint8List.fromList(img.encodeJpg(rotated, quality: 96)));
+      final rotatedBytes = await compute(_rotateReceiptBytes, {
+        'bytes': rawBytes,
+        'clockwise': clockwise,
+      });
+      _workingPath = await _writeTempImage(rotatedBytes);
       await _refreshPreview();
     });
   }
@@ -106,42 +77,55 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
       return;
     }
 
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: _workingPath,
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: 96,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
-          toolbarColor: Theme.of(context).colorScheme.surface,
-          toolbarWidgetColor: Theme.of(context).colorScheme.onSurface,
-          activeControlsWidgetColor: Theme.of(context).colorScheme.primary,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          hideBottomControls: false,
-          lockAspectRatio: false,
-        ),
-        IOSUiSettings(
-          title: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
-          doneButtonTitle: tr(context, es: 'Listo', en: 'Done', gl: 'Listo', fr: 'Pret', it: 'Fine', pt: 'Concluir'),
-          cancelButtonTitle: tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'),
-        ),
-      ],
-    );
+    try {
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: _workingPath,
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 96,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
+            toolbarColor: Theme.of(context).colorScheme.surface,
+            toolbarWidgetColor: Theme.of(context).colorScheme.onSurface,
+            activeControlsWidgetColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            hideBottomControls: false,
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(
+            title: tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura'),
+            doneButtonTitle: tr(context, es: 'Listo', en: 'Done', gl: 'Listo', fr: 'Pret', it: 'Fine', pt: 'Concluir'),
+            cancelButtonTitle: tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'),
+          ),
+        ],
+      );
 
-    if (cropped == null) {
-      return;
+      if (cropped == null || !mounted) {
+        return;
+      }
+
+      setState(() {
+        _workingPath = cropped.path;
+        _previewBytes = null;
+      });
+      await _refreshPreview();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showEditorError(
+        tr(context, es: 'No se pudo recortar la foto del ticket.', en: 'The receipt photo could not be cropped.', gl: 'Non se puido recortar a foto do ticket.', fr: 'Impossible de recadrer la photo du ticket.', it: 'Impossibile ritagliare la foto dello scontrino.', pt: 'Nao foi possivel recortar a foto da fatura.'),
+      );
     }
-
-    setState(() {
-      _workingPath = cropped.path;
-    });
-    await _refreshPreview();
   }
 
   Future<void> _confirmImage() async {
     await _runBusyTask(() async {
       final rawBytes = await File(_workingPath).readAsBytes();
-      final outputBytes = _applyFilter(rawBytes, _selectedFilter);
+      final outputBytes = await compute(_buildReceiptExportBytes, {
+        'bytes': rawBytes,
+        'filterIndex': _selectedFilter.index,
+      });
       final outputPath = _selectedFilter == ReceiptImageFilter.none ? _workingPath : await _writeTempImage(outputBytes);
       if (!mounted) {
         return;
@@ -173,6 +157,12 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
     final file = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_receipt_${DateTime.now().microsecondsSinceEpoch}.jpg');
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
+  }
+
+  void _showEditorError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -265,6 +255,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                         : (_) async {
                             setState(() {
                               _selectedFilter = filter;
+                              _previewBytes = null;
                             });
                             await _refreshPreview();
                           },
@@ -295,4 +286,77 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
       ),
     );
   }
+}
+
+Uint8List _buildReceiptPreviewBytes(Map<String, Object> payload) {
+  final bytes = payload['bytes']! as Uint8List;
+  final filter = ReceiptImageFilter.values[payload['filterIndex']! as int];
+  return _processReceiptBytes(bytes, filter, maxDimension: 1600);
+}
+
+Uint8List _buildReceiptExportBytes(Map<String, Object> payload) {
+  final bytes = payload['bytes']! as Uint8List;
+  final filter = ReceiptImageFilter.values[payload['filterIndex']! as int];
+  return _processReceiptBytes(bytes, filter, maxDimension: 2400);
+}
+
+Uint8List _rotateReceiptBytes(Map<String, Object> payload) {
+  final bytes = payload['bytes']! as Uint8List;
+  final clockwise = payload['clockwise']! as bool;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) {
+    return bytes;
+  }
+
+  final rotated = img.copyRotate(decoded, angle: clockwise ? 90 : -90);
+  return Uint8List.fromList(img.encodeJpg(rotated, quality: 94));
+}
+
+Uint8List _processReceiptBytes(Uint8List bytes, ReceiptImageFilter filter, {required int maxDimension}) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) {
+    return bytes;
+  }
+
+  var working = img.Image.from(decoded);
+  final largestSide = working.width > working.height ? working.width : working.height;
+  if (largestSide > maxDimension) {
+    if (working.width >= working.height) {
+      working = img.copyResize(working, width: maxDimension);
+    } else {
+      working = img.copyResize(working, height: maxDimension);
+    }
+  }
+
+  switch (filter) {
+    case ReceiptImageFilter.none:
+      break;
+    case ReceiptImageFilter.grayscale:
+      working = img.grayscale(working);
+      break;
+    case ReceiptImageFilter.document:
+      working = img.grayscale(working);
+      working = img.adjustColor(working, contrast: 2.2, brightness: 0.08, gamma: 0.92);
+      working = img.gaussianBlur(working, radius: 1);
+      for (final pixel in working) {
+        final luminance = img.getLuminance(pixel);
+        final binary = luminance >= 170 ? 255 : 0;
+        pixel
+          ..r = binary
+          ..g = binary
+          ..b = binary;
+      }
+      break;
+    case ReceiptImageFilter.warm:
+      working = img.adjustColor(working, saturation: 1.08, contrast: 1.12, brightness: 0.02);
+      for (final pixel in working) {
+        pixel
+          ..r = (pixel.r * 1.06).clamp(0, 255).toInt()
+          ..g = (pixel.g * 1.01).clamp(0, 255).toInt()
+          ..b = (pixel.b * 0.95).clamp(0, 255).toInt();
+      }
+      break;
+  }
+
+  return Uint8List.fromList(img.encodeJpg(working, quality: 94));
 }

@@ -978,6 +978,28 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      if (items.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            tr(
+                              context,
+                              es: 'No quedan items detectados. Añade uno manualmente si quieres guardar el ticket.',
+                              en: 'There are no detected items left. Add one manually if you want to save the receipt.',
+                              gl: 'Non quedan items detectados. Engade un manualmente se queres gardar o ticket.',
+                              fr: 'Il ne reste aucun article detecte. Ajoutez-en un manuellement si vous voulez enregistrer le ticket.',
+                              it: 'Non restano voci rilevate. Aggiungine una manualmente se vuoi salvare lo scontrino.',
+                              pt: 'Nao restam itens detetados. Adiciona um manualmente se quiseres guardar a fatura.',
+                            ),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
                       ...items.asMap().entries.map((entry) {
                         final index = entry.key;
                         final item = entry.value;
@@ -1002,7 +1024,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    onPressed: items.length == 1 ? null : () => setDialogState(() => items.removeAt(index)),
+                                    onPressed: () => setDialogState(() => items.removeAt(index)),
                                     icon: const Icon(Icons.delete_outline_rounded),
                                     tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
                                   ),

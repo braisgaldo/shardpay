@@ -270,7 +270,12 @@ class FirebaseAppRepository implements AppRepository {
       updatedAt: DateTime.now(),
     );
 
-    await _firestore.collection('groups').doc(group.id).set(updated.toMap());
+    await _firestore.collection('groups').doc(group.id).update({
+      'memberIds': updated.memberIds,
+      'members': updated.members.map((entry) => entry.toMap()).toList(),
+      'pendingMembers': updated.pendingMembers.map((entry) => entry.toMap()).toList(),
+      'updatedAt': updated.updatedAt.toIso8601String(),
+    });
   }
 
   @override

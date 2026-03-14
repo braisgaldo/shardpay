@@ -160,6 +160,8 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
   String _query = '';
   _SearchScope _searchScope = _SearchScope.groups;
   bool _isConsumingInvite = false;
+  OverlayEntry? _joinToastEntry;
+  Timer? _joinToastTimer;
 
   Future<void> _refreshGroups() async {
     ref.invalidate(groupsProvider(widget.user.id));
@@ -182,6 +184,8 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
 
   @override
   void dispose() {
+    _joinToastTimer?.cancel();
+    _removeJoinToast();
     _searchController.dispose();
     super.dispose();
   }
@@ -709,12 +713,10 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
 
   Future<void> _resolveJoinFlow(BuildContext context, String rawInvite, String joinPin) async {
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(this.context);
     try {
       if (rawInvite.trim().isEmpty) {
         _showJoinToast(
           context,
-          messenger,
           tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
         );
         return;
@@ -722,7 +724,6 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       if (joinPin.length != 4) {
         _showJoinToast(
           context,
-          messenger,
           tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
         );
         return;
@@ -735,7 +736,6 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       if (group == null) {
         _showJoinToast(
           context,
-          messenger,
           tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
         );
         return;
@@ -743,7 +743,6 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       if (group.joinPin != joinPin.trim()) {
         _showJoinToast(
           context,
-          messenger,
           tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
         );
         return;
@@ -768,7 +767,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       );
       if (mounted && context.mounted) {
         navigator.pop();
-        messenger.showSnackBar(SnackBar(content: Text(tr(context, es: 'Has entrado en ${group.name}.', en: 'You joined ${group.name}.', gl: 'Entraches en ${group.name}.', fr: 'Vous avez rejoint ${group.name}.', it: 'Sei entrato in ${group.name}.', pt: 'Entraste em ${group.name}.'))));
+        _showJoinToast(context, tr(context, es: 'Has entrado en ${group.name}.', en: 'You joined ${group.name}.', gl: 'Entraches en ${group.name}.', fr: 'Vous avez rejoint ${group.name}.', it: 'Sei entrato in ${group.name}.', pt: 'Entraste em ${group.name}.'));
       }
     } catch (error) {
       if (mounted && context.mounted) {
@@ -776,35 +775,82 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
         if (message.contains('PIN del grupo no es correcto')) {
           _showJoinToast(
             context,
-            messenger,
             tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
           );
         } else if (message.contains('No se encontró ningún grupo') || message.contains('Invitación no encontrada')) {
           _showJoinToast(
             context,
-            messenger,
             tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
           );
         } else {
-          _showJoinToast(context, messenger, message);
+          _showJoinToast(context, message);
         }
       }
     }
   }
 
-  void _showJoinToast(BuildContext context, ScaffoldMessengerState messenger, String message) {
+  void _showJoinToast(BuildContext context, String message) {
     FocusScope.of(context).unfocus();
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    _joinToastTimer?.cancel();
+    _removeJoinToast();
+
+    final overlay = Overlay.of(this.context, rootOverlay: true);
+    final mediaQuery = MediaQuery.of(this.context);
+    final topOffset = mediaQuery.padding.top + 18;
+    _joinToastEntry = OverlayEntry(
+      builder: (overlayContext) {
+        return Positioned(
+          top: topOffset,
+          left: 16,
+          right: 16,
+          child: IgnorePointer(
+            child: SafeArea(
+              bottom: false,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF04438),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                message,
+                                style: Theme.of(overlayContext).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(_joinToastEntry!);
+    _joinToastTimer = Timer(const Duration(seconds: 3), _removeJoinToast);
+  }
+
+  void _removeJoinToast() {
+    _joinToastEntry?.remove();
+    _joinToastEntry = null;
   }
 
   Future<String?> _pickInviteIdentity(ExpenseGroup group) {
