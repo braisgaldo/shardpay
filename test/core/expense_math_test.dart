@@ -164,6 +164,70 @@ void main() {
       expect(globalSummaryB.outgoingAmount, 20);
       expect(globalSummaryB.netAmount, -5);
     });
+
+    test('recorded settlements reduce the minimum settlement plan for the group', () {
+      final baseGroup = _group(
+        id: 'g3',
+        members: const [
+          GroupMember(userId: 'a', name: 'A', email: 'a@example.com'),
+          GroupMember(userId: 'b', name: 'B', email: 'b@example.com'),
+          GroupMember(userId: 'c', name: 'C', email: 'c@example.com'),
+        ],
+        expenses: [
+          _expense(
+            id: 'e1',
+            payerId: 'b',
+            items: [_item(amount: 30, allocations: const [SplitAllocation(userId: 'a', percentage: 100)])],
+          ),
+          _expense(
+            id: 'e2',
+            payerId: 'c',
+            items: [_item(amount: 20, allocations: const [SplitAllocation(userId: 'a', percentage: 100)])],
+          ),
+        ],
+      );
+
+      final initialEdges = settlementEdges(baseGroup, activeAccountsOnly: false);
+      expect(initialEdges, hasLength(2));
+      expect(initialEdges.first.fromUserId, 'a');
+      expect(initialEdges.first.toUserId, 'b');
+      expect(initialEdges.first.amount, 30);
+
+      final settledGroup = baseGroup.copyWith(
+        expenses: [
+          ...baseGroup.expenses,
+          ExpenseRecord(
+            id: 's1',
+            title: 'Settlement',
+            payerId: 'a',
+            createdAt: DateTime(2026, 3, 14, 13),
+            kind: ExpenseRecordKind.settlement,
+            items: const [
+              ExpenseItem(
+                id: 's1-item',
+                name: 'Recorded payment',
+                amount: 30,
+                categoryId: 'work',
+                allocations: [
+                  SplitAllocation(userId: 'b', percentage: 100),
+                  SplitAllocation(userId: 'a', percentage: 0),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final remainingEdges = settlementEdges(settledGroup, activeAccountsOnly: false);
+      expect(remainingEdges, hasLength(1));
+      expect(remainingEdges.single.fromUserId, 'a');
+      expect(remainingEdges.single.toUserId, 'c');
+      expect(remainingEdges.single.amount, 20);
+
+      final summaryA = groupBalanceSummaries(settledGroup).firstWhere((entry) => entry.memberId == 'a');
+      expect(summaryA.outgoingAmount, 20);
+      expect(summaryA.netAmount, -20);
+    });
   });
 }
 

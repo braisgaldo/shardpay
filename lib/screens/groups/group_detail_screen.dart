@@ -55,6 +55,60 @@ Future<void> _showInfoDialog(BuildContext context, {required String title, requi
   );
 }
 
+ChipThemeData _surfaceChipTheme(BuildContext context) {
+  final theme = Theme.of(context);
+  final colorScheme = theme.colorScheme;
+  final background = colorScheme.surface;
+  final foreground = colorOn(background, dark: colorScheme.onSurface);
+
+  return theme.chipTheme.copyWith(
+    backgroundColor: background,
+    disabledColor: background,
+    selectedColor: colorScheme.primary.withValues(alpha: 0.14),
+    side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.55)),
+    labelStyle: theme.textTheme.labelLarge?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+    secondaryLabelStyle: theme.textTheme.labelLarge?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.w700),
+    iconTheme: IconThemeData(color: foreground, size: 18),
+    deleteIconColor: foreground.withValues(alpha: 0.72),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+  );
+}
+
+Widget _readableChipWrap(
+  BuildContext context, {
+  required List<Widget> children,
+  double spacing = 8,
+  double runSpacing = 8,
+}) {
+  return ChipTheme(
+    data: _surfaceChipTheme(context),
+    child: Wrap(
+      spacing: spacing,
+      runSpacing: runSpacing,
+      children: children,
+    ),
+  );
+}
+
+String _unknownParticipantLabel(BuildContext context) {
+  return tr(context, es: 'Participante pendiente', en: 'Pending participant', gl: 'Participante pendente', fr: 'Participant en attente', it: 'Partecipante in sospeso', pt: 'Participante pendente');
+}
+
+String _groupParticipantName(BuildContext context, ExpenseGroup group, String rawUserId, {String? emptyLabel}) {
+  final resolved = resolveGroupMember(group, rawUserId);
+  if (resolved != null && resolved.name.trim().isNotEmpty) {
+    return resolved.name.trim();
+  }
+
+  final normalizedUserId = rawUserId.trim();
+  if (normalizedUserId.isEmpty) {
+    return emptyLabel ?? _unknownParticipantLabel(context);
+  }
+
+  final looksOpaque = normalizedUserId.startsWith('pending:') || normalizedUserId.contains(':') || RegExp(r'^[0-9a-fA-F-]{16,}$').hasMatch(normalizedUserId);
+  return looksOpaque ? _unknownParticipantLabel(context) : normalizedUserId;
+}
+
 class GroupDetailScreen extends ConsumerStatefulWidget {
   const GroupDetailScreen({super.key, required this.user, required this.groupId});
 
@@ -614,9 +668,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       if (pendingMembers.isEmpty)
                         Text(tr(context, es: 'Todavía no hay nombres preparados.', en: 'There are no prepared names yet.', gl: 'Ainda non hai nomes preparados.', fr: 'Il n y a pas encore de noms prepares.', it: 'Non ci sono ancora nomi preparati.', pt: 'Ainda nao ha nomes preparados.'))
                       else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        _readableChipWrap(
+                          context,
                           children: pendingMembers.map((member) {
                             return InputChip(
                               label: Text(member.name),
@@ -1840,23 +1893,22 @@ class _OverviewTab extends StatelessWidget {
               children: [
                 Text(tr(context, es: 'Personas del grupo', en: 'Group people', gl: 'Persoas do grupo', fr: 'Personnes du groupe', it: 'Persone del gruppo', pt: 'Pessoas do grupo'), style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                _readableChipWrap(
+                  context,
                   children: sortedMembersByName(group.visibleMembers).map((member) {
                     final isOwner = !member.isPending && member.userId == group.ownerId;
                     final isAdmin = !member.isPending && group.adminIds.contains(member.userId);
                     final suffix = member.isPending
                         ? null
-                      : member.isDeletedAccount
-                        ? tr(context, es: 'cuenta eliminada', en: 'deleted account', gl: 'conta eliminada', fr: 'compte supprime', it: 'account eliminato', pt: 'conta eliminada')
-                        : member.isArchived
-                          ? tr(context, es: 'histórico', en: 'historical', gl: 'historico', fr: 'historique', it: 'storico', pt: 'historico')
-                        : isOwner
-                            ? tr(context, es: 'propietario', en: 'owner', gl: 'propietario', fr: 'proprietaire', it: 'proprietario', pt: 'proprietario')
-                            : isAdmin
-                              ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
-                            : null;
+                        : member.isDeletedAccount
+                            ? tr(context, es: 'cuenta eliminada', en: 'deleted account', gl: 'conta eliminada', fr: 'compte supprime', it: 'account eliminato', pt: 'conta eliminada')
+                            : member.isArchived
+                                ? tr(context, es: 'histórico', en: 'historical', gl: 'historico', fr: 'historique', it: 'storico', pt: 'historico')
+                                : isOwner
+                                    ? tr(context, es: 'propietario', en: 'owner', gl: 'propietario', fr: 'proprietaire', it: 'proprietario', pt: 'proprietario')
+                                    : isAdmin
+                                        ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
+                                        : null;
                     return Chip(label: Text(suffix == null ? member.name : '${member.name} · $suffix'));
                   }).toList(),
                 ),
@@ -1889,9 +1941,8 @@ class _OverviewTab extends StatelessWidget {
                   const SizedBox(height: 8),
                   const SizedBox(height: 12),
                   if (group.pendingMembers.isNotEmpty)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    _readableChipWrap(
+                      context,
                       children: group.pendingMembers.map((member) => Chip(label: Text(member.name))).toList(),
                     ),
                 ],
@@ -1901,9 +1952,8 @@ class _OverviewTab extends StatelessWidget {
         const SizedBox(height: 20),
                 Text(tr(context, es: 'Categorías activas', en: 'Active categories', gl: 'Categorias activas', fr: 'Categories actives', it: 'Categorie attive', pt: 'Categorias ativas'), style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        _readableChipWrap(
+          context,
           children: categories.map((category) {
             return Chip(
               avatar: Icon(categoryIcons[category.iconKey] ?? Icons.receipt_long_rounded, size: 18),
@@ -2003,15 +2053,20 @@ class _BalancesTab extends StatelessWidget {
 }
 
 Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
-  final counterparties = directBalancesForMember(group, member.userId)
-      .entries
+  final counterparties = settlementEdges(group, activeAccountsOnly: false)
+      .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
       .map(
-        (entry) => (
-          member: resolveGroupMember(group, entry.key),
-          amount: entry.value,
+        (edge) {
+          final tappedMemberPays = edge.fromUserId == member.userId;
+          final counterpartyId = tappedMemberPays ? edge.toUserId : edge.fromUserId;
+          return (
+            userId: canonicalGroupUserId(group, counterpartyId),
+            member: resolveGroupMember(group, counterpartyId),
+            label: _groupParticipantName(context, group, counterpartyId),
+            amount: tappedMemberPays ? -edge.amount : edge.amount,
+          );
+        },
         ),
-      )
-      .where((entry) => entry.member != null)
       .sorted((left, right) => right.amount.abs().compareTo(left.amount.abs()))
       .toList(growable: false);
 
@@ -2060,11 +2115,13 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                           separatorBuilder: (_, _) => const SizedBox(height: 12),
                           itemBuilder: (_, index) {
                             final entry = counterparties[index];
-                            final counterparty = entry.member!;
+                            final counterparty = entry.member;
+                            final counterpartyName = entry.label;
                             final tappedMemberPays = entry.amount < 0;
-                            final debtorId = tappedMemberPays ? member.userId : counterparty.userId;
-                            final creditorId = tappedMemberPays ? counterparty.userId : member.userId;
+                            final debtorId = tappedMemberPays ? member.userId : entry.userId;
+                            final creditorId = tappedMemberPays ? entry.userId : member.userId;
                             final currentUserIsInvolved = currentUserId == creditorId || currentUserId == debtorId;
+                            final requestEnabled = currentUserIsInvolved && counterparty != null && !counterparty.isPending && !counterparty.isDeletedAccount;
                             final amount = entry.amount.abs();
                             final accent = tappedMemberPays ? const Color(0xFFC77600) : const Color(0xFF1E8E5A);
                             return Container(
@@ -2082,12 +2139,12 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(counterparty.name, style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                            Text(counterpartyName, style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                                             const SizedBox(height: 6),
                                             Text(
                                               tappedMemberPays
-                                                  ? tr(context, es: '${member.name} paga a ${counterparty.name}', en: '${member.name} pays ${counterparty.name}', gl: '${member.name} paga a ${counterparty.name}', fr: '${member.name} paie ${counterparty.name}', it: '${member.name} paga ${counterparty.name}', pt: '${member.name} paga a ${counterparty.name}')
-                                                  : tr(context, es: '${counterparty.name} paga a ${member.name}', en: '${counterparty.name} pays ${member.name}', gl: '${counterparty.name} paga a ${member.name}', fr: '${counterparty.name} paie ${member.name}', it: '${counterparty.name} paga ${member.name}', pt: '${counterparty.name} paga a ${member.name}'),
+                                                  ? tr(context, es: '${member.name} paga a $counterpartyName', en: '${member.name} pays $counterpartyName', gl: '${member.name} paga a $counterpartyName', fr: '${member.name} paie $counterpartyName', it: '${member.name} paga $counterpartyName', pt: '${member.name} paga a $counterpartyName')
+                                                  : tr(context, es: '$counterpartyName paga a ${member.name}', en: '$counterpartyName pays ${member.name}', gl: '$counterpartyName paga a ${member.name}', fr: '$counterpartyName paie ${member.name}', it: '$counterpartyName paga ${member.name}', pt: '$counterpartyName paga a ${member.name}'),
                                             ),
                                           ],
                                         ),
@@ -2105,7 +2162,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                     children: [
                                       Expanded(
                                         child: OutlinedButton.icon(
-                                            onPressed: !currentUserIsInvolved
+                                            onPressed: !requestEnabled
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
@@ -2122,7 +2179,7 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
                                               ? null
                                               : () async {
                                                   Navigator.of(dialogContext).pop();
-                                                  await _recordDirectSettlement(context, ref, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterparty.name, creditorName: tappedMemberPays ? counterparty.name : member.name);
+                                                  await _recordDirectSettlement(context, ref, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterpartyName, creditorName: tappedMemberPays ? counterpartyName : member.name);
                                                 },
                                           icon: const Icon(Icons.check_circle_rounded),
                                           label: Text(tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
@@ -2155,8 +2212,10 @@ Future<void> _requestDirectSettlement(
   String targetUserId,
   double suggestedAmount,
 ) async {
-  final targetMember = group.visibleMembers.firstWhereOrNull((member) => member.userId == targetUserId);
-  final targetIsPending = targetUserId.startsWith('pending:') || (targetMember?.isPending ?? false);
+  final canonicalTargetUserId = canonicalGroupUserId(group, targetUserId);
+  final targetMember = resolveGroupMember(group, canonicalTargetUserId);
+  final targetIsPending = canonicalTargetUserId.startsWith('pending:') || (targetMember?.isPending ?? false);
+  final targetCanReceiveRequest = targetMember != null && !targetMember.isPending && !targetMember.isDeletedAccount;
   final controller = TextEditingController(text: suggestedAmount.toStringAsFixed(2));
   final amount = await showDialog<double>(
     context: context,
@@ -2203,19 +2262,21 @@ Future<void> _requestDirectSettlement(
   if (!confirmed) {
     return;
   }
-  if (targetIsPending) {
+  if (!targetCanReceiveRequest) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            tr(context, es: 'Solicitud registrada sin notificación porque la identidad sigue pendiente de vincular.', en: 'Request recorded without notification because the identity is still pending linking.', gl: 'Solicitude rexistrada sen notificacion porque a identidade segue pendente de vincular.', fr: 'Demande enregistree sans notification car l identite est encore en attente de liaison.', it: 'Richiesta registrata senza notifica perche l identita e ancora in attesa di collegamento.', pt: 'Pedido registado sem notificacao porque a identidade continua pendente de associacao.'),
+            targetIsPending
+                ? tr(context, es: 'No se puede enviar la solicitud hasta que esa identidad se vincule a una cuenta real.', en: 'The request cannot be sent until that identity is linked to a real account.', gl: 'Non se pode enviar a solicitude ata que esa identidade se vincule a unha conta real.', fr: 'La demande ne peut pas etre envoyee tant que cette identite n est pas liee a un compte reel.', it: 'La richiesta non puo essere inviata finche questa identita non viene collegata a un account reale.', pt: 'O pedido nao pode ser enviado ate que essa identidade seja ligada a uma conta real.')
+                : tr(context, es: 'No se puede enviar la solicitud a esta persona desde el grupo.', en: 'The request cannot be sent to this person from the group.', gl: 'Non se pode enviar a solicitude a esta persoa desde o grupo.', fr: 'La demande ne peut pas etre envoyee a cette personne depuis le groupe.', it: 'La richiesta non puo essere inviata a questa persona dal gruppo.', pt: 'O pedido nao pode ser enviado a esta pessoa a partir do grupo.'),
           ),
         ),
       );
     }
     return;
   }
-  await ref.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: targetUserId, amount: amount);
+  await ref.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: canonicalTargetUserId, amount: amount);
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -2293,11 +2354,26 @@ Future<void> _recordDirectSettlement(
     return;
   }
 
+  final canonicalDebtorId = canonicalGroupUserId(group, debtorId);
+  final canonicalCreditorId = canonicalGroupUserId(group, creditorId);
+  if (canonicalDebtorId.isEmpty || canonicalCreditorId.isEmpty || canonicalDebtorId == canonicalCreditorId) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(context, es: 'No se pudo registrar este pago con los participantes actuales.', en: 'This payment could not be recorded with the current participants.', gl: 'Non se puido rexistrar este pago cos participantes actuais.', fr: 'Ce paiement n a pas pu etre enregistre avec les participants actuels.', it: 'Non e stato possibile registrare questo pagamento con i partecipanti attuali.', pt: 'Nao foi possivel registar este pagamento com os participantes atuais.'),
+          ),
+        ),
+      );
+    }
+    return;
+  }
+
   final uuid = const Uuid();
   final expense = ExpenseRecord(
     id: uuid.v4(),
     title: settlementTitle,
-    payerId: debtorId,
+    payerId: canonicalDebtorId,
     createdAt: DateTime.now(),
     kind: ExpenseRecordKind.settlement,
     note: settlementNote,
@@ -2308,8 +2384,8 @@ Future<void> _recordDirectSettlement(
         amount: amount,
         categoryId: 'work',
         allocations: [
-          SplitAllocation(userId: creditorId, percentage: 100),
-          SplitAllocation(userId: debtorId, percentage: 0),
+          SplitAllocation(userId: canonicalCreditorId, percentage: 100),
+          SplitAllocation(userId: canonicalDebtorId, percentage: 0),
         ],
       ),
     ],
@@ -2505,7 +2581,12 @@ class _ExpensesTabState extends State<_ExpensesTab> {
         if (filteredExpenses.isEmpty)
           Card(child: Padding(padding: const EdgeInsets.all(20), child: Text(tr(context, es: 'No hay gastos que coincidan con los filtros.', en: 'No expenses match the filters.', gl: 'Non hai gastos que coincidan cos filtros.', fr: 'Aucune depense ne correspond aux filtres.', it: 'Nessuna spesa corrisponde ai filtri.', pt: 'Nenhuma despesa corresponde aos filtros.')))),
         ...filteredExpenses.map((expense) {
-          final payer = resolveGroupMember(widget.group, expense.payerId);
+          final payer = _groupParticipantName(
+            context,
+            widget.group,
+            expense.payerId,
+            emptyLabel: tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem'),
+          );
           final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
           final isPayer = expense.payerId == widget.currentUserId;
           final isParticipant = expense.items.any((item) => item.allocations.any((allocation) => allocation.userId == widget.currentUserId && allocation.percentage > 0));
@@ -2553,7 +2634,7 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${payer?.name ?? tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem')} · ${DateFormat('dd/MM/yyyy', localeTag(context)).format(expense.createdAt)}',
+                      '$payer · ${DateFormat('dd/MM/yyyy HH:mm', localeTag(context)).format(expense.createdAt)}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.subtitle),
                     ),
                     const SizedBox(height: 6),
@@ -2603,9 +2684,8 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                          _readableChipWrap(
+                            context,
                             children: [
                               Chip(
                                 label: Text(category?.name ?? item.categoryId),
@@ -2855,7 +2935,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ? null
       : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
     final topPayerEntry = payerEntries.firstWhereOrNull((entry) => entry.key.trim().isNotEmpty);
-    final topPayer = topPayerEntry == null ? null : resolveGroupMember(widget.group, topPayerEntry.key);
+    final topPayerName = topPayerEntry == null ? null : _groupParticipantName(context, widget.group, topPayerEntry.key);
     final topCategory = categoryEntries.isEmpty ? null : categoryMap[categoryEntries.first.key];
     final settlementCount = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.settlement).length;
     final noDataText = tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados');
@@ -2872,7 +2952,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       ),
       _InsightTileData(
         label: tr(context, es: 'Más pagó', en: 'Top payer', gl: 'Máis pagou', fr: 'Principal payeur', it: 'Chi ha pagato di piu', pt: 'Quem mais pagou'),
-        value: topPayerEntry == null || topPayer == null ? noDataText : '${topPayer.name} · ${money(topPayerEntry.value, widget.group.currency)}',
+        value: topPayerEntry == null || topPayerName == null ? noDataText : '$topPayerName · ${money(topPayerEntry.value, widget.group.currency)}',
         icon: Icons.emoji_events_rounded,
       ),
       _InsightTileData(
@@ -3038,9 +3118,8 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                 ),
                 if (categoryEntries.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  _readableChipWrap(
+                    context,
                     children: categoryEntries.take(5).mapIndexed((index, entry) {
                       final category = categoryMap[entry.key];
                       return Chip(
@@ -3149,14 +3228,12 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                 ),
                 if (payerEntries.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  _readableChipWrap(
+                    context,
                     children: payerEntries.take(5).mapIndexed((index, entry) {
-                      final payer = resolveGroupMember(widget.group, entry.key);
                       return Chip(
                         avatar: CircleAvatar(radius: 7, backgroundColor: _chartPalette[index % _chartPalette.length]),
-                        label: Text('${payer?.name ?? entry.key} · ${money(entry.value, widget.group.currency)}'),
+                        label: Text('${_groupParticipantName(context, widget.group, entry.key)} · ${money(entry.value, widget.group.currency)}'),
                       );
                     }).toList(),
                   ),
@@ -3212,11 +3289,8 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                                   enabled: true,
                                   touchTooltipData: BarTouchTooltipData(
                                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                      final visible = resolveGroupMember(widget.group, memberEntries[group.x.toInt()].key);
-                                      if (visible == null) {
-                                        return null;
-                                      }
-                                      return BarTooltipItem('${visible.name}\n${money(rod.toY.abs(), widget.group.currency)}', const TextStyle(color: Colors.white, fontWeight: FontWeight.w700));
+                                      final label = _groupParticipantName(context, widget.group, memberEntries[group.x.toInt()].key);
+                                      return BarTooltipItem('$label\n${money(rod.toY.abs(), widget.group.currency)}', const TextStyle(color: Colors.white, fontWeight: FontWeight.w700));
                                     },
                                   ),
                                 ),
@@ -3241,13 +3315,13 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                                         if (index < 0 || index >= memberEntries.length) {
                                           return const SizedBox.shrink();
                                         }
-                                        final visible = resolveGroupMember(widget.group, memberEntries[index].key);
+                                        final label = _groupParticipantName(context, widget.group, memberEntries[index].key);
                                         return Padding(
                                           padding: const EdgeInsets.only(top: 8),
                                           child: SizedBox(
                                             width: 56,
                                             child: Text(
-                                              visible?.name.split(' ').first ?? 'Miembro',
+                                              label.split(' ').first,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               textAlign: TextAlign.center,
