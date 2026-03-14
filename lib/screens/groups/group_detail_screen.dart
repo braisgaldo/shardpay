@@ -2399,23 +2399,40 @@ Future<void> _recordDirectSettlement(
       ),
     ],
   );
-  await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
   try {
-    await ref
-        .read(repositoryProvider)
-        .watchGroup(group.id)
-        .firstWhere((updatedGroup) => updatedGroup?.expenses.any((entry) => entry.id == expense.id) ?? false)
-        .timeout(const Duration(seconds: 5));
-  } catch (_) {}
-  ref.invalidate(groupProvider(group.id));
-  if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          tr(context, es: 'Pago registrado.', en: 'Payment recorded.', gl: 'Pago rexistrado.', fr: 'Paiement enregistre.', it: 'Pagamento registrato.', pt: 'Pagamento registado.'),
+    await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+    ref.invalidate(groupProvider(group.id));
+    final updatedGroup = await ref.read(groupProvider(group.id).future).timeout(const Duration(seconds: 5));
+    final settlementWasPersisted = updatedGroup?.expenses.any((entry) => entry.id == expense.id) ?? false;
+    if (!settlementWasPersisted) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr(context, es: 'No se pudo confirmar la liquidación. Inténtalo de nuevo.', en: 'The settlement could not be confirmed. Please try again.', gl: 'Non se puido confirmar a liquidacion. Téntao de novo.', fr: 'La liquidation n a pas pu etre confirmee. Reessayez.', it: 'Non e stato possibile confermare la liquidazione. Riprova.', pt: 'Nao foi possivel confirmar a liquidacao. Tenta de novo.'),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(context, es: 'Pago registrado.', en: 'Payment recorded.', gl: 'Pago rexistrado.', fr: 'Paiement enregistre.', it: 'Pagamento registrato.', pt: 'Pagamento registado.'),
+          ),
         ),
-      ),
-    );
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
   }
 }
 
@@ -2604,15 +2621,20 @@ class _ExpensesTabState extends State<_ExpensesTab> {
             expense.payerId,
             emptyLabel: tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem'),
           );
-          final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
+            final isSettlement = expense.kind == ExpenseRecordKind.settlement;
+            final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
           final isPayer = expense.payerId == widget.currentUserId;
           final isParticipant = expense.items.any((item) => item.allocations.any((allocation) => allocation.userId == widget.currentUserId && allocation.percentage > 0));
-          final status = isPayer
-              ? _ExpenseStatus.paid
-              : isParticipant
+            final status = isSettlement
+              ? _ExpenseStatus.settlement
+              : isPayer
+                ? _ExpenseStatus.paid
+                : isParticipant
                   ? _ExpenseStatus.participated
                   : _ExpenseStatus.outside;
           final colors = _expenseStatusPalette(context, status);
+            final leadingColor = isSettlement ? const Color(0xFF2D6CDF) : colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E');
+            final leadingIcon = isSettlement ? Icons.payments_rounded : categoryIconForKey(primaryCategory?.iconKey ?? 'receipt');
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Container(
@@ -2630,10 +2652,10 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E').withValues(alpha: 0.14),
+                        color: leadingColor.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(categoryIconForKey(primaryCategory?.iconKey ?? 'receipt'), size: 18, color: colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E')),
+                      child: Icon(leadingIcon, size: 18, color: leadingColor),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -2759,13 +2781,22 @@ class _ExpensesTabState extends State<_ExpensesTab> {
   }
 }
 
-enum _ExpenseStatus { paid, participated, outside }
+enum _ExpenseStatus { settlement, paid, participated, outside }
 
 ({Color background, Color border, Color accent, Color title, Color subtitle}) _expenseStatusPalette(BuildContext context, _ExpenseStatus status) {
   final colorScheme = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
   switch (status) {
+    case _ExpenseStatus.settlement:
+      final background = isDark ? const Color(0xFF162D57) : const Color(0xFFE8F1FF);
+      return (
+        background: background,
+        border: isDark ? const Color(0xFF4A7DDA) : const Color(0xFF7AA7F2),
+        accent: const Color(0xFF2D6CDF),
+        title: colorOn(background, dark: colorScheme.onSurface),
+        subtitle: colorOn(background, dark: colorScheme.onSurface).withValues(alpha: 0.78),
+      );
     case _ExpenseStatus.paid:
       final background = isDark ? const Color(0xFF153326) : const Color(0xFFE8F7EF);
       return (
@@ -2797,6 +2828,8 @@ enum _ExpenseStatus { paid, participated, outside }
 
 String _expenseStatusLabel(BuildContext context, _ExpenseStatus status) {
   switch (status) {
+    case _ExpenseStatus.settlement:
+      return tr(context, es: 'Liquidación', en: 'Settlement', gl: 'Liquidacion', fr: 'Liquidation', it: 'Liquidazione', pt: 'Liquidacao');
     case _ExpenseStatus.paid:
       return tr(context, es: 'Lo pagaste', en: 'You paid it', gl: 'Pagachelo ti', fr: 'Vous l avez paye', it: 'L hai pagato tu', pt: 'Pagaste tu');
     case _ExpenseStatus.participated:
