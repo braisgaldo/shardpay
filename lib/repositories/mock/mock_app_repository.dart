@@ -353,11 +353,14 @@ class MockAppRepository implements AppRepository {
     if (!group.isAdmin(requesterId)) {
       throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
     }
-    _groups[groupId] = group.copyWith(
-      isClosed: isClosed,
-      closedAt: isClosed ? DateTime.now() : null,
-      updatedAt: DateTime.now(),
-    );
+    final now = DateTime.now();
+    _groups[groupId] = isClosed
+        ? group.archived(at: now)
+        : group.copyWith(
+            isClosed: false,
+            closedAt: null,
+            updatedAt: now,
+          );
     _groupsController.add(null);
   }
 

@@ -228,7 +228,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             children: [
                               Icon(group.isClosed ? Icons.lock_open_rounded : Icons.lock_rounded, size: 18),
                               const SizedBox(width: 10),
-                              Text(group.isClosed ? tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo') : tr(context, es: 'Cerrar grupo', en: 'Close group', gl: 'Pechar grupo', fr: 'Fermer le groupe', it: 'Chiudi gruppo', pt: 'Fechar grupo')),
+                              Text(group.isClosed ? tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo') : tr(context, es: 'Archivar grupo', en: 'Archive group', gl: 'Arquivar grupo', fr: 'Archiver le groupe', it: 'Archivia gruppo', pt: 'Arquivar grupo')),
                             ],
                           ),
                         ),
@@ -1234,7 +1234,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       : () async {
                           setDialogState(() => isSaving = true);
                           try {
-                    final validItems = items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).toList();
+                     final validItems = items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).toList(growable: false);
                     if (validItems.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -1259,33 +1259,29 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       Navigator.of(dialogContext).pop();
                     }
 
-                    final receiptSeedExpenseId = uuid.v4();
-                    final createdAt = DateTime.now();
-
-                    for (var index = 0; index < validItems.length; index++) {
-                      final item = validItems[index];
-                      final expense = ExpenseRecord(
-                        id: index == 0 ? receiptSeedExpenseId : uuid.v4(),
-                        title: titleController.text.trim().isEmpty ? item.name.trim() : titleController.text.trim(),
-                        payerId: payerId,
-                        createdAt: createdAt.add(Duration(milliseconds: index)),
-                        note: parsed.note ?? 'Añadido con OCR',
-                        items: [
-                          item.copyWith(
-                            id: uuid.v4(),
-                            name: item.name.trim(),
-                          ),
-                        ],
-                      );
-                      await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
-                    }
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(tr(context, es: 'Ticket guardado.', en: 'Receipt saved.', gl: 'Ticket gardado.', fr: 'Ticket enregistre.', it: 'Scontrino salvato.', pt: 'Fatura guardada.')),
-                        ),
-                      );
-                    }
+                     final expense = ExpenseRecord(
+                       id: uuid.v4(),
+                       title: titleController.text.trim().isEmpty ? validItems.first.name.trim() : titleController.text.trim(),
+                       payerId: payerId,
+                       createdAt: DateTime.now(),
+                       note: parsed.note ?? 'Añadido con OCR',
+                       items: validItems
+                           .map(
+                             (item) => item.copyWith(
+                               id: uuid.v4(),
+                               name: item.name.trim(),
+                             ),
+                           )
+                           .toList(growable: false),
+                     );
+                     await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+                     if (context.mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         SnackBar(
+                           content: Text(tr(context, es: 'Ticket guardado con subgastos.', en: 'Receipt saved with subexpenses.', gl: 'Ticket gardado con subgastos.', fr: 'Ticket enregistre avec des sous-depenses.', it: 'Scontrino salvato con sottospese.', pt: 'Fatura guardada com subgastos.')),
+                         ),
+                       );
+                     }
                           } catch (error) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
@@ -1705,11 +1701,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text(closing ? tr(context, es: 'Cerrar grupo', en: 'Close group', gl: 'Pechar grupo', fr: 'Fermer le groupe', it: 'Chiudi gruppo', pt: 'Fechar grupo') : tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo')),
-              content: Text(closing ? tr(context, es: 'Nadie podrá añadir gastos ni modificar datos mientras el grupo esté cerrado.', en: 'No one will be able to add expenses or modify data while the group is closed.', gl: 'Ninguen podera engadir gastos nin modificar datos mentres o grupo estea pechado.', fr: 'Personne ne pourra ajouter des depenses ni modifier les donnees tant que le groupe sera ferme.', it: 'Nessuno potra aggiungere spese o modificare dati mentre il gruppo e chiuso.', pt: 'Ninguem podera adicionar despesas nem modificar dados enquanto o grupo estiver fechado.') : tr(context, es: 'El grupo volverá a permitir acciones y la fecha de cierre desaparecerá.', en: 'The group will allow actions again and the closed date will be cleared.', gl: 'O grupo volvera permitir accions e a data de peche desaparecera.', fr: 'Le groupe permettra de nouveau les actions et la date de fermeture disparaitra.', it: 'Il gruppo permettera di nuovo le azioni e la data di chiusura verra rimossa.', pt: 'O grupo voltara a permitir acoes e a data de fecho desaparecera.')),
+              title: Text(closing ? tr(context, es: 'Archivar grupo', en: 'Archive group', gl: 'Arquivar grupo', fr: 'Archiver le groupe', it: 'Archivia gruppo', pt: 'Arquivar grupo') : tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo')),
+              content: Text(closing ? tr(context, es: 'Los importes pendientes pasarán a 0 y nadie podrá añadir gastos ni modificar datos mientras el grupo esté archivado.', en: 'Pending amounts will be reset to 0 and no one will be able to add expenses or modify data while the group is archived.', gl: 'Os importes pendentes pasarán a 0 e ninguén poderá engadir gastos nin modificar datos mentres o grupo estea arquivado.', fr: 'Les montants en attente seront remis a 0 et personne ne pourra ajouter des depenses ni modifier les donnees tant que le groupe sera archive.', it: 'Gli importi pendenti verranno azzerati e nessuno potra aggiungere spese o modificare dati mentre il gruppo e archiviato.', pt: 'Os valores pendentes serão colocados a 0 e ninguém poderá adicionar despesas nem modificar dados enquanto o grupo estiver arquivado.') : tr(context, es: 'El grupo volverá a permitir acciones, pero los importes archivados seguirán a 0.', en: 'The group will allow actions again, but archived amounts will stay at 0.', gl: 'O grupo volverá permitir accións, pero os importes arquivados seguirán a 0.', fr: 'Le groupe permettra de nouveau les actions, mais les montants archives resteront a 0.', it: 'Il gruppo permettera di nuovo le azioni, ma gli importi archiviati resteranno a 0.', pt: 'O grupo voltará a permitir ações, mas os valores arquivados continuarão a 0.')),
               actions: [
                 TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-                FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(closing ? tr(context, es: 'Cerrar', en: 'Close', gl: 'Pechar', fr: 'Fermer', it: 'Chiudi', pt: 'Fechar') : tr(context, es: 'Reabrir', en: 'Reopen', gl: 'Reabrir', fr: 'Rouvrir', it: 'Riapri', pt: 'Reabrir'))),
+                FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(closing ? tr(context, es: 'Archivar', en: 'Archive', gl: 'Arquivar', fr: 'Archiver', it: 'Archivia', pt: 'Arquivar') : tr(context, es: 'Reabrir', en: 'Reopen', gl: 'Reabrir', fr: 'Rouvrir', it: 'Riapri', pt: 'Reabrir'))),
               ],
             );
           },
@@ -1722,13 +1718,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(closing ? tr(context, es: 'Grupo cerrado.', en: 'Group closed.', gl: 'Grupo pechado.', fr: 'Groupe ferme.', it: 'Gruppo chiuso.', pt: 'Grupo fechado.') : tr(context, es: 'Grupo reabierto.', en: 'Group reopened.', gl: 'Grupo reaberto.', fr: 'Groupe rouvert.', it: 'Gruppo riaperto.', pt: 'Grupo reaberto.')),
-          action: closing
-              ? SnackBarAction(
-                  label: tr(context, es: 'Solicitar pagos', en: 'Request payments', gl: 'Solicitar pagos', fr: 'Demander paiements', it: 'Richiedi pagamenti', pt: 'Solicitar pagamentos'),
-                  onPressed: () => _notifyGroupSettlements(context, group),
-                )
-              : null,
+          content: Text(closing ? tr(context, es: 'Grupo archivado y saldos puestos a 0.', en: 'Group archived and balances reset to 0.', gl: 'Grupo arquivado e saldos postos a 0.', fr: 'Groupe archive et soldes remis a 0.', it: 'Gruppo archiviato e saldi azzerati.', pt: 'Grupo arquivado e saldos colocados a 0.') : tr(context, es: 'Grupo reabierto.', en: 'Group reopened.', gl: 'Grupo reaberto.', fr: 'Groupe rouvert.', it: 'Gruppo riaperto.', pt: 'Grupo reaberto.')),
         ),
       );
     }
@@ -3642,4 +3632,3 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 }
-

@@ -33,7 +33,12 @@ class TicketOcrService {
   static final List<String> _ignoredLineTokens = [
     'total',
     'subtotal',
+    'descuento',
+    'dto',
+    'promo',
     'importe',
+    'importe total',
+    'base imponible',
     'cambio',
     'visa',
     'mastercard',
@@ -56,6 +61,11 @@ class TicketOcrService {
     'cash',
     'datafono',
     'comercio',
+    'servicio',
+    'service',
+    'propina',
+    'tip',
+    'recargo',
     'saldo',
     'entregado',
     'recibido',
@@ -316,7 +326,7 @@ String _normalizeLine(String value) {
 }
 
 List<String> _trimTrailingSummaryLines(List<String> lines) {
-  final totalIndex = lines.indexWhere((line) => RegExp(r'\b(total|importe total|subtotal|base imponible)\b', caseSensitive: false).hasMatch(line));
+  final totalIndex = lines.indexWhere((line) => RegExp(r'\b(total|importe total|subtotal|base imponible|descuento|tarjeta|efectivo|cambio|propina|recargo)\b', caseSensitive: false).hasMatch(line));
   if (totalIndex <= 0) {
     return lines;
   }

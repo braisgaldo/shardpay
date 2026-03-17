@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const _copyWithUnset = Object();
+
 DateTime _toDateTime(dynamic value) {
   if (value is Timestamp) {
     return value.toDate();
@@ -445,6 +447,12 @@ class ExpenseRecord {
       items: items ?? this.items,
     );
   }
+
+  ExpenseRecord zeroed() {
+    return copyWith(
+      items: items.map((item) => item.copyWith(amount: 0)).toList(growable: false),
+    );
+  }
 }
 
 class ExpenseGroup {
@@ -578,7 +586,7 @@ class ExpenseGroup {
   ExpenseGroup copyWith({
     String? id,
     String? name,
-    String? description,
+    Object? description = _copyWithUnset,
     String? iconKey,
     String? currency,
     String? ownerId,
@@ -594,12 +602,12 @@ class ExpenseGroup {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isClosed,
-    DateTime? closedAt,
+    Object? closedAt = _copyWithUnset,
   }) {
     return ExpenseGroup(
       id: id ?? this.id,
       name: name ?? this.name,
-      description: description ?? this.description,
+      description: identical(description, _copyWithUnset) ? this.description : description as String?,
       iconKey: iconKey ?? this.iconKey,
       currency: currency ?? this.currency,
       ownerId: ownerId ?? this.ownerId,
@@ -615,7 +623,17 @@ class ExpenseGroup {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isClosed: isClosed ?? this.isClosed,
-      closedAt: closedAt ?? this.closedAt,
+      closedAt: identical(closedAt, _copyWithUnset) ? this.closedAt : closedAt as DateTime?,
+    );
+  }
+
+  ExpenseGroup archived({DateTime? at}) {
+    final archivedAt = at ?? DateTime.now();
+    return copyWith(
+      expenses: expenses.map((expense) => expense.zeroed()).toList(growable: false),
+      isClosed: true,
+      closedAt: archivedAt,
+      updatedAt: archivedAt,
     );
   }
 }

@@ -489,14 +489,15 @@ class FirebaseAppRepository implements AppRepository {
       if (!current.isAdmin(requesterId)) {
         throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
       }
-      transaction.set(
-        docRef,
-        current.copyWith(
-          isClosed: isClosed,
-          closedAt: isClosed ? DateTime.now() : null,
-          updatedAt: DateTime.now(),
-        ).toMap(),
-      );
+      final now = DateTime.now();
+      final updated = isClosed
+          ? current.archived(at: now)
+          : current.copyWith(
+              isClosed: false,
+              closedAt: null,
+              updatedAt: now,
+            );
+      transaction.set(docRef, updated.toMap());
     });
   }
 
