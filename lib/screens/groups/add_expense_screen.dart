@@ -40,7 +40,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   void initState() {
     super.initState();
     _selectedMembers = {for (final member in widget.group.selectableMembers) member.userId};
-    _payerId = widget.group.visibleMembers.any((member) => member.userId == widget.user.id) ? widget.user.id : widget.group.visibleMembers.first.userId;
+    _payerId = widget.group.visibleMembers.any((member) => member.userId == widget.user.id)
+        ? widget.user.id
+        : widget.group.visibleMembers.first.userId;
     _categoryId = 'food';
   }
 
@@ -63,7 +65,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final categories = [...buildDefaultCategories(), ...widget.group.customCategories];
 
     return Scaffold(
-      appBar: AppBar(title: Text(tr(context, es: 'Añadir gasto', en: 'Add expense', gl: 'Engadir gasto', fr: 'Ajouter une depense', it: 'Aggiungi spesa', pt: 'Adicionar despesa'))),
+      appBar: AppBar(
+        title: Text(
+          tr(
+            context,
+            es: 'Añadir gasto',
+            en: 'Add expense',
+            gl: 'Engadir gasto',
+            fr: 'Ajouter une depense',
+            it: 'Aggiungi spesa',
+            pt: 'Adicionar despesa',
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -77,7 +91,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     const Icon(Icons.lock_clock_rounded),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(tr(context, es: 'Este grupo está cerrado. Solo puedes consultarlo hasta que un administrador lo reabra.', en: 'This group is closed. You can only review it until an admin reopens it.', gl: 'Este grupo esta pechado. So podes consultalo ata que unha administracion o reabra.', fr: 'Ce groupe est ferme. Vous pouvez seulement le consulter jusqu a sa reouverture.', it: 'Questo gruppo e chiuso. Puoi solo consultarlo finche un admin non lo riapre.', pt: 'Este grupo esta fechado. So o podes consultar ate que a administracao o reabra.')),
+                      child: Text(
+                        tr(
+                          context,
+                          es: 'Este grupo está cerrado. Solo puedes consultarlo hasta que un administrador lo reabra.',
+                          en: 'This group is closed. You can only review it until an admin reopens it.',
+                          gl: 'Este grupo esta pechado. So podes consultalo ata que unha administracion o reabra.',
+                          fr: 'Ce groupe est ferme. Vous pouvez seulement le consulter jusqu a sa reouverture.',
+                          it: 'Questo gruppo e chiuso. Puoi solo consultarlo finche un admin non lo riapre.',
+                          pt: 'Este grupo esta fechado. So o podes consultar ate que a administracao o reabra.',
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -91,13 +115,40 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tr(context, es: 'Resumen del gasto', en: 'Expense summary', gl: 'Resumo do gasto', fr: 'Resume de la depense', it: 'Riepilogo spesa', pt: 'Resumo da despesa'), style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    tr(
+                      context,
+                      es: 'Resumen del gasto',
+                      en: 'Expense summary',
+                      gl: 'Resumo do gasto',
+                      fr: 'Resume de la depense',
+                      it: 'Riepilogo spesa',
+                      pt: 'Resumo da despesa',
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
-                      labelText: tr(context, es: 'Concepto principal', en: 'Main concept', gl: 'Concepto principal', fr: 'Concept principal', it: 'Voce principale', pt: 'Conceito principal'),
-                      hintText: tr(context, es: 'Cena, gasolina, compra...', en: 'Dinner, fuel, groceries...', gl: 'Cea, gasolina, compra...', fr: 'Diner, essence, courses...', it: 'Cena, carburante, spesa...', pt: 'Jantar, combustivel, compras...'),
+                      labelText: tr(
+                        context,
+                        es: 'Concepto principal',
+                        en: 'Main concept',
+                        gl: 'Concepto principal',
+                        fr: 'Concept principal',
+                        it: 'Voce principale',
+                        pt: 'Conceito principal',
+                      ),
+                      hintText: tr(
+                        context,
+                        es: 'Cena, gasolina, compra...',
+                        en: 'Dinner, fuel, groceries...',
+                        gl: 'Cea, gasolina, compra...',
+                        fr: 'Diner, essence, courses...',
+                        it: 'Cena, carburante, spesa...',
+                        pt: 'Jantar, combustivel, compras...',
+                      ),
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                     ),
                   ),
@@ -106,10 +157,26 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     controller: _amountController,
                     enabled: !_hasStartedSubExpenses,
                     decoration: InputDecoration(
-                      labelText: tr(context, es: 'Importe total', en: 'Total amount', gl: 'Importe total', fr: 'Montant total', it: 'Importo totale', pt: 'Valor total'),
+                      labelText: tr(
+                        context,
+                        es: 'Importe total',
+                        en: 'Total amount',
+                        gl: 'Importe total',
+                        fr: 'Montant total',
+                        it: 'Importo totale',
+                        pt: 'Valor total',
+                      ),
                       hintText: '0,00',
                       helperText: _hasStartedSubExpenses
-                          ? tr(context, es: 'Se calcula automáticamente con la suma de los subgastos.', en: 'It is calculated automatically from the subexpenses sum.', gl: 'Calcúlase automaticamente coa suma dos subgastos.', fr: 'Il est calculé automatiquement à partir de la somme des sous-dépenses.', it: 'Viene calcolato automaticamente dalla somma delle sottospese.', pt: 'E calculado automaticamente pela soma dos subgastos.')
+                          ? tr(
+                              context,
+                              es: 'Se calcula automáticamente con la suma de los subgastos.',
+                              en: 'It is calculated automatically from the subexpenses sum.',
+                              gl: 'Calcúlase automaticamente coa suma dos subgastos.',
+                              fr: 'Il est calculé automatiquement à partir de la somme des sous-dépenses.',
+                              it: 'Viene calcolato automaticamente dalla somma delle sottospese.',
+                              pt: 'E calculado automaticamente pela soma dos subgastos.',
+                            )
                           : null,
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -119,7 +186,20 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     _ComputedTotalCard(currency: widget.group.currency, total: _subExpenseTotal),
                   ],
                   const SizedBox(height: 12),
-                  TextField(controller: _noteController, decoration: InputDecoration(labelText: tr(context, es: 'Nota opcional', en: 'Optional note', gl: 'Nota opcional', fr: 'Note facultative', it: 'Nota opzionale', pt: 'Nota opcional'))),
+                  TextField(
+                    controller: _noteController,
+                    decoration: InputDecoration(
+                      labelText: tr(
+                        context,
+                        es: 'Nota opcional',
+                        en: 'Optional note',
+                        gl: 'Nota opcional',
+                        fr: 'Note facultative',
+                        it: 'Nota opzionale',
+                        pt: 'Nota opcional',
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -134,7 +214,18 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(tr(context, es: 'Subgastos', en: 'Subexpenses', gl: 'Subgastos', fr: 'Sous-depenses', it: 'Sottospese', pt: 'Subgastos'), style: Theme.of(context).textTheme.headlineSmall),
+                        child: Text(
+                          tr(
+                            context,
+                            es: 'Subgastos',
+                            en: 'Subexpenses',
+                            gl: 'Subgastos',
+                            fr: 'Sous-depenses',
+                            it: 'Sottospese',
+                            pt: 'Subgastos',
+                          ),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: _addSubExpense,
@@ -145,7 +236,15 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    tr(context, es: 'Opcional. Si añades subgastos, el total se calculará automáticamente con su suma.', en: 'Optional. If you add subexpenses, the total will be calculated automatically from their sum.', gl: 'Opcional. Se engades subgastos, o total calcularase automaticamente coa súa suma.', fr: 'Facultatif. Si vous ajoutez des sous-dépenses, le total sera calculé automatiquement à partir de leur somme.', it: 'Opzionale. Se aggiungi sottospese, il totale verra calcolato automaticamente dalla loro somma.', pt: 'Opcional. Se adicionares subgastos, o total sera calculado automaticamente pela soma deles.'),
+                    tr(
+                      context,
+                      es: 'Opcional. Si añades subgastos, el total se calculará automáticamente con su suma.',
+                      en: 'Optional. If you add subexpenses, the total will be calculated automatically from their sum.',
+                      gl: 'Opcional. Se engades subgastos, o total calcularase automaticamente coa súa suma.',
+                      fr: 'Facultatif. Si vous ajoutez des sous-dépenses, le total sera calculé automatiquement à partir de leur somme.',
+                      it: 'Opzionale. Se aggiungi sottospese, il totale verra calcolato automaticamente dalla loro somma.',
+                      pt: 'Opcional. Se adicionares subgastos, o total sera calculado automaticamente pela soma deles.',
+                    ),
                   ),
                   if (_subExpenses.isEmpty) ...[
                     const SizedBox(height: 12),
@@ -156,7 +255,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(18),
                       ),
-                        child: Text(tr(context, es: 'Sin subgastos. Puedes guardar un gasto simple con el importe total o desglosarlo aquí.', en: 'No subexpenses yet. You can save a simple expense with the total amount or break it down here.', gl: 'Sen subgastos. Podes gardar un gasto simple co importe total ou desagregalo aquí.', fr: 'Pas encore de sous-dépenses. Vous pouvez enregistrer une dépense simple avec le montant total ou la détailler ici.', it: 'Nessuna sottospesa. Puoi salvare una spesa semplice con l\'importo totale o suddividerla qui.', pt: 'Sem subgastos. Podes guardar uma despesa simples com o valor total ou detalha-la aqui.')),
+                      child: Text(
+                        tr(
+                          context,
+                          es: 'Sin subgastos. Puedes guardar un gasto simple con el importe total o desglosarlo aquí.',
+                          en: 'No subexpenses yet. You can save a simple expense with the total amount or break it down here.',
+                          gl: 'Sen subgastos. Podes gardar un gasto simple co importe total ou desagregalo aquí.',
+                          fr: 'Pas encore de sous-dépenses. Vous pouvez enregistrer une dépense simple avec le montant total ou la détailler ici.',
+                          it: 'Nessuna sottospesa. Puoi salvare una spesa semplice con l\'importo totale o suddividerla qui.',
+                          pt: 'Sem subgastos. Podes guardar uma despesa simples com o valor total ou detalha-la aqui.',
+                        ),
+                      ),
                     ),
                   ] else ...[
                     const SizedBox(height: 12),
@@ -178,7 +287,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                   Expanded(
                                     child: TextFormField(
                                       controller: _subExpenseNameControllers[index],
-                                      decoration: InputDecoration(labelText: tr(context, es: 'Subgasto', en: 'Subexpense', gl: 'Subgasto', fr: 'Sous-depense', it: 'Sottospesa', pt: 'Subgasto')),
+                                      decoration: InputDecoration(
+                                        labelText: tr(
+                                          context,
+                                          es: 'Subgasto',
+                                          en: 'Subexpense',
+                                          gl: 'Subgasto',
+                                          fr: 'Sous-depense',
+                                          it: 'Sottospesa',
+                                          pt: 'Subgasto',
+                                        ),
+                                      ),
                                       onChanged: (value) => _updateSubExpense(index, subExpense.copyWith(name: value)),
                                     ),
                                   ),
@@ -186,16 +305,35 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                   IconButton(
                                     onPressed: () => _removeSubExpense(index),
                                     icon: const Icon(Icons.delete_outline_rounded),
-                                    tooltip: tr(context, es: 'Eliminar subgasto', en: 'Delete subexpense', gl: 'Eliminar subgasto', fr: 'Supprimer la sous-depense', it: 'Elimina sottospesa', pt: 'Eliminar subgasto'),
+                                    tooltip: tr(
+                                      context,
+                                      es: 'Eliminar subgasto',
+                                      en: 'Delete subexpense',
+                                      gl: 'Eliminar subgasto',
+                                      fr: 'Supprimer la sous-depense',
+                                      it: 'Elimina sottospesa',
+                                      pt: 'Eliminar subgasto',
+                                    ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: _subExpenseAmountControllers[index],
-                                decoration: InputDecoration(labelText: tr(context, es: 'Importe', en: 'Amount', gl: 'Importe', fr: 'Montant', it: 'Importo', pt: 'Valor')),
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Importe',
+                                    en: 'Amount',
+                                    gl: 'Importe',
+                                    fr: 'Montant',
+                                    it: 'Importo',
+                                    pt: 'Valor',
+                                  ),
+                                ),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                onChanged: (value) => _updateSubExpense(index, subExpense.copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? 0)),
+                                onChanged: (value) =>
+                                    _updateSubExpense(index, subExpense.copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? 0)),
                               ),
                             ],
                           ),
@@ -214,11 +352,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tr(context, es: 'Quién pagó y categoría', en: 'Payer and category', gl: 'Quen pagou e categoria', fr: 'Payeur et categorie', it: 'Chi ha pagato e categoria', pt: 'Quem pagou e categoria'), style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    tr(
+                      context,
+                      es: 'Quién pagó y categoría',
+                      en: 'Payer and category',
+                      gl: 'Quen pagou e categoria',
+                      fr: 'Payeur et categorie',
+                      it: 'Chi ha pagato e categoria',
+                      pt: 'Quem pagou e categoria',
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: _payerId,
-                    decoration: InputDecoration(labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por')),
+                    decoration: InputDecoration(
+                      labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por'),
+                    ),
                     items: _sortedPayerMembers
                         .map(
                           (member) => DropdownMenuItem(
@@ -239,9 +390,25 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   DropdownButtonFormField<String>(
                     initialValue: _categoryId,
                     decoration: InputDecoration(
-                      labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria'),
+                      labelText: tr(
+                        context,
+                        es: 'Categoría',
+                        en: 'Category',
+                        gl: 'Categoria',
+                        fr: 'Categorie',
+                        it: 'Categoria',
+                        pt: 'Categoria',
+                      ),
                       helperText: _hasStartedSubExpenses
-                          ? tr(context, es: 'Se aplicará a todos los subgastos de este gasto.', en: 'It will be applied to all subexpenses in this expense.', gl: 'Aplicarase a todos os subgastos deste gasto.', fr: 'Elle sera appliquee a toutes les sous-depenses de cette depense.', it: 'Verra applicata a tutte le sottospese di questa spesa.', pt: 'Sera aplicada a todos os subgastos desta despesa.')
+                          ? tr(
+                              context,
+                              es: 'Se aplicará a todos los subgastos de este gasto.',
+                              en: 'It will be applied to all subexpenses in this expense.',
+                              gl: 'Aplicarase a todos os subgastos deste gasto.',
+                              fr: 'Elle sera appliquee a toutes les sous-depenses de cette depense.',
+                              it: 'Verra applicata a tutte le sottospese di questa spesa.',
+                              pt: 'Sera aplicada a todos os subgastos desta despesa.',
+                            )
                           : null,
                     ),
                     items: categories
@@ -271,9 +438,30 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tr(context, es: 'Quién participa', en: 'Who takes part', gl: 'Quen participa', fr: 'Qui participe', it: 'Chi partecipa', pt: 'Quem participa'), style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    tr(
+                      context,
+                      es: 'Quién participa',
+                      en: 'Who takes part',
+                      gl: 'Quen participa',
+                      fr: 'Qui participe',
+                      it: 'Chi partecipa',
+                      pt: 'Quem participa',
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: 8),
-                  Text(tr(context, es: 'Selecciona las personas que comparten este gasto.', en: 'Select the people who share this expense.', gl: 'Selecciona as persoas que comparten este gasto.', fr: 'Selectionnez les personnes qui partagent cette depense.', it: 'Seleziona le persone che condividono questa spesa.', pt: 'Seleciona as pessoas que partilham esta despesa.')),
+                  Text(
+                    tr(
+                      context,
+                      es: 'Selecciona las personas que comparten este gasto.',
+                      en: 'Select the people who share this expense.',
+                      gl: 'Selecciona as persoas que comparten este gasto.',
+                      fr: 'Selectionnez les personnes qui partagent cette depense.',
+                      it: 'Seleziona le persone che condividono questa spesa.',
+                      pt: 'Seleciona as pessoas que partilham esta despesa.',
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Container(
                     constraints: const BoxConstraints(maxHeight: 280),
@@ -293,7 +481,19 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                           dense: true,
                           controlAffinity: ListTileControlAffinity.leading,
                           title: Text(member.name),
-                          subtitle: member.isPending ? Text(tr(context, es: 'Pendiente de vincular', en: 'Pending to link', gl: 'Pendiente de vincular', fr: 'En attente de liaison', it: 'In attesa di collegamento', pt: 'Pendente de associacao')) : null,
+                          subtitle: member.isPending
+                              ? Text(
+                                  tr(
+                                    context,
+                                    es: 'Pendiente de vincular',
+                                    en: 'Pending to link',
+                                    gl: 'Pendiente de vincular',
+                                    fr: 'En attente de liaison',
+                                    it: 'In attesa di collegamento',
+                                    pt: 'Pendente de associacao',
+                                  ),
+                                )
+                              : null,
                           onChanged: (value) {
                             setState(() {
                               if (value ?? false) {
@@ -318,7 +518,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: FilledButton.icon(
           onPressed: widget.group.isClosed || _saving ? null : _saveExpense,
           icon: const Icon(Icons.save_rounded),
-          label: Text(tr(context, es: 'Guardar gasto', en: 'Save expense', gl: 'Gardar gasto', fr: 'Enregistrer la depense', it: 'Salva spesa', pt: 'Guardar despesa')),
+          label: Text(
+            tr(
+              context,
+              es: 'Guardar gasto',
+              en: 'Save expense',
+              gl: 'Gardar gasto',
+              fr: 'Enregistrer la depense',
+              it: 'Salva spesa',
+              pt: 'Guardar despesa',
+            ),
+          ),
         ),
       ),
     );
@@ -358,8 +568,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
     if (_titleController.text.trim().isEmpty || members.isEmpty || (_hasStartedSubExpenses ? hasInvalidSubExpenses : amount <= 0)) {
       final message = _hasStartedSubExpenses
-          ? tr(context, es: 'Revisa el concepto, las personas participantes y todos los subgastos añadidos.', en: 'Check the concept, selected participants, and every added subexpense.', gl: 'Revisa o concepto, as persoas participantes e todos os subgastos engadidos.', fr: 'Verifiez le concept, les participants et chaque sous-depense ajoutee.', it: 'Controlla il concetto, i partecipanti selezionati e ogni sottospesa aggiunta.', pt: 'Revê o conceito, as pessoas participantes e cada subgasto adicionado.')
-          : tr(context, es: 'Revisa el concepto, el importe y las personas participantes.', en: 'Check the concept, amount and selected participants.', gl: 'Revisa o concepto, o importe e as persoas participantes.', fr: 'Verifiez le concept, le montant et les participants selectionnes.', it: 'Controlla voce, importo e partecipanti selezionati.', pt: 'Revê o conceito, o valor e as pessoas participantes.');
+          ? tr(
+              context,
+              es: 'Revisa el concepto, las personas participantes y todos los subgastos añadidos.',
+              en: 'Check the concept, selected participants, and every added subexpense.',
+              gl: 'Revisa o concepto, as persoas participantes e todos os subgastos engadidos.',
+              fr: 'Verifiez le concept, les participants et chaque sous-depense ajoutee.',
+              it: 'Controlla il concetto, i partecipanti selezionati e ogni sottospesa aggiunta.',
+              pt: 'Revê o conceito, as pessoas participantes e cada subgasto adicionado.',
+            )
+          : tr(
+              context,
+              es: 'Revisa el concepto, el importe y las personas participantes.',
+              en: 'Check the concept, amount and selected participants.',
+              gl: 'Revisa o concepto, o importe e as persoas participantes.',
+              fr: 'Verifiez le concept, le montant et les participants selectionnes.',
+              it: 'Controlla voce, importo e partecipanti selezionati.',
+              pt: 'Revê o conceito, o valor e as pessoas participantes.',
+            );
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       setState(() => _saving = false);
       return;
@@ -369,16 +595,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       final allocations = equalAllocations(members);
       final items = meaningfulSubExpenses.isNotEmpty
           ? meaningfulSubExpenses
-              .map(
-                (item) => ExpenseItem(
-                  id: _uuid.v4(),
-                  name: item.name.trim(),
-                  amount: item.amount,
-                  categoryId: _categoryId,
-                  allocations: allocations,
-                ),
-              )
-              .toList(growable: false)
+                .map(
+                  (item) => ExpenseItem(
+                    id: _uuid.v4(),
+                    name: item.name.trim(),
+                    amount: item.amount,
+                    categoryId: _categoryId,
+                    allocations: allocations,
+                  ),
+                )
+                .toList(growable: false)
           : [
               ExpenseItem(
                 id: _uuid.v4(),
@@ -399,6 +625,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       );
 
       await ref.read(repositoryProvider).addExpense(groupId: widget.group.id, expense: expense);
+      // Cuenta como uso real de la app: es lo que habilita, mas adelante,
+      // el aviso de donacion.
+      ref.read(appPreferencesProvider.notifier).registerRealUse();
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -421,23 +650,25 @@ class _ComputedTotalCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           const Icon(Icons.functions_rounded),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              tr(context, es: 'Total calculado desde los subgastos', en: 'Total calculated from subexpenses', gl: 'Total calculado dende os subgastos', fr: 'Total calculé à partir des sous-dépenses', it: 'Totale calcolato dalle sottospese', pt: 'Total calculado a partir dos subgastos'),
+              tr(
+                context,
+                es: 'Total calculado desde los subgastos',
+                en: 'Total calculated from subexpenses',
+                gl: 'Total calculado dende os subgastos',
+                fr: 'Total calculé à partir des sous-dépenses',
+                it: 'Totale calcolato dalle sottospese',
+                pt: 'Total calculado a partir dos subgastos',
+              ),
             ),
           ),
-          Text(
-            money(total, currency),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
+          Text(money(total, currency), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -445,21 +676,12 @@ class _ComputedTotalCard extends StatelessWidget {
 }
 
 class _DraftSubExpense {
-  const _DraftSubExpense({
-    this.name = '',
-    this.amount = 0,
-  });
+  const _DraftSubExpense({this.name = '', this.amount = 0});
 
   final String name;
   final double amount;
 
-  _DraftSubExpense copyWith({
-    String? name,
-    double? amount,
-  }) {
-    return _DraftSubExpense(
-      name: name ?? this.name,
-      amount: amount ?? this.amount,
-    );
+  _DraftSubExpense copyWith({String? name, double? amount}) {
+    return _DraftSubExpense(name: name ?? this.name, amount: amount ?? this.amount);
   }
 }

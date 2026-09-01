@@ -1,0 +1,158 @@
+name: Release
+
+# Genera el AAB firmado, el APK y los documentos en HTML, PDF y DOCX, y los
+# adjunta a la GitHub Release de la etiqueta.
+#
+# Los binarios de documentación NO se versionan: se generan aquí y viven como
+# assets de la Release, para que cada documento corresponda a una versión
+# concreta y el repositorio siga siendo ligero de clonar.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión SemVer, p. ej. 1.0.0'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.35.0'
+
+jobs:
+  compilar:
+    name: Compilar y publicar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calcular versión y número de compilación
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          # Formula del versionCode: AAMMDDNN, documentada en docs/INSTALL.md.
+          # NN es el numero de compilacion del dia; en CI se usa el contador de
+          # ejecuciones del dia, acotado a 99.
+          STAMP=$(date -u +%y%m%d)
+          SEQ=$(printf "%02d" $(( ${{ github.run_number }} % 100 )))
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=${STAMP}${SEQ}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Análisis y pruebas
+        run: |
+          flutter analyze --no-fatal-infos
+          flutter test
+
+      - name: Restaurar el almacén de claves
+        # El .jks nunca vive en el repositorio: llega como secret en base64.
+        # Si no está configurado, se compila sin firmar y se avisa.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Sin ANDROID_KEYSTORE_BASE64: el AAB se firmará con la clave de depuración y NO se puede subir a Play."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/shardpay-release.jks"
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$RUNNER_TEMP/shardpay-release.jks
+          EOF
+
+      - name: Compilar AAB
+        env:
+          DEFINES: >-
+            --dart-define=SHARDPAY_VERSION=${{ steps.version.outputs.version }}
+            --dart-define=SHARDPAY_BUILD=${{ steps.version.outputs.build }}
+            --dart-define=SHARDPAY_COMMIT=${{ steps.version.outputs.commit }}
+            --dart-define=SHARDPAY_BUILD_DATE=${{ steps.version.outputs.date }}
+            --dart-define=FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
+            --dart-define=FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+            --dart-define=FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}
+            --dart-define=FIREBASE_ANDROID_APP_ID=${{ secrets.FIREBASE_ANDROID_APP_ID }}
+            --dart-define=GOOGLE_SERVER_CLIENT_ID=${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
+        run: |
+          flutter build appbundle --release $DEFINES \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ steps.version.outputs.build }}
+          flutter build apk --release $DEFINES \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ steps.version.outputs.build }}
+
+      - name: Comprobar que no hay bibliotecas de facturación en el binario
+        run: |
+          cd android
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > /tmp/deps.txt || true
+          if grep -iE "billingclient|com\.android\.billing" /tmp/deps.txt; then
+            echo "::error::Se ha colado una biblioteca de facturación."
+            exit 1
+          fi
+
+      # El generador de documentacion es Python mas Chrome sin ventana. Antes
+      # esto instalaba Pandoc y medio TeX Live: unos 800 MB y varios minutos por
+      # ejecucion, para un resultado con menos control sobre el estilo.
+      - name: Preparar la generación de documentación
+        run: python3 -m pip install --quiet markdown pygments pillow
+
+      - name: Generar la documentación
+        env:
+          SHARDPAY_VERSION: ${{ steps.version.outputs.version }}
+        run: bash docs/build-docs.sh
+
+      - name: Renombrar los artefactos
+        run: |
+          mkdir -p dist
+          V=${{ steps.version.outputs.version }}
+          cp build/app/outputs/bundle/release/app-release.aab "dist/shardpay-$V.aab"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/shardpay-$V.apk"
+          cp docs/out/* dist/ 2>/dev/null || true
+          ls -la dist
+
+      - name: Publicar la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## ShardPay ${{ steps.version.outputs.version }}
+
+            - Compilación `${{ steps.version.outputs.build }}`
+            - Commit `${{ steps.version.outputs.commit }}`
+            - Fecha `${{ steps.version.outputs.date }}`
+
+            Los cambios de esta versión están en
+            [CHANGELOG.md](https://github.com/braisgaldo/shardpay/blob/main/CHANGELOG.md).
+
+            El APK adjunto se puede instalar directamente, sin pasar por ninguna
+            tienda.

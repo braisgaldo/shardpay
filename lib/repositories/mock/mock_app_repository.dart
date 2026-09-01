@@ -26,12 +26,7 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<AppUser> signInWithEmail({
-    required String email,
-    required String password,
-    required bool register,
-    String? displayName,
-  }) async {
+  Future<AppUser> signInWithEmail({required String email, required String password, required bool register, String? displayName}) async {
     final user = AppUser(
       id: _uuid.v4(),
       email: email,
@@ -46,13 +41,7 @@ class MockAppRepository implements AppRepository {
 
   @override
   Future<AppUser> signInWithGoogle() async {
-    final user = AppUser(
-      id: _uuid.v4(),
-      email: 'demo@shardpay.app',
-      displayName: 'Demo Rider',
-      createdAt: DateTime.now(),
-      photoUrl: null,
-    );
+    final user = AppUser(id: _uuid.v4(), email: 'demo@shardpay.app', displayName: 'Demo Rider', createdAt: DateTime.now(), photoUrl: null);
     _currentUser = user;
     _authController.add(user);
     await seedDemoData(user);
@@ -77,7 +66,10 @@ class MockAppRepository implements AppRepository {
       }
       _groups[groupId] = group.copyWith(
         ownerId: group.ownerId == user.id && remainingActive.isNotEmpty ? remainingActive.first.userId : group.ownerId,
-        adminIds: group.adminIds.where((entry) => entry != user.id).where((entry) => remainingActive.any((member) => member.userId == entry)).toList(),
+        adminIds: group.adminIds
+            .where((entry) => entry != user.id)
+            .where((entry) => remainingActive.any((member) => member.userId == entry))
+            .toList(),
         members: group.members.map((entry) {
           if (entry.userId != user.id) {
             return entry;
@@ -121,7 +113,16 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<ExpenseGroup?> previewInvite(String rawInvite) async {
+  Future<GroupInvitePreview?> previewInvite(String rawInvite) async {
+    final grupo = _resolveInviteGroup(rawInvite);
+    return grupo == null ? null : GroupInvitePreview.fromGroup(grupo);
+  }
+
+  /// En el modo de demostracion no hay reglas de seguridad que valgan: todo esta
+  /// en memoria y en el propio movil. Se resuelve el grupo entero y se recorta a
+  /// la ficha, para que la pantalla vea exactamente lo mismo que veria contra
+  /// Firestore de verdad.
+  ExpenseGroup? _resolveInviteGroup(String rawInvite) {
     final value = rawInvite.trim();
     final reference = _parseInviteReference(value);
     if (reference != null) {
@@ -144,10 +145,7 @@ class MockAppRepository implements AppRepository {
     if (uri != null && uri.queryParameters.containsKey('group')) {
       final groupId = uri.queryParameters['group'];
       if (groupId != null && groupId.isNotEmpty) {
-        return _InviteReference(
-          groupId: groupId,
-          token: uri.queryParameters['token']?.trim(),
-        );
+        return _InviteReference(groupId: groupId, token: uri.queryParameters['token']?.trim());
       }
     }
 
@@ -162,7 +160,13 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<ExpenseGroup> createGroup({required AppUser owner, required String name, required String iconKey, required String currency, required List<PendingGroupMember> pendingMembers}) async {
+  Future<ExpenseGroup> createGroup({
+    required AppUser owner,
+    required String name,
+    required String iconKey,
+    required String currency,
+    required List<PendingGroupMember> pendingMembers,
+  }) async {
     final now = DateTime.now();
     final group = ExpenseGroup(
       id: _uuid.v4(),
@@ -196,7 +200,7 @@ class MockAppRepository implements AppRepository {
     required String joinPin,
     String? pendingMemberId,
   }) async {
-    final group = await previewInvite(rawInvite);
+    final group = _resolveInviteGroup(rawInvite);
 
     if (group == null) {
       throw StateError('Invitación no encontrada.');
@@ -204,6 +208,8 @@ class MockAppRepository implements AppRepository {
     if (group.isClosed) {
       throw StateError('El grupo está cerrado y no admite nuevas incorporaciones.');
     }
+    // Aqui si se compara el PIN de frente: no hay servidor al que preguntarle.
+    // Contra Firestore lo hacen las reglas, con `joinProof` (ADR-0009).
     if (group.joinPin != joinPin.trim()) {
       throw StateError('El PIN del grupo no es correcto.');
     }
@@ -211,22 +217,23 @@ class MockAppRepository implements AppRepository {
       return;
     }
 
-    PendingGroupMember? selectedSlot;
-    if (pendingMemberId != null) {
-      selectedSlot = group.pendingMembers.firstWhereOrNull((entry) => entry.id == pendingMemberId);
+    final selectedSlot = pendingMemberId == null ? null : group.openSlots.firstWhereOrNull((entry) => entry.id == pendingMemberId);
+    if (pendingMemberId != null && selectedSlot == null) {
+      throw StateError('Ese hueco ya lo ha ocupado otra persona.');
     }
     if (selectedSlot == null && !group.allowAnonymousJoin) {
       throw StateError('El administrador debe indicar qué persona se está uniendo o activar el acceso libre por enlace.');
     }
 
-    final memberName = selectedSlot?.name ?? user.displayName;
-    final pendingUserId = selectedSlot == null ? null : 'pending:${selectedSlot.id}';
-
     _groups[group.id] = group.copyWith(
       memberIds: [...group.memberIds, user.id],
-      members: [...group.members, GroupMember(userId: user.id, name: memberName, email: user.email, photoUrl: user.photoUrl)],
-      pendingMembers: group.pendingMembers.where((entry) => entry.id != pendingMemberId).toList(),
-      expenses: pendingUserId == null ? group.expenses : _rebindPendingMemberReferences(group.expenses, pendingUserId, user.id),
+      members: [
+        ...group.members,
+        GroupMember(userId: user.id, name: selectedSlot?.name ?? user.displayName, email: user.email, photoUrl: user.photoUrl),
+      ],
+      // El hueco no se borra: se marca reclamado, y los gastos que lo
+      // referencian se resuelven al leer, sin reescribir el historial.
+      claimedSlots: selectedSlot == null ? group.claimedSlots : <String, String>{...group.claimedSlots, selectedSlot.id: user.id},
       updatedAt: DateTime.now(),
     );
     _groupsController.add(null);
@@ -236,10 +243,7 @@ class MockAppRepository implements AppRepository {
   Future<void> addExpense({required String groupId, required ExpenseRecord expense}) async {
     final group = _groups[groupId]!;
     _ensureGroupAllowsExpense(group, expense);
-    _groups[groupId] = group.copyWith(
-      expenses: [...group.expenses, expense],
-      updatedAt: DateTime.now(),
-    );
+    _groups[groupId] = group.copyWith(expenses: [...group.expenses, expense], updatedAt: DateTime.now());
     await _notifyExpenseEvent(group: _groups[groupId]!, expense: expense);
     _groupsController.add(null);
   }
@@ -259,10 +263,7 @@ class MockAppRepository implements AppRepository {
   Future<void> deleteExpense({required String groupId, required String expenseId}) async {
     final group = _groups[groupId]!;
     _ensureGroupOpen(group);
-    _groups[groupId] = group.copyWith(
-      expenses: group.expenses.where((entry) => entry.id != expenseId).toList(),
-      updatedAt: DateTime.now(),
-    );
+    _groups[groupId] = group.copyWith(expenses: group.expenses.where((entry) => entry.id != expenseId).toList(), updatedAt: DateTime.now());
     _groupsController.add(null);
   }
 
@@ -311,11 +312,7 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<void> transferGroupOwnership({
-    required String groupId,
-    required String requesterId,
-    required String newOwnerId,
-  }) async {
+  Future<void> transferGroupOwnership({required String groupId, required String requesterId, required String newOwnerId}) async {
     final group = _groups[groupId]!;
     if (group.ownerId != requesterId) {
       throw StateError('Solo la persona administradora puede reasignar la administración.');
@@ -333,16 +330,16 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<void> setGroupAdmins({
-    required String groupId,
-    required String requesterId,
-    required List<String> adminIds,
-  }) async {
+  Future<void> setGroupAdmins({required String groupId, required String requesterId, required List<String> adminIds}) async {
     final group = _groups[groupId]!;
     if (group.ownerId != requesterId) {
       throw StateError('Solo la persona administradora principal puede cambiar otros administradores.');
     }
-    final validAdminIds = adminIds.where((entry) => entry != group.ownerId).where((entry) => group.activeMembers.any((member) => member.userId == entry)).toSet().toList();
+    final validAdminIds = adminIds
+        .where((entry) => entry != group.ownerId)
+        .where((entry) => group.activeMembers.any((member) => member.userId == entry))
+        .toSet()
+        .toList();
     _groups[groupId] = group.copyWith(adminIds: validAdminIds, updatedAt: DateTime.now());
     _groupsController.add(null);
   }
@@ -354,21 +351,12 @@ class MockAppRepository implements AppRepository {
       throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
     }
     final now = DateTime.now();
-    _groups[groupId] = isClosed
-        ? group.archived(at: now)
-        : group.copyWith(
-            isClosed: false,
-            closedAt: null,
-            updatedAt: now,
-          );
+    _groups[groupId] = isClosed ? group.archived(at: now) : group.copyWith(isClosed: false, closedAt: null, updatedAt: now);
     _groupsController.add(null);
   }
 
   @override
-  Future<void> leaveGroup({
-    required String groupId,
-    required String userId,
-  }) async {
+  Future<void> leaveGroup({required String groupId, required String userId}) async {
     final group = _groups[groupId]!;
     if (!group.memberIds.contains(userId)) {
       return;
@@ -402,10 +390,7 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<void> deleteGroup({
-    required String groupId,
-    required String requesterId,
-  }) async {
+  Future<void> deleteGroup({required String groupId, required String requesterId}) async {
     final group = _groups[groupId]!;
     if (group.ownerId != requesterId) {
       throw StateError('Solo la persona administradora puede borrar el grupo.');
@@ -438,7 +423,12 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
-  Future<void> requestReimbursement({required String groupId, required String requesterId, required String targetUserId, required double amount}) async {
+  Future<void> requestReimbursement({
+    required String groupId,
+    required String requesterId,
+    required String targetUserId,
+    required double amount,
+  }) async {
     final group = _groups[groupId]!;
     final targetMember = group.visibleMembers.firstWhereOrNull((entry) => entry.userId == targetUserId);
     if (targetUserId.startsWith('pending:') || (targetMember?.isPending ?? false) || (targetMember?.isDeletedAccount ?? false)) {
@@ -471,10 +461,15 @@ class MockAppRepository implements AppRepository {
     final edges = settlementEdges(group, activeAccountsOnly: false);
     final balances = memberBalances(group);
     final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
-    final recipientIds = edges.expand((edge) => [edge.fromUserId, edge.toUserId]).where((userId) => userId != requesterId && !userId.startsWith('pending:')).toSet();
+    final recipientIds = edges
+        .expand((edge) => [edge.fromUserId, edge.toUserId])
+        .where((userId) => userId != requesterId && !userId.startsWith('pending:'))
+        .toSet();
     var sent = 0;
 
-    for (final member in group.visibleMembers.where((entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount)) {
+    for (final member in group.visibleMembers.where(
+      (entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount,
+    )) {
       final balance = balances[member.userId] ?? 0;
       final amount = balance.abs();
       if (amount <= 0.009) {
@@ -515,12 +510,28 @@ class MockAppRepository implements AppRepository {
   }
 
   @override
+  Future<ExpenseGroup> restoreGroup({required AppUser owner, required ExpenseGroup group}) async {
+    final now = DateTime.now();
+    final restored = group.copyWith(
+      id: _uuid.v4(),
+      inviteCode: _uuid.v4().substring(0, 6).toUpperCase(),
+      joinPin: generateGroupJoinPin(),
+      ownerId: owner.id,
+      memberIds: <String>{owner.id, ...group.memberIds}.toList(growable: false),
+      updatedAt: now,
+    );
+    _groups[restored.id] = restored;
+    _groupsController.add(null);
+    return restored;
+  }
+
+  @override
   Future<void> seedDemoData(AppUser user) async {
     if (_groups.values.any((group) => group.memberIds.contains(user.id))) {
       return;
     }
 
-    final partner = GroupMember(userId: 'friend-1', name: 'Noa', email: 'noa@example.com');
+    const partner = GroupMember(userId: 'friend-1', name: 'Noa', email: 'noa@example.com');
     final squad = [
       GroupMember(userId: user.id, name: user.displayName, email: user.email, photoUrl: user.photoUrl),
       partner,
@@ -538,7 +549,13 @@ class MockAppRepository implements AppRepository {
         createdAt: DateTime.now().subtract(const Duration(days: 2)),
         items: [
           ExpenseItem(id: _uuid.v4(), name: 'Sushi combo', amount: 42.50, categoryId: 'food', allocations: equalAllocations(squad)),
-          ExpenseItem(id: _uuid.v4(), name: 'Postres', amount: 14.20, categoryId: 'fun', allocations: equalAllocations([squad[0], squad[1]])),
+          ExpenseItem(
+            id: _uuid.v4(),
+            name: 'Postres',
+            amount: 14.20,
+            categoryId: 'fun',
+            allocations: equalAllocations([squad[0], squad[1]]),
+          ),
         ],
       ),
       ExpenseRecord(
@@ -569,9 +586,7 @@ class MockAppRepository implements AppRepository {
         PendingGroupMember(id: 'slot_2', name: 'Brais'),
       ],
       allowAnonymousJoin: false,
-      customCategories: const [
-        ExpenseCategory(id: 'surf', name: 'Surf', iconKey: 'bolt', colorHex: '0xFF1B998B'),
-      ],
+      customCategories: const [ExpenseCategory(id: 'surf', name: 'Surf', iconKey: 'bolt', colorHex: '0xFF1B998B')],
       expenses: tripExpenses,
       createdAt: DateTime.now().subtract(const Duration(days: 8)),
       updatedAt: DateTime.now().subtract(const Duration(hours: 6)),
@@ -592,9 +607,7 @@ class MockAppRepository implements AppRepository {
       members: [squad.first, partner],
       pendingMembers: const [],
       allowAnonymousJoin: true,
-      customCategories: const [
-        ExpenseCategory(id: 'cleaning', name: 'Limpieza', iconKey: 'home', colorHex: '0xFF3A86FF'),
-      ],
+      customCategories: const [ExpenseCategory(id: 'cleaning', name: 'Limpieza', iconKey: 'home', colorHex: '0xFF3A86FF')],
       expenses: [
         ExpenseRecord(
           id: _uuid.v4(),
@@ -603,11 +616,25 @@ class MockAppRepository implements AppRepository {
           createdAt: DateTime.now().subtract(const Duration(days: 4)),
           note: 'Demo local para validar flujo sin Firebase.',
           items: [
-            ExpenseItem(id: _uuid.v4(), name: 'Verdura', amount: 18.40, categoryId: 'groceries', allocations: equalAllocations([squad.first, partner])),
-            ExpenseItem(id: _uuid.v4(), name: 'Café', amount: 6.80, categoryId: 'coffee', allocations: [
-              SplitAllocation(userId: user.id, percentage: 100),
-              SplitAllocation(userId: partner.userId, percentage: 0),
-            ]),
+            ExpenseItem(
+              id: _uuid.v4(),
+              name: 'Verdura',
+              amount: 18.40,
+              categoryId: 'groceries',
+              allocations: equalAllocations([squad.first, partner]),
+            ),
+            ExpenseItem(
+              id: _uuid.v4(),
+              name: 'Café',
+              amount: 6.80,
+              // `coffee` no es ninguna de las categorias por defecto, asi que la
+              // etiqueta salia con el identificador crudo en ingles.
+              categoryId: 'food',
+              allocations: [
+                SplitAllocation(userId: user.id, percentage: 100),
+                SplitAllocation(userId: partner.userId, percentage: 0),
+              ],
+            ),
           ],
         ),
       ],
@@ -617,49 +644,6 @@ class MockAppRepository implements AppRepository {
     );
 
     _groupsController.add(null);
-  }
-
-  List<ExpenseRecord> _rebindPendingMemberReferences(List<ExpenseRecord> expenses, String pendingUserId, String actualUserId) {
-    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
-
-    return expenses
-        .map(
-          (expense) => expense.copyWith(
-            payerId: expense.payerId == pendingUserId || expense.payerId == legacyPendingUserId ? actualUserId : expense.payerId,
-            items: expense.items
-                .map(
-                  (item) => item.copyWith(
-                    allocations: _mergeAllocations(item.allocations, pendingUserId, actualUserId),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  List<SplitAllocation> _mergeAllocations(List<SplitAllocation> allocations, String pendingUserId, String actualUserId) {
-    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
-    final orderedUserIds = <String>[];
-    final percentagesByUser = <String, double>{};
-
-    for (final allocation in allocations) {
-      final targetUserId = allocation.userId == pendingUserId || allocation.userId == legacyPendingUserId ? actualUserId : allocation.userId;
-      if (!percentagesByUser.containsKey(targetUserId)) {
-        orderedUserIds.add(targetUserId);
-      }
-      percentagesByUser[targetUserId] = (percentagesByUser[targetUserId] ?? 0) + allocation.percentage;
-    }
-
-    return orderedUserIds
-        .map(
-          (userId) => SplitAllocation(
-            userId: userId,
-            percentage: double.parse((percentagesByUser[userId] ?? 0).toStringAsFixed(2)),
-          ),
-        )
-        .where((allocation) => allocation.percentage > 0)
-        .toList(growable: false);
   }
 
   void _ensureGroupOpen(ExpenseGroup group) {
@@ -685,7 +669,9 @@ class MockAppRepository implements AppRepository {
   Future<void> _notifyExpenseEvent({required ExpenseGroup group, required ExpenseRecord expense}) async {
     final payer = group.members.firstWhereOrNull((entry) => entry.userId == expense.payerId);
     if (expense.kind == ExpenseRecordKind.expense) {
-      for (final member in group.activeMembers.where((entry) => entry.userId != expense.payerId && !entry.isDeletedAccount && !entry.userId.startsWith('pending:'))) {
+      for (final member in group.activeMembers.where(
+        (entry) => entry.userId != expense.payerId && !entry.isDeletedAccount && !entry.userId.startsWith('pending:'),
+      )) {
         _pushNotification(
           AppNotification(
             id: _uuid.v4(),
@@ -717,7 +703,8 @@ class MockAppRepository implements AppRepository {
           userId: userId,
           type: AppNotificationType.reimbursementRecorded,
           title: 'Reembolso registrado',
-          message: '${payer?.name ?? 'Una persona'} registró un reembolso de ${total.toStringAsFixed(2)} ${group.currency} en ${group.name}.',
+          message:
+              '${payer?.name ?? 'Una persona'} registró un reembolso de ${total.toStringAsFixed(2)} ${group.currency} en ${group.name}.',
           createdAt: DateTime.now(),
           groupId: group.id,
           expenseId: expense.id,

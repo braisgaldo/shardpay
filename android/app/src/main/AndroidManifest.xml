@@ -1,11 +1,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Minimo privilegio: solo se piden los permisos que una funcion concreta
+      necesita, y cada uno esta justificado en docs/adr/0006-permisos.md y en la
+      ficha de la tienda.
+
+      - POST_NOTIFICATIONS: avisos de gastos y reembolsos del grupo.
+      - CAMERA: fotografiar el ticket. El reconocimiento de texto ocurre entero
+        en el dispositivo; la foto no sale de aqui salvo que el usuario decida
+        adjuntarla al gasto.
+
+      No se pide almacenamiento: exportar e importar usan el selector del
+      sistema, que da acceso solo al fichero elegido.
+    -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- La camara no es obligatoria: sin ella se pueden seguir metiendo los
+         gastos a mano y leer tickets desde la galeria. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
         android:label="ShardPay"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher">
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:localeConfig="@xml/locales_config">
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="shardpay_messages" />
@@ -48,6 +69,33 @@
                     android:scheme="https"
                     android:host="shardpay.app"
                     android:pathPrefix="/join" />
+            </intent-filter>
+
+            <!--
+              Asociacion de la extension propia .shardpay.bak, para poder abrir
+              una copia de seguridad desde el gestor de archivos o desde el
+              correo. Se declaran las dos vias porque los gestores de archivos
+              son incoherentes: unos mandan el tipo MIME correcto y otros
+              octet-stream con la extension en la ruta.
+            -->
+            <intent-filter android:label="@string/backup_file_label">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.ghatostudio.shardpay.backup" />
+            </intent-filter>
+            <intent-filter android:label="@string/backup_file_label">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.shardpay\\.bak" />
+                <data android:pathPattern=".*\\..*\\.shardpay\\.bak" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

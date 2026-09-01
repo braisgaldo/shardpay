@@ -1,23 +1,21 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/expense_math.dart';
+import '../../core/join_proof.dart';
 import '../../models/app_models.dart';
 import '../app_repository.dart';
 
 class FirebaseAppRepository implements AppRepository {
-  FirebaseAppRepository({
-    required auth.FirebaseAuth auth,
-    required FirebaseFirestore firestore,
-    required GoogleSignIn googleSignIn,
-  })  : _auth = auth,
-        _firestore = firestore,
-        _googleSignIn = googleSignIn;
+  FirebaseAppRepository({required auth.FirebaseAuth auth, required FirebaseFirestore firestore, required GoogleSignIn googleSignIn})
+    : _auth = auth,
+      _firestore = firestore,
+      _googleSignIn = googleSignIn;
 
   final auth.FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -44,12 +42,7 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
-  Future<AppUser> signInWithEmail({
-    required String email,
-    required String password,
-    required bool register,
-    String? displayName,
-  }) async {
+  Future<AppUser> signInWithEmail({required String email, required String password, required bool register, String? displayName}) async {
     try {
       final credential = register
           ? await _auth.createUserWithEmailAndPassword(email: email, password: password)
@@ -81,10 +74,7 @@ class FirebaseAppRepository implements AppRepository {
       }
       final authClient = await googleUser.authentication;
 
-      final credential = auth.GoogleAuthProvider.credential(
-        accessToken: authClient.accessToken,
-        idToken: authClient.idToken,
-      );
+      final credential = auth.GoogleAuthProvider.credential(accessToken: authClient.accessToken, idToken: authClient.idToken);
 
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user!;
@@ -104,10 +94,7 @@ class FirebaseAppRepository implements AppRepository {
 
   @override
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _googleSignIn.signOut(),
-    ]);
+    await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
   }
 
   @override
@@ -117,7 +104,10 @@ class FirebaseAppRepository implements AppRepository {
       final group = ExpenseGroup.fromMap(doc.data());
       final remainingActive = group.activeMembers.where((entry) => entry.userId != user.id).toList();
       final ownerId = group.ownerId == user.id && remainingActive.isNotEmpty ? remainingActive.first.userId : group.ownerId;
-      final adminIds = group.adminIds.where((entry) => entry != user.id).where((entry) => remainingActive.any((member) => member.userId == entry)).toList();
+      final adminIds = group.adminIds
+          .where((entry) => entry != user.id)
+          .where((entry) => remainingActive.any((member) => member.userId == entry))
+          .toList();
       final updatedMembers = group.members.map((entry) {
         if (entry.userId != user.id) {
           return entry;
@@ -131,13 +121,15 @@ class FirebaseAppRepository implements AppRepository {
       }
 
       await doc.reference.set(
-        group.copyWith(
-          ownerId: ownerId,
-          adminIds: adminIds,
-          members: updatedMembers,
-          memberIds: group.memberIds.where((entry) => entry != user.id).toList(),
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        group
+            .copyWith(
+              ownerId: ownerId,
+              adminIds: adminIds,
+              members: updatedMembers,
+              memberIds: group.memberIds.where((entry) => entry != user.id).toList(),
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     }
 
@@ -155,20 +147,83 @@ class FirebaseAppRepository implements AppRepository {
     }
   }
 
+  /// Modelos ya construidos, indexados por documento y version.
+  ///
+  /// Un grupo con doscientos gastos son varios miles de objetos al
+  /// deserializarlo. Sin esta cache, tocar un solo gasto de un solo grupo
+  /// obligaba a reconstruir **todos** los grupos del usuario, en el hilo de
+  /// interfaz y en cada instantanea.
+  final Map<String, _CachedGroup> _groupCache = <String, _CachedGroup>{};
+
+  /// Ultima ficha de invitacion publicada por este dispositivo para cada grupo.
+  /// Evita reescribir `invites` en cada instantanea cuando nada publico cambia.
+  final Map<String, GroupInvitePreview> _publishedInvites = <String, GroupInvitePreview>{};
+
+  ExpenseGroup _materializeGroup(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    if (data == null) {
+      throw StateError('El grupo ${doc.id} no tiene datos.');
+    }
+
+    // `updatedAt` cambia en cada escritura, asi que sirve de version del
+    // documento sin tener que comparar el mapa entero.
+    final version = data['updatedAt']?.toString() ?? '';
+    final cached = _groupCache[doc.id];
+    if (cached != null && cached.version == version) {
+      return cached.group;
+    }
+
+    final group = ExpenseGroup.fromMap(data);
+    _groupCache[doc.id] = _CachedGroup(version: version, group: group);
+    unawaited(_syncInviteMirror(group));
+    return group;
+  }
+
+  /// Mantiene al dia `invites/{codigo}`, la ficha publica del grupo (ADR-0009).
+  ///
+  /// Se llama desde el unico sitio por el que pasan todos los grupos, asi que no
+  /// hay que acordarse de refrescarla en cada escritura. Como tambien se dispara
+  /// la primera vez que un miembro ve un grupo, sirve ademas de migracion: los
+  /// grupos que existian antes de que hubiera coleccion `invites` publican su
+  /// ficha solos, sin script aparte.
+  ///
+  /// Si falla, se traga el error a proposito: que no se pueda republicar una
+  /// ficha no puede impedirle a nadie usar la app. Lo unico que pasa es que una
+  /// invitacion enseñe un nombre viejo hasta el siguiente intento.
+  Future<void> _syncInviteMirror(ExpenseGroup group) async {
+    if (group.inviteCode.isEmpty) {
+      return;
+    }
+
+    final ficha = GroupInvitePreview.fromGroup(group);
+    if (_publishedInvites[group.id]?.matches(group) ?? false) {
+      return;
+    }
+
+    try {
+      await _firestore.collection('invites').doc(group.inviteCode).set(ficha.toMap());
+      _publishedInvites[group.id] = ficha;
+    } catch (_) {
+      // Se reintenta con la siguiente instantanea del grupo.
+    }
+  }
+
   @override
   Stream<List<ExpenseGroup>> watchGroups(String userId) {
     return _watchCurrentUserScoped(
       userId,
       emptyValue: const <ExpenseGroup>[],
       subscribe: () => _streamWithAuthRetry(
-        () => _firestore
-            .collection('groups')
-            .where('memberIds', arrayContains: userId)
-            .snapshots()
-            .map((snapshot) => snapshot.docs
-                .map((doc) => ExpenseGroup.fromMap(doc.data()))
-                .toList()
-              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))),
+        () => _firestore.collection('groups').where('memberIds', arrayContains: userId).snapshots().map((snapshot) {
+          final groups = snapshot.docs.map(_materializeGroup).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+          // Se limpian de la cache los grupos que ya no vienen en la consulta:
+          // el usuario se ha salido o lo han borrado.
+          final visibleIds = snapshot.docs.map((doc) => doc.id).toSet();
+          _groupCache.removeWhere((id, _) => !visibleIds.contains(id));
+
+          return groups;
+        }),
       ),
     );
   }
@@ -178,9 +233,10 @@ class FirebaseAppRepository implements AppRepository {
     return _streamWithAuthRetry(
       () => _firestore.collection('groups').doc(groupId).snapshots().map((doc) {
         if (!doc.exists || doc.data() == null) {
+          _groupCache.remove(doc.id);
           return null;
         }
-        return ExpenseGroup.fromMap(doc.data()!);
+        return _materializeGroup(doc);
       }),
     );
   }
@@ -199,7 +255,7 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
-  Future<ExpenseGroup?> previewInvite(String rawInvite) {
+  Future<GroupInvitePreview?> previewInvite(String rawInvite) {
     return _resolveInvite(rawInvite);
   }
 
@@ -245,50 +301,53 @@ class FirebaseAppRepository implements AppRepository {
     required String joinPin,
     String? pendingMemberId,
   }) async {
-    final group = await _resolveInvite(rawInvite);
-    if (group == null) {
+    final ficha = await _resolveInvite(rawInvite);
+    if (ficha == null) {
       throw StateError('No se encontró ningún grupo con esa invitación.');
     }
-
-    if (group.memberIds.contains(user.id)) {
-      return;
-    }
-    if (group.isClosed) {
+    if (ficha.isClosed) {
       throw StateError('El grupo está cerrado y no admite nuevas incorporaciones.');
     }
-    if (group.joinPin != joinPin.trim()) {
-      throw StateError('El PIN del grupo no es correcto.');
-    }
 
-    PendingGroupMember? selectedSlot;
-    if (pendingMemberId != null) {
-      selectedSlot = group.pendingMembers.firstWhere((entry) => entry.id == pendingMemberId);
+    final slot = pendingMemberId == null ? null : ficha.openSlots.firstWhereOrNull((entry) => entry.id == pendingMemberId);
+    if (pendingMemberId != null && slot == null) {
+      throw StateError('Ese hueco ya lo ha ocupado otra persona.');
     }
-    if (selectedSlot == null && !group.allowAnonymousJoin) {
+    if (slot == null && !ficha.allowAnonymousJoin) {
       throw StateError('El administrador debe indicar qué persona se está uniendo o activar el acceso libre por enlace.');
     }
 
-    final pendingUserId = selectedSlot == null ? null : 'pending:${selectedSlot.id}';
-    final migratedExpenses = pendingUserId == null ? group.expenses : _rebindPendingMemberReferences(group.expenses, pendingUserId, user.id);
+    // Aqui esta lo que cambia respecto a la version anterior: NO se lee el
+    // grupo. No se puede, y no hace falta (ADR-0009).
+    //
+    // - La lista de miembros se amplia con `arrayUnion`, que no necesita conocer
+    //   la lista actual.
+    // - El PIN lo verifican las reglas contra el valor real, comparandolo con
+    //   `joinProof`. Antes se comparaba en el movil despues de leer el grupo,
+    //   que era tanto como no comprobarlo.
+    // - Reclamar el hueco de «Marta» ya no reescribe todos los gastos: se anota
+    //   la equivalencia en `claimedSlots` y se resuelve al leer.
+    final patch = <String, dynamic>{
+      'memberIds': FieldValue.arrayUnion(<String>[user.id]),
+      'members': FieldValue.arrayUnion(<Map<String, dynamic>>[
+        GroupMember(userId: user.id, name: slot?.name ?? user.displayName, email: user.email, photoUrl: user.photoUrl).toMap(),
+      ]),
+      'joinProof': joinProofFor(joinPin: joinPin, userId: user.id),
+      'updatedAt': DateTime.now().toIso8601String(),
+      if (slot != null) 'claimedSlots.${slot.id}': user.id,
+    };
 
-    final updated = group.copyWith(
-      memberIds: [...group.memberIds, user.id],
-      members: [
-        ...group.members,
-        GroupMember(userId: user.id, name: selectedSlot?.name ?? user.displayName, email: user.email, photoUrl: user.photoUrl),
-      ],
-      pendingMembers: group.pendingMembers.where((entry) => entry.id != pendingMemberId).toList(),
-      expenses: migratedExpenses,
-      updatedAt: DateTime.now(),
-    );
-
-    await _firestore.collection('groups').doc(group.id).update({
-      'memberIds': updated.memberIds,
-      'members': updated.members.map((entry) => entry.toMap()).toList(),
-      'pendingMembers': updated.pendingMembers.map((entry) => entry.toMap()).toList(),
-      'expenses': updated.expenses.map((entry) => entry.toMap()).toList(),
-      'updatedAt': updated.updatedAt.toIso8601String(),
-    });
+    try {
+      await _firestore.collection('groups').doc(ficha.groupId).update(patch);
+    } on FirebaseException catch (error) {
+      // Las reglas no distinguen por que han dicho que no, asi que el motivo mas
+      // probable con diferencia es el PIN. Devolver «permiso denegado» a alguien
+      // que se ha equivocado tecleando cuatro digitos no ayuda a nadie.
+      if (error.code == 'permission-denied') {
+        throw StateError('El PIN del grupo no es correcto.');
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -298,11 +357,8 @@ class FirebaseAppRepository implements AppRepository {
       final snapshot = await transaction.get(docRef);
       final current = ExpenseGroup.fromMap(snapshot.data()!);
       _ensureGroupAllowsExpense(current, expense);
-      final updated = current.copyWith(
-        expenses: [...current.expenses, expense],
-        updatedAt: DateTime.now(),
-      );
-      transaction.set(docRef, updated.toMap());
+      final updated = current.copyWith(expenses: [...current.expenses, expense], updatedAt: DateTime.now());
+      transaction.update(docRef, _expensesPatch(updated));
     });
     final group = await _resolveGroup(groupId);
     if (group != null) {
@@ -323,7 +379,7 @@ class FirebaseAppRepository implements AppRepository {
         expenses: current.expenses.map((entry) => entry.id == expense.id ? expense : entry).toList(),
         updatedAt: DateTime.now(),
       );
-      transaction.set(docRef, updated.toMap());
+      transaction.update(docRef, _expensesPatch(updated));
     });
   }
 
@@ -338,7 +394,7 @@ class FirebaseAppRepository implements AppRepository {
         expenses: current.expenses.where((entry) => entry.id != expenseId).toList(),
         updatedAt: DateTime.now(),
       );
-      transaction.set(docRef, updated.toMap());
+      transaction.update(docRef, _expensesPatch(updated));
     });
   }
 
@@ -356,7 +412,11 @@ class FirebaseAppRepository implements AppRepository {
       } else {
         categories[index] = category;
       }
-      transaction.set(docRef, current.copyWith(customCategories: categories, updatedAt: DateTime.now()).toMap());
+      final updated = current.copyWith(customCategories: categories, updatedAt: DateTime.now());
+      transaction.update(docRef, <String, Object?>{
+        'customCategories': updated.customCategories.map((entry) => entry.toMap()).toList(growable: false),
+        'updatedAt': updated.updatedAt.toIso8601String(),
+      });
     });
   }
 
@@ -379,28 +439,26 @@ class FirebaseAppRepository implements AppRepository {
       _ensureGroupOpen(current);
       transaction.set(
         docRef,
-        current.copyWith(
-          name: name.trim(),
-          description: description?.trim().isEmpty ?? true ? null : description!.trim(),
-          iconKey: iconKey,
-          members: members,
-          memberIds: members.map((entry) => entry.userId).toList(growable: false),
-          pendingMembers: pendingMembers,
-          allowAnonymousJoin: allowAnonymousJoin,
-          currency: currency,
-          joinPin: joinPin,
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        current
+            .copyWith(
+              name: name.trim(),
+              description: description?.trim().isEmpty ?? true ? null : description!.trim(),
+              iconKey: iconKey,
+              members: members,
+              memberIds: members.map((entry) => entry.userId).toList(growable: false),
+              pendingMembers: pendingMembers,
+              allowAnonymousJoin: allowAnonymousJoin,
+              currency: currency,
+              joinPin: joinPin,
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     });
   }
 
   @override
-  Future<void> transferGroupOwnership({
-    required String groupId,
-    required String requesterId,
-    required String newOwnerId,
-  }) async {
+  Future<void> transferGroupOwnership({required String groupId, required String requesterId, required String newOwnerId}) async {
     final docRef = _firestore.collection('groups').doc(groupId);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
@@ -421,11 +479,7 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
-  Future<void> setGroupAdmins({
-    required String groupId,
-    required String requesterId,
-    required List<String> adminIds,
-  }) async {
+  Future<void> setGroupAdmins({required String groupId, required String requesterId, required List<String> adminIds}) async {
     final docRef = _firestore.collection('groups').doc(groupId);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
@@ -433,16 +487,17 @@ class FirebaseAppRepository implements AppRepository {
       if (current.ownerId != requesterId) {
         throw StateError('Solo la persona administradora principal puede cambiar otros administradores.');
       }
-      final validAdminIds = adminIds.where((entry) => entry != current.ownerId).where((entry) => current.activeMembers.any((member) => member.userId == entry)).toSet().toList();
+      final validAdminIds = adminIds
+          .where((entry) => entry != current.ownerId)
+          .where((entry) => current.activeMembers.any((member) => member.userId == entry))
+          .toSet()
+          .toList();
       transaction.set(docRef, current.copyWith(adminIds: validAdminIds, updatedAt: DateTime.now()).toMap());
     });
   }
 
   @override
-  Future<void> leaveGroup({
-    required String groupId,
-    required String userId,
-  }) async {
+  Future<void> leaveGroup({required String groupId, required String userId}) async {
     final docRef = _firestore.collection('groups').doc(groupId);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
@@ -465,17 +520,19 @@ class FirebaseAppRepository implements AppRepository {
 
       transaction.set(
         docRef,
-        current.copyWith(
-          adminIds: current.adminIds.where((entry) => entry != userId).toList(),
-          memberIds: remainingIds,
-          members: current.members.map((entry) {
-            if (entry.userId != userId) {
-              return entry;
-            }
-            return entry.copyWith(isArchived: true, archivedAt: DateTime.now());
-          }).toList(),
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        current
+            .copyWith(
+              adminIds: current.adminIds.where((entry) => entry != userId).toList(),
+              memberIds: remainingIds,
+              members: current.members.map((entry) {
+                if (entry.userId != userId) {
+                  return entry;
+                }
+                return entry.copyWith(isArchived: true, archivedAt: DateTime.now());
+              }).toList(),
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     });
   }
@@ -490,22 +547,13 @@ class FirebaseAppRepository implements AppRepository {
         throw StateError('Solo la persona administradora puede cerrar o abrir el grupo.');
       }
       final now = DateTime.now();
-      final updated = isClosed
-          ? current.archived(at: now)
-          : current.copyWith(
-              isClosed: false,
-              closedAt: null,
-              updatedAt: now,
-            );
+      final updated = isClosed ? current.archived(at: now) : current.copyWith(isClosed: false, closedAt: null, updatedAt: now);
       transaction.set(docRef, updated.toMap());
     });
   }
 
   @override
-  Future<void> deleteGroup({
-    required String groupId,
-    required String requesterId,
-  }) async {
+  Future<void> deleteGroup({required String groupId, required String requesterId}) async {
     final docRef = _firestore.collection('groups').doc(groupId);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
@@ -544,12 +592,17 @@ class FirebaseAppRepository implements AppRepository {
         );
       }).toList();
 
-      transaction.set(docRef, current.copyWith(expenses: updatedExpenses, updatedAt: DateTime.now()).toMap());
+      transaction.update(docRef, _expensesPatch(current.copyWith(expenses: updatedExpenses, updatedAt: DateTime.now())));
     });
   }
 
   @override
-  Future<void> requestReimbursement({required String groupId, required String requesterId, required String targetUserId, required double amount}) async {
+  Future<void> requestReimbursement({
+    required String groupId,
+    required String requesterId,
+    required String targetUserId,
+    required double amount,
+  }) async {
     final group = await _resolveGroup(groupId);
     if (group == null) {
       throw StateError('Grupo no encontrado.');
@@ -588,38 +641,41 @@ class FirebaseAppRepository implements AppRepository {
     final edges = settlementEdges(group, activeAccountsOnly: false);
     final balances = memberBalances(group);
     final admin = group.members.firstWhereOrNull((entry) => entry.userId == requesterId);
-    final recipientIds = edges.expand((edge) => [edge.fromUserId, edge.toUserId]).where((userId) => userId != requesterId && !userId.startsWith('pending:')).toSet();
-    final recipients = group.visibleMembers.where((entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount).toList();
+    final recipientIds = edges
+        .expand((edge) => [edge.fromUserId, edge.toUserId])
+        .where((userId) => userId != requesterId && !userId.startsWith('pending:'))
+        .toSet();
+    final recipients = group.visibleMembers
+        .where((entry) => recipientIds.contains(entry.userId) && !entry.isPending && !entry.isDeletedAccount)
+        .toList();
     var sent = 0;
 
     await Future.wait(
-      recipients.map(
-        (member) async {
-          final balance = balances[member.userId] ?? 0;
-          final amount = balance.abs();
-          if (amount <= 0.009) {
-            return;
-          }
-          sent += 1;
-          final message = balance < 0
-              ? '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.'
-              : '${admin?.name ?? 'La persona administradora'} te avisa de que tienes ${amount.toStringAsFixed(2)} ${group.currency} a favor en ${group.name}.';
-          await _createNotification(
-            AppNotification(
-              id: _uuid.v4(),
-              userId: member.userId,
-              type: AppNotificationType.groupSettlementRequested,
-              title: 'Liquidación del grupo',
-              message: message,
-              createdAt: DateTime.now(),
-              groupId: group.id,
-              fromUserId: requesterId,
-              relatedUserId: member.userId,
-              amount: amount,
-            ),
-          );
-        },
-      ),
+      recipients.map((member) async {
+        final balance = balances[member.userId] ?? 0;
+        final amount = balance.abs();
+        if (amount <= 0.009) {
+          return;
+        }
+        sent += 1;
+        final message = balance < 0
+            ? '${admin?.name ?? 'La persona administradora'} te pide saldar ${amount.toStringAsFixed(2)} ${group.currency} en ${group.name}.'
+            : '${admin?.name ?? 'La persona administradora'} te avisa de que tienes ${amount.toStringAsFixed(2)} ${group.currency} a favor en ${group.name}.';
+        await _createNotification(
+          AppNotification(
+            id: _uuid.v4(),
+            userId: member.userId,
+            type: AppNotificationType.groupSettlementRequested,
+            title: 'Liquidación del grupo',
+            message: message,
+            createdAt: DateTime.now(),
+            groupId: group.id,
+            fromUserId: requesterId,
+            relatedUserId: member.userId,
+            amount: amount,
+          ),
+        );
+      }),
     );
 
     return sent;
@@ -636,6 +692,45 @@ class FirebaseAppRepository implements AppRepository {
     await ref.set(notification.copyWith(readAt: DateTime.now()).toMap());
   }
 
+  /// Campos que cambian al tocar la lista de gastos.
+  ///
+  /// Enviar solo esto en lugar del documento entero reduce mucho el trafico de
+  /// escritura y, sobre todo, evita pisar los cambios que otro miembro haya
+  /// hecho a los miembros o a los ajustes del grupo en el mismo instante.
+  Map<String, Object?> _expensesPatch(ExpenseGroup group) {
+    return <String, Object?>{
+      'expenses': group.expenses.map((entry) => entry.toMap()).toList(growable: false),
+      'updatedAt': group.updatedAt.toIso8601String(),
+    };
+  }
+
+  @override
+  Future<ExpenseGroup> restoreGroup({required AppUser owner, required ExpenseGroup group}) async {
+    final now = DateTime.now();
+    final id = _uuid.v4();
+    final restoredMembers = <GroupMember>[
+      GroupMember(userId: owner.id, name: owner.displayName, email: owner.email, photoUrl: owner.photoUrl),
+      ...group.members.where((member) => member.userId != owner.id),
+    ];
+
+    final restored = group.copyWith(
+      id: id,
+      inviteCode: _uuid.v4().split('-').first.toUpperCase(),
+      joinPin: generateGroupJoinPin(),
+      ownerId: owner.id,
+      adminIds: const <String>[],
+      members: restoredMembers,
+      memberIds: <String>[owner.id],
+      updatedAt: now,
+    );
+
+    // Solo se declara miembro a quien importa: el resto de personas del grupo
+    // original siguen figurando por su nombre, pero sin acceso, porque sus
+    // cuentas no han aceptado nada. Se vuelven a unir con la invitacion.
+    await _firestore.collection('groups').doc(id).set(restored.toMap());
+    return restored;
+  }
+
   @override
   Future<void> seedDemoData(AppUser user) async {}
 
@@ -643,11 +738,7 @@ class FirebaseAppRepository implements AppRepository {
     return _firestore.collection('users').doc(userId).collection('notifications');
   }
 
-  Stream<T> _watchCurrentUserScoped<T>(
-    String userId, {
-    required T emptyValue,
-    required Stream<T> Function() subscribe,
-  }) {
+  Stream<T> _watchCurrentUserScoped<T>(String userId, {required T emptyValue, required Stream<T> Function() subscribe}) {
     return _auth.idTokenChanges().asyncExpand((firebaseUser) {
       if (firebaseUser == null || firebaseUser.uid != userId) {
         return Stream<T>.value(emptyValue);
@@ -663,6 +754,9 @@ class FirebaseAppRepository implements AppRepository {
 
   Stream<T> _streamWithAuthRetry<T>(Stream<T> Function() subscribe) {
     const maxPermissionDeniedRetries = 2;
+    // El controlador se cierra en su propio `onCancel`, mas abajo; el analizador
+    // no sigue esa ruta.
+    // ignore: close_sinks
     late final StreamController<T> controller;
     StreamSubscription<T>? subscription;
     var permissionDeniedRetries = 0;
@@ -713,49 +807,6 @@ class FirebaseAppRepository implements AppRepository {
     return error is FirebaseException && error.code == 'permission-denied';
   }
 
-  List<ExpenseRecord> _rebindPendingMemberReferences(List<ExpenseRecord> expenses, String pendingUserId, String actualUserId) {
-    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
-
-    return expenses
-        .map(
-          (expense) => expense.copyWith(
-            payerId: expense.payerId == pendingUserId || expense.payerId == legacyPendingUserId ? actualUserId : expense.payerId,
-            items: expense.items
-                .map(
-                  (item) => item.copyWith(
-                    allocations: _mergeAllocations(item.allocations, pendingUserId, actualUserId),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  List<SplitAllocation> _mergeAllocations(List<SplitAllocation> allocations, String pendingUserId, String actualUserId) {
-    final legacyPendingUserId = pendingUserId.startsWith('pending:') ? pendingUserId.substring('pending:'.length) : pendingUserId;
-    final orderedUserIds = <String>[];
-    final percentagesByUser = <String, double>{};
-
-    for (final allocation in allocations) {
-      final targetUserId = allocation.userId == pendingUserId || allocation.userId == legacyPendingUserId ? actualUserId : allocation.userId;
-      if (!percentagesByUser.containsKey(targetUserId)) {
-        orderedUserIds.add(targetUserId);
-      }
-      percentagesByUser[targetUserId] = (percentagesByUser[targetUserId] ?? 0) + allocation.percentage;
-    }
-
-    return orderedUserIds
-        .map(
-          (userId) => SplitAllocation(
-            userId: userId,
-            percentage: double.parse((percentagesByUser[userId] ?? 0).toStringAsFixed(2)),
-          ),
-        )
-        .where((allocation) => allocation.percentage > 0)
-        .toList(growable: false);
-  }
-
   Future<bool> _refreshAuthSession() async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) {
@@ -788,7 +839,11 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   Future<void> _notifyExpenseEvent({required ExpenseGroup group, required ExpenseRecord expense}) async {
-    final recipients = group.activeMembers.where((entry) => entry.userId != expense.payerId && !entry.isPending && !entry.isDeletedAccount && !entry.userId.startsWith('pending:')).toList();
+    final recipients = group.activeMembers
+        .where(
+          (entry) => entry.userId != expense.payerId && !entry.isPending && !entry.isDeletedAccount && !entry.userId.startsWith('pending:'),
+        )
+        .toList();
     final payer = group.members.firstWhereOrNull((entry) => entry.userId == expense.payerId);
     final actorUserId = _auth.currentUser?.uid ?? expense.payerId;
 
@@ -827,7 +882,8 @@ class FirebaseAppRepository implements AppRepository {
             userId: userId,
             type: AppNotificationType.reimbursementRecorded,
             title: 'Reembolso registrado',
-            message: '${payer?.name ?? 'Una persona'} registró un reembolso de ${expense.items.fold<double>(0, (totalAmount, item) => totalAmount + item.amount).toStringAsFixed(2)} ${group.currency} en ${group.name}.',
+            message:
+                '${payer?.name ?? 'Una persona'} registró un reembolso de ${expense.items.fold<double>(0, (totalAmount, item) => totalAmount + item.amount).toStringAsFixed(2)} ${group.currency} en ${group.name}.',
             createdAt: DateTime.now(),
             groupId: group.id,
             expenseId: expense.id,
@@ -839,27 +895,38 @@ class FirebaseAppRepository implements AppRepository {
     );
   }
 
-  Future<ExpenseGroup?> _resolveInvite(String rawInvite) async {
+  /// Busca la ficha publica de una invitacion.
+  ///
+  /// Antes esto consultaba la coleccion `groups` por `inviteCode`, y para que
+  /// funcionara las reglas dejaban leer cualquier grupo a cualquiera con cuenta
+  /// (ADR-0009). Ahora lee `invites/{codigo}`, que solo tiene lo que se le puede
+  /// enseñar a un desconocido.
+  ///
+  /// El codigo hay que conocerlo: `invites` no se puede enumerar.
+  Future<GroupInvitePreview?> _resolveInvite(String rawInvite) async {
     final value = rawInvite.trim();
-    final reference = _parseInviteReference(value);
-    if (reference != null) {
-      final snapshot = await _firestore.collection('groups').doc(reference.groupId).get();
-      if (snapshot.data() == null) {
-        return null;
-      }
-
-      final group = ExpenseGroup.fromMap(snapshot.data()!);
-      if (reference.token != null && reference.token!.isNotEmpty && group.inviteCode.toUpperCase() != reference.token!.toUpperCase()) {
-        return null;
-      }
-      return group;
-    }
-
-    final query = await _firestore.collection('groups').where('inviteCode', isEqualTo: value.toUpperCase()).limit(1).get();
-    if (query.docs.isEmpty) {
+    if (value.isEmpty) {
       return null;
     }
-    return ExpenseGroup.fromMap(query.docs.first.data());
+
+    final reference = _parseInviteReference(value);
+    final code = (reference?.token?.isNotEmpty ?? false) ? reference!.token!.toUpperCase() : value.toUpperCase();
+
+    final snapshot = await _firestore.collection('invites').doc(code).get();
+    final data = snapshot.data();
+    if (data == null) {
+      return null;
+    }
+
+    final ficha = GroupInvitePreview.fromMap(code, data);
+
+    // Un enlace lleva tambien el identificador del grupo. Si no cuadra con el
+    // que dice la ficha, el enlace esta manipulado o caducado.
+    if (reference != null && reference.groupId.isNotEmpty && ficha.groupId != reference.groupId) {
+      return null;
+    }
+
+    return ficha.groupId.isEmpty ? null : ficha;
   }
 
   _InviteReference? _parseInviteReference(String rawInvite) {
@@ -868,10 +935,7 @@ class FirebaseAppRepository implements AppRepository {
     if (uri != null && uri.queryParameters.containsKey('group')) {
       final groupId = uri.queryParameters['group'];
       if (groupId != null && groupId.isNotEmpty) {
-        return _InviteReference(
-          groupId: groupId,
-          token: uri.queryParameters['token']?.trim(),
-        );
+        return _InviteReference(groupId: groupId, token: uri.queryParameters['token']?.trim());
       }
     }
 
@@ -885,11 +949,7 @@ class FirebaseAppRepository implements AppRepository {
     return null;
   }
 
-  String _mapAuthException(
-    auth.FirebaseAuthException error, {
-    bool register = false,
-    bool google = false,
-  }) {
+  String _mapAuthException(auth.FirebaseAuthException error, {bool register = false, bool google = false}) {
     switch (error.code) {
       case 'invalid-email':
         return 'El email no tiene un formato valido.';
@@ -951,4 +1011,12 @@ class _InviteReference {
 
   final String groupId;
   final String? token;
+}
+
+/// Modelo cacheado de un grupo junto con la version del documento del que sale.
+class _CachedGroup {
+  const _CachedGroup({required this.version, required this.group});
+
+  final String version;
+  final ExpenseGroup group;
 }

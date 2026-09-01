@@ -1,16 +1,17 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'local_preferences_store.dart';
-import 'preferences.dart';
 import '../models/app_models.dart';
 import '../repositories/app_repository.dart';
+import '../services/backup_service.dart';
 import '../services/fcm_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/receipt_storage_service.dart';
 import '../services/ticket_ocr_service.dart';
 import 'bootstrap.dart';
+import 'local_preferences_store.dart';
+import 'preferences.dart';
 
 final bootstrapProvider = Provider<AppBootstrap>((ref) {
   throw UnimplementedError('bootstrapProvider must be overridden in main.dart');
@@ -57,6 +58,10 @@ final ticketOcrServiceProvider = Provider<TicketOcrService>((ref) {
   final service = TicketOcrService();
   ref.onDispose(service.dispose);
   return service;
+});
+
+final backupServiceProvider = Provider<BackupService>((ref) {
+  return BackupService(repository: ref.watch(repositoryProvider));
 });
 
 final receiptStorageServiceProvider = Provider<ReceiptStorageService>((ref) {

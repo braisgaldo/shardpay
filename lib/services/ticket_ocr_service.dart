@@ -1,519 +1,164 @@
-import 'dart:math' as math;
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:image/image.dart' as img;
-import 'package:uuid/uuid.dart';
 
-import '../models/app_models.dart';
+import '../core/receipts/ocr_document.dart';
+import '../core/receipts/receipt_parser.dart';
+import 'receipt_preprocessor.dart';
 
-class ParsedReceipt {
-  ParsedReceipt({
-    required this.items,
-    this.title,
-    this.note,
-  });
-
-  final String? title;
-  final String? note;
-  final List<ExpenseItem> items;
-}
-
+/// Lectura de tickets: pone el reconocedor de texto de ML Kit al servicio del
+/// parser puro de [ReceiptParser].
+///
+/// El reparto de responsabilidades es el que hace que esto se pueda mantener:
+/// aquí solo vive lo que necesita el dispositivo (ML Kit, ficheros, islas), y
+/// toda la lógica de interpretar el papel está en `lib/core/receipts`, cubierta
+/// por pruebas.
 class TicketOcrService {
-  TicketOcrService() : _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  TicketOcrService({ReceiptParser parser = const ReceiptParser(), ReceiptPreprocessor preprocessor = const ReceiptPreprocessor()})
+    : _parser = parser,
+      _preprocessor = preprocessor;
 
-  final TextRecognizer _recognizer;
-  final _uuid = const Uuid();
-  static final RegExp _moneyAtEndRegExp = RegExp(r'([0-9]{1,3}(?:[\.,\s][0-9]{3})*[\.,][0-9]{2})\s*(?:€|eur|euros?)?$', caseSensitive: false);
-  static final RegExp _amountAnywhereRegExp = RegExp(r'([0-9]{1,3}(?:[\.,\s][0-9]{3})*[\.,][0-9]{2})');
-  static final RegExp _amountWithoutDecimalsRegExp = RegExp(r'([0-9]{1,3}(?:[\.,\s][0-9]{3})*)(?:\s*(?:€|eur|euros?))$', caseSensitive: false);
-  static final RegExp _quantityPrefixRegExp = RegExp(r'^(?:\d+[xX]\s+|\d+\s*[xX]\s+|\d+\s+)');
-  static final RegExp _danglingAmountRegExp = RegExp(r'\b\d+(?:[\.,]\d{2,3})?\b');
-  static final List<String> _ignoredLineTokens = [
-    'total',
-    'subtotal',
-    'descuento',
-    'dto',
-    'promo',
-    'importe',
-    'importe total',
-    'base imponible',
-    'cambio',
-    'visa',
-    'mastercard',
-    'tarjeta',
-    'efectivo',
-    'fecha',
-    'hora',
-    'ticket',
-    'factura',
-    'nif',
-    'cif',
-    'iva',
-    'mesa',
-    'uds',
-    'ud',
-    'unid',
-    'cant',
-    'cantidad',
-    'pago',
-    'cash',
-    'datafono',
-    'comercio',
-    'servicio',
-    'service',
-    'propina',
-    'tip',
-    'recargo',
-    'saldo',
-    'entregado',
-    'recibido',
-    'vuelto',
-  ];
+  final ReceiptParser _parser;
+  final ReceiptPreprocessor _preprocessor;
 
-  Future<ParsedReceipt> parseReceipt({
-    required String imagePath,
-    required List<SplitAllocation> defaultAllocations,
-    required String defaultCategoryId,
-  }) async {
-    final preparedImagePath = await _prepareImageForOcr(imagePath);
-    final candidates = <_ReceiptParseCandidate>[
-      await _parseCandidateImage(imagePath, defaultAllocations: defaultAllocations, defaultCategoryId: defaultCategoryId, source: 'original'),
-    ];
-    if (preparedImagePath != imagePath) {
-      candidates.add(
-        await _parseCandidateImage(preparedImagePath, defaultAllocations: defaultAllocations, defaultCategoryId: defaultCategoryId, source: 'preprocessed'),
-      );
-    }
+  TextRecognizer? _recognizer;
+  bool _disposed = false;
 
-    candidates.sort((left, right) => right.score.compareTo(left.score));
-    final selected = candidates.first;
-    if (kDebugMode) {
-      debugPrint('[OCR] Using ${selected.source} candidate with score ${selected.score} and ${selected.items.length} items');
-    }
+  /// Confianza a partir de la cual no merece la pena realzar la imagen y
+  /// volver a pasar el OCR.
+  ///
+  /// La versión anterior procesaba **siempre** las dos variantes, con lo que el
+  /// caso bueno —una foto nítida, que es la mayoría— pagaba el doble de tiempo
+  /// y de batería sin ganar nada.
+  static const double _goodEnoughConfidence = 0.75;
 
-    return ParsedReceipt(
-      title: selected.title,
-      note: selected.note,
-      items: selected.items,
-    );
+  TextRecognizer get _textRecognizer {
+    return _recognizer ??= TextRecognizer(script: TextRecognitionScript.latin);
   }
 
-  void _logOcrLines(List<String> lines) {
-    if (!kDebugMode) {
-      return;
-    }
-    debugPrint('[OCR] Lines: ${lines.length}');
-    for (final line in lines.take(80)) {
-      debugPrint('[OCR] > $line');
-    }
-  }
+  /// Lee un ticket a partir de una imagen.
+  ///
+  /// Primero prueba con la foto tal cual. Solo si el resultado no convence
+  /// gasta tiempo en realzarla y repetir, y se queda con la mejor de las dos.
+  Future<ReceiptScan> scanReceipt({required String imagePath}) async {
+    final stopwatch = Stopwatch()..start();
+    final direct = await _recognize(imagePath);
 
-  void _logAcceptedItem(_ParsedReceiptItem item) {
-    if (!kDebugMode) {
-      return;
+    if (direct.confidence >= _goodEnoughConfidence && direct.reconciled) {
+      _log('lectura directa aceptada', direct, stopwatch);
+      return direct;
     }
-    debugPrint('[OCR] Item accepted: ${item.name} | ${item.amount.toStringAsFixed(2)}');
-  }
 
-  Future<String> _prepareImageForOcr(String imagePath) async {
+    String? enhancedPath;
     try {
-      final originalBytes = await File(imagePath).readAsBytes();
-      final decoded = img.decodeImage(originalBytes);
-      if (decoded == null) {
-        return imagePath;
+      enhancedPath = await _preprocessor.enhance(imagePath);
+      if (enhancedPath == null) {
+        _log('sin realce disponible', direct, stopwatch);
+        return direct;
       }
 
-      final targetWidth = decoded.width < 1800 ? 1800 : decoded.width;
-      var processed = decoded.width == targetWidth ? img.Image.from(decoded) : img.copyResize(decoded, width: targetWidth);
-      processed = img.grayscale(processed);
-      processed = img.adjustColor(processed, contrast: 1.9, brightness: 0.08, gamma: 0.92);
-      processed = img.gaussianBlur(processed, radius: 1);
-      processed = img.adjustColor(processed, contrast: 2.4, brightness: 0.03);
-      for (final pixel in processed) {
-        final luminance = img.getLuminance(pixel);
-        final binary = luminance >= 165 ? 255 : 0;
-        pixel
-          ..r = binary
-          ..g = binary
-          ..b = binary;
+      final enhanced = await _recognize(enhancedPath);
+      final best = _pickBest(direct, enhanced);
+      _log(identical(best, enhanced) ? 'gana la imagen realzada' : 'gana la imagen original', best, stopwatch);
+      return best;
+    } finally {
+      if (enhancedPath != null) {
+        // El fichero intermedio se borra siempre. La versión anterior los
+        // dejaba acumulándose en el directorio temporal, uno por cada ticket
+        // leído en toda la vida de la instalación.
+        unawaited(_deleteQuietly(enhancedPath));
       }
-
-      final preparedFile = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_ocr_${DateTime.now().microsecondsSinceEpoch}.jpg');
-      await preparedFile.writeAsBytes(img.encodeJpg(processed, quality: 96), flush: true);
-      if (kDebugMode) {
-        debugPrint('[OCR] Prepared image saved at ${preparedFile.path}');
-      }
-      return preparedFile.path;
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[OCR] Image preprocessing failed: $error');
-      }
-      return imagePath;
     }
   }
 
-  Future<_ReceiptParseCandidate> _parseCandidateImage(
-    String imagePath, {
-    required List<SplitAllocation> defaultAllocations,
-    required String defaultCategoryId,
-    required String source,
-  }) async {
-    final inputImage = InputImage.fromFile(File(imagePath));
-    final result = await _recognizer.processImage(inputImage);
-    final fragments = _extractFragments(result);
-    final rows = _buildRows(fragments);
-    final lines = rows.map((row) => row.fullText).where((line) => line.isNotEmpty).toList();
-    final trimmedLines = _trimTrailingSummaryLines(lines);
-    final items = <ExpenseItem>[];
-    final detectedNames = <String>[];
+  Future<ReceiptScan> _recognize(String imagePath) async {
+    if (_disposed) {
+      return const ReceiptScan.empty();
+    }
 
-    _logOcrLines(trimmedLines);
+    try {
+      final recognized = await _textRecognizer.processImage(InputImage.fromFile(File(imagePath)));
+      final document = OcrDocument.fromFragments(_toFragments(recognized));
+      return _parser.parse(document);
+    } catch (error) {
+      debugPrint('[OCR] El reconocimiento falló para $imagePath: $error');
+      return const ReceiptScan.empty();
+    }
+  }
 
-    final trimmedRows = rows.where((row) => trimmedLines.contains(row.fullText)).toList();
+  /// Elige entre dos lecturas del mismo ticket.
+  ///
+  /// Manda la que cuadre con su propio total; entre dos que cuadren o dos que
+  /// no, la de mayor confianza. Cuadrar con el total es una señal objetiva —el
+  /// ticket confirma su propia aritmética—, mientras que la confianza es solo
+  /// una heurística.
+  ReceiptScan _pickBest(ReceiptScan first, ReceiptScan second) {
+    if (first.reconciled != second.reconciled) {
+      return first.reconciled ? first : second;
+    }
+    return second.confidence > first.confidence ? second : first;
+  }
 
-    for (final row in trimmedRows) {
-      final parsedItem = _parseRow(row, trimmedRows);
-      if (parsedItem == null) {
-        final candidateName = _extractNameCandidate(row.fullText);
-        if (candidateName != null) {
-          detectedNames.add(candidateName);
+  /// Convierte el resultado de ML Kit en fragmentos con geometría.
+  ///
+  /// Se toman los elementos (palabras) y no las líneas completas: ML Kit une
+  /// en una misma línea el nombre del artículo y su precio aunque estén en
+  /// extremos opuestos del papel, y así se pierde la posición del importe, que
+  /// es justo la señal que permite reconocer la columna de precios.
+  Iterable<OcrFragment> _toFragments(RecognizedText recognized) sync* {
+    for (final block in recognized.blocks) {
+      for (final line in block.lines) {
+        if (line.elements.isEmpty) {
+          final text = line.text.trim();
+          if (text.isNotEmpty) {
+            yield OcrFragment(text: text, box: _toTextBox(line.boundingBox));
+          }
+          continue;
         }
-        continue;
-      }
 
-      items.add(
-        ExpenseItem(
-          id: _uuid.v4(),
-          name: parsedItem.name,
-          amount: parsedItem.amount,
-          categoryId: defaultCategoryId,
-          allocations: defaultAllocations,
-        ),
-      );
-
-      _logAcceptedItem(parsedItem);
-    }
-
-    final fallbackTitle = _detectReceiptTitle(lines);
-    final fallbackTotal = lines.map(_extractLastAmount).whereType<double>().fold<double>(0, (currentMax, amount) => amount > currentMax ? amount : currentMax);
-
-    if (items.isEmpty && detectedNames.length >= 2 && fallbackTotal > 0) {
-      final estimatedAmount = double.parse((fallbackTotal / detectedNames.length).toStringAsFixed(2));
-      for (final name in detectedNames) {
-        items.add(
-          ExpenseItem(
-            id: _uuid.v4(),
-            name: name,
-            amount: estimatedAmount,
-            categoryId: defaultCategoryId,
-            allocations: defaultAllocations,
-          ),
-        );
+        for (final element in line.elements) {
+          final text = element.text.trim();
+          if (text.isEmpty) {
+            continue;
+          }
+          yield OcrFragment(text: text, box: _toTextBox(element.boundingBox));
+        }
       }
     }
+  }
 
-    if (items.isEmpty) {
-      items.add(
-        ExpenseItem(
-          id: _uuid.v4(),
-          name: fallbackTitle,
-          amount: fallbackTotal > 0 ? fallbackTotal : 0,
-          categoryId: defaultCategoryId,
-          allocations: defaultAllocations,
-        ),
-      );
+  TextBox _toTextBox(Rect box) {
+    return TextBox(left: box.left, top: box.top, right: box.right, bottom: box.bottom);
+  }
+
+  Future<void> _deleteQuietly(String path) async {
+    try {
+      final file = File(path);
+      if (file.existsSync()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Un temporal que no se puede borrar no es motivo para romper nada.
     }
+  }
 
-    final note = items.length >= 2 && detectedNames.isNotEmpty && items.every((item) => item.amount == items.first.amount)
-        ? 'Añadido con OCR · revisa importes estimados'
-        : 'Añadido con OCR';
-
-    return _ReceiptParseCandidate(
-      source: source,
-      title: fallbackTitle,
-      note: note,
-      items: items,
-      score: (items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).length * 1000) + trimmedLines.length,
+  void _log(String message, ReceiptScan scan, Stopwatch stopwatch) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint(
+      '[OCR] $message · ${scan.items.length} líneas · confianza '
+      '${scan.confidence.toStringAsFixed(2)} · total ${scan.total} · '
+      '${stopwatch.elapsedMilliseconds} ms',
     );
   }
 
   void dispose() {
-    _recognizer.close();
+    _disposed = true;
+    _recognizer?.close();
+    _recognizer = null;
   }
-}
-
-class _ParsedReceiptItem {
-  const _ParsedReceiptItem({required this.name, required this.amount});
-
-  final String name;
-  final double amount;
-}
-
-class _ReceiptParseCandidate {
-  const _ReceiptParseCandidate({
-    required this.source,
-    required this.title,
-    required this.note,
-    required this.items,
-    required this.score,
-  });
-
-  final String source;
-  final String title;
-  final String note;
-  final List<ExpenseItem> items;
-  final int score;
-}
-
-class _OcrFragment {
-  const _OcrFragment({required this.text, required this.left, required this.top, required this.right, required this.bottom});
-
-  final String text;
-  final double left;
-  final double top;
-  final double right;
-  final double bottom;
-
-  double get centerY => (top + bottom) / 2;
-  double get height => bottom - top;
-}
-
-class _OcrRow {
-  const _OcrRow({required this.fragments, required this.fullText});
-
-  final List<_OcrFragment> fragments;
-  final String fullText;
-
-  double get centerY => fragments.fold<double>(0, (total, item) => total + item.centerY) / fragments.length;
-  double get top => fragments.fold<double>(fragments.first.top, (current, fragment) => math.min(current, fragment.top));
-  double get bottom => fragments.fold<double>(fragments.first.bottom, (current, fragment) => math.max(current, fragment.bottom));
-  double get height => bottom - top;
-  String? get rightMostAmount => fragments.map((fragment) => fragment.text).where((text) => _extractLastAmount(text) != null).lastOrNull;
-  bool get isAmountOnly => fragments.isNotEmpty && fragments.every((fragment) => _extractNameCandidate(fragment.text) == null) && rightMostAmount != null;
-}
-
-_OcrRow? _findNeighboringAmountRow(_OcrRow row, List<_OcrRow> allRows) {
-  final maxDistance = math.max(26, row.height * 1.8);
-  _OcrRow? bestCandidate;
-  var bestDistance = double.infinity;
-
-  for (final candidate in allRows) {
-    if (identical(candidate, row) || !candidate.isAmountOnly) {
-      continue;
-    }
-
-    final verticalDistance = (candidate.centerY - row.centerY).abs();
-    if (verticalDistance > maxDistance || verticalDistance >= bestDistance) {
-      continue;
-    }
-
-    bestCandidate = candidate;
-    bestDistance = verticalDistance;
-  }
-
-  return bestCandidate;
-}
-
-String _normalizeLine(String value) {
-  return value
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .replaceAll('€', ' €')
-      .replaceAll('|', '1')
-      .replaceAllMapped(RegExp(r'(?<=\D)(\d{1,2})[Oo](?=\d{2}\b)'), (match) => '${match.group(1)}0')
-      .trim();
-}
-
-List<String> _trimTrailingSummaryLines(List<String> lines) {
-  final totalIndex = lines.indexWhere((line) => RegExp(r'\b(total|importe total|subtotal|base imponible|descuento|tarjeta|efectivo|cambio|propina|recargo)\b', caseSensitive: false).hasMatch(line));
-  if (totalIndex <= 0) {
-    return lines;
-  }
-  return lines.take(totalIndex).toList(growable: false);
-}
-
-String _detectReceiptTitle(List<String> lines) {
-  for (final line in lines) {
-    final lowered = line.toLowerCase();
-    final hasAmount = TicketOcrService._amountAnywhereRegExp.hasMatch(line) || TicketOcrService._amountWithoutDecimalsRegExp.hasMatch(line);
-    if (TicketOcrService._ignoredLineTokens.any(lowered.contains) || hasAmount) {
-      continue;
-    }
-    return line;
-  }
-  return lines.isNotEmpty ? lines.first : 'Ticket importado';
-}
-
-List<_OcrFragment> _extractFragments(RecognizedText result) {
-  final fragments = <_OcrFragment>[];
-
-  for (final block in result.blocks) {
-    for (final line in block.lines) {
-      if (line.elements.isEmpty) {
-        final text = _normalizeLine(line.text);
-        final box = line.boundingBox;
-        if (text.isNotEmpty) {
-          fragments.add(_OcrFragment(text: text, left: box.left.toDouble(), top: box.top.toDouble(), right: box.right.toDouble(), bottom: box.bottom.toDouble()));
-        }
-        continue;
-      }
-
-      for (final element in line.elements) {
-        final text = _normalizeLine(element.text);
-        final box = element.boundingBox;
-        if (text.isEmpty) {
-          continue;
-        }
-        fragments.add(_OcrFragment(text: text, left: box.left.toDouble(), top: box.top.toDouble(), right: box.right.toDouble(), bottom: box.bottom.toDouble()));
-      }
-    }
-  }
-
-  fragments.sort((a, b) => a.top.compareTo(b.top));
-  return fragments;
-}
-
-List<_OcrRow> _buildRows(List<_OcrFragment> fragments) {
-  if (fragments.isEmpty) {
-    return const [];
-  }
-
-  final averageHeight = fragments.fold<double>(0, (total, fragment) => total + fragment.height) / fragments.length;
-  final threshold = averageHeight.clamp(10, 22).toDouble();
-  final rows = <List<_OcrFragment>>[];
-
-  for (final fragment in fragments) {
-    final row = rows.isEmpty ? null : rows.last;
-    if (row == null) {
-      rows.add([fragment]);
-      continue;
-    }
-
-    final rowCenterY = row.fold<double>(0, (total, item) => total + item.centerY) / row.length;
-    if ((fragment.centerY - rowCenterY).abs() <= threshold) {
-      row.add(fragment);
-    } else {
-      rows.add([fragment]);
-    }
-  }
-
-  return rows
-      .map((row) {
-        final sortedRow = [...row]..sort((a, b) => a.left.compareTo(b.left));
-        return sortedRow;
-      })
-      .map((row) => _OcrRow(fragments: row, fullText: _normalizeLine(row.map((fragment) => fragment.text).join(' '))))
-      .where((row) => row.fullText.isNotEmpty)
-      .toList();
-}
-
-_ParsedReceiptItem? _parseRow(_OcrRow row, List<_OcrRow> allRows) {
-  final direct = _parseItemLine(row.fullText);
-  if (direct != null) {
-    return direct;
-  }
-
-  final candidateName = _extractNameCandidate(row.fullText);
-  if (candidateName == null) {
-    return null;
-  }
-
-  final neighboringAmount = _findNeighboringAmountRow(row, allRows)?.rightMostAmount;
-  if (neighboringAmount == null) {
-    return null;
-  }
-
-  final amount = _parseMoney(neighboringAmount);
-  if (amount == null || amount <= 0) {
-    return null;
-  }
-
-  return _ParsedReceiptItem(name: candidateName, amount: amount);
-}
-
-String? _extractNameCandidate(String rawLine) {
-  final loweredLine = rawLine.toLowerCase();
-  if (TicketOcrService._ignoredLineTokens.any(loweredLine.contains)) {
-    return null;
-  }
-
-  final withoutAmounts = rawLine
-      .replaceAll(TicketOcrService._amountAnywhereRegExp, ' ')
-      .replaceAll(TicketOcrService._amountWithoutDecimalsRegExp, ' ')
-      .replaceFirst(TicketOcrService._quantityPrefixRegExp, '')
-      .replaceAll(TicketOcrService._danglingAmountRegExp, ' ')
-      .replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9\s]'), ' ')
-      .replaceAll(RegExp(r'\s{2,}'), ' ')
-      .trim();
-
-  if (withoutAmounts.length < 3 || RegExp(r'^[0-9\s]+$').hasMatch(withoutAmounts)) {
-    return null;
-  }
-
-  return withoutAmounts;
-}
-
-_ParsedReceiptItem? _parseItemLine(String rawLine) {
-  final loweredLine = rawLine.toLowerCase();
-  if (TicketOcrService._ignoredLineTokens.any(loweredLine.contains)) {
-    return null;
-  }
-
-  final amountMatch = TicketOcrService._moneyAtEndRegExp.firstMatch(rawLine) ?? TicketOcrService._amountAnywhereRegExp.allMatches(rawLine).lastOrNull ?? TicketOcrService._amountWithoutDecimalsRegExp.firstMatch(rawLine);
-  if (amountMatch == null) {
-    return null;
-  }
-
-  final amount = _parseMoney(amountMatch.group(1)!);
-  if (amount == null || amount <= 0) {
-    return null;
-  }
-
-  final rawName = '${rawLine.substring(0, amountMatch.start)} ${rawLine.substring(amountMatch.end)}'.trim();
-  final normalizedName = _extractNameCandidate(rawName);
-
-  if (normalizedName == null || normalizedName.isEmpty) {
-    return null;
-  }
-
-  final lowered = normalizedName.toLowerCase();
-  if (TicketOcrService._ignoredLineTokens.any(lowered.contains) || lowered.length < 2) {
-    return null;
-  }
-
-  if (RegExp(r'^[0-9\s\.,xX]+$').hasMatch(normalizedName)) {
-    return null;
-  }
-
-  return _ParsedReceiptItem(name: normalizedName, amount: amount);
-}
-
-double? _extractLastAmount(String line) {
-  final match = TicketOcrService._amountAnywhereRegExp.allMatches(line).lastOrNull ?? TicketOcrService._amountWithoutDecimalsRegExp.firstMatch(line);
-  if (match == null) {
-    return null;
-  }
-  return _parseMoney(match.group(1)!);
-}
-
-double? _parseMoney(String rawValue) {
-  var value = rawValue.replaceAll(' ', '').replaceAll(RegExp(r'[^0-9,\.]'), '');
-  if (value.isEmpty) {
-    return null;
-  }
-
-  final lastComma = value.lastIndexOf(',');
-  final lastDot = value.lastIndexOf('.');
-  final decimalSeparatorIndex = lastComma > lastDot ? lastComma : lastDot;
-
-  if (decimalSeparatorIndex >= 0) {
-    final integerPart = value.substring(0, decimalSeparatorIndex).replaceAll(RegExp(r'[^0-9]'), '');
-    final decimalPart = value.substring(decimalSeparatorIndex + 1).replaceAll(RegExp(r'[^0-9]'), '');
-    value = '$integerPart.$decimalPart';
-  } else {
-    value = value.replaceAll(RegExp(r'[^0-9]'), '');
-  }
-
-  return double.tryParse(value);
 }

@@ -63,10 +63,7 @@ void main() {
       expect(archived.isClosed, isTrue);
       expect(archived.closedAt, now.add(const Duration(hours: 1)));
       expect(totalGroupSpend(archived), 0);
-      expect(
-        archived.expenses.expand((expense) => expense.items).every((item) => item.amount == 0),
-        isTrue,
-      );
+      expect(archived.expenses.expand((expense) => expense.items).every((item) => item.amount == 0), isTrue);
     });
   });
 

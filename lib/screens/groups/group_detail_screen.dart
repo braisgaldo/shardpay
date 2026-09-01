@@ -16,9 +16,11 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
+import '../../core/receipts/receipt_parser.dart';
 import '../../models/app_models.dart';
 import '../receipts/receipt_image_editor_screen.dart';
-import '../../services/ticket_ocr_service.dart';
+import '../receipts/receipt_scan_summary.dart';
+import '../receipts/receipt_scanner_screen.dart';
 import 'add_expense_screen.dart';
 
 enum _GroupMenuAction { toggleClosed, notifySettlements, manageAdmins, transferOwner, leave, delete }
@@ -48,7 +50,10 @@ Future<void> _showInfoDialog(BuildContext context, {required String title, requi
         title: Text(title),
         content: Text(message),
         actions: [
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido'))),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido')),
+          ),
         ],
       );
     },
@@ -74,24 +79,23 @@ ChipThemeData _surfaceChipTheme(BuildContext context) {
   );
 }
 
-Widget _readableChipWrap(
-  BuildContext context, {
-  required List<Widget> children,
-  double spacing = 8,
-  double runSpacing = 8,
-}) {
+Widget _readableChipWrap(BuildContext context, {required List<Widget> children, double spacing = 8, double runSpacing = 8}) {
   return ChipTheme(
     data: _surfaceChipTheme(context),
-    child: Wrap(
-      spacing: spacing,
-      runSpacing: runSpacing,
-      children: children,
-    ),
+    child: Wrap(spacing: spacing, runSpacing: runSpacing, children: children),
   );
 }
 
 String _unknownParticipantLabel(BuildContext context) {
-  return tr(context, es: 'Participante pendiente', en: 'Pending participant', gl: 'Participante pendente', fr: 'Participant en attente', it: 'Partecipante in sospeso', pt: 'Participante pendente');
+  return tr(
+    context,
+    es: 'Participante pendiente',
+    en: 'Pending participant',
+    gl: 'Participante pendente',
+    fr: 'Participant en attente',
+    it: 'Partecipante in sospeso',
+    pt: 'Participante pendente',
+  );
 }
 
 String _groupParticipantName(BuildContext context, ExpenseGroup group, String rawUserId, {String? emptyLabel}) {
@@ -105,7 +109,10 @@ String _groupParticipantName(BuildContext context, ExpenseGroup group, String ra
     return emptyLabel ?? _unknownParticipantLabel(context);
   }
 
-  final looksOpaque = normalizedUserId.startsWith('pending:') || normalizedUserId.contains(':') || RegExp(r'^[0-9a-fA-F-]{16,}$').hasMatch(normalizedUserId);
+  final looksOpaque =
+      normalizedUserId.startsWith('pending:') ||
+      normalizedUserId.contains(':') ||
+      RegExp(r'^[0-9a-fA-F-]{16,}$').hasMatch(normalizedUserId);
   return looksOpaque ? _unknownParticipantLabel(context) : normalizedUserId;
 }
 
@@ -132,7 +139,21 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     return groupState.when(
       data: (group) {
         if (group == null) {
-          return Scaffold(body: Center(child: Text(tr(context, es: 'Grupo no encontrado.', en: 'Group not found.', gl: 'Grupo non atopado.', fr: 'Groupe introuvable.', it: 'Gruppo non trovato.', pt: 'Grupo nao encontrado.'))));
+          return Scaffold(
+            body: Center(
+              child: Text(
+                tr(
+                  context,
+                  es: 'Grupo no encontrado.',
+                  en: 'Group not found.',
+                  gl: 'Grupo non atopado.',
+                  fr: 'Groupe introuvable.',
+                  it: 'Gruppo non trovato.',
+                  pt: 'Grupo nao encontrado.',
+                ),
+              ),
+            ),
+          );
         }
 
         final balances = memberBalances(group);
@@ -142,6 +163,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
           length: 4,
           child: Scaffold(
             appBar: AppBar(
+              // El titulo son hasta tres lineas —nombre, descripcion y
+              // «N miembros · invite CODIGO»— y los 56 dp de `kToolbarHeight`
+              // solo dan para dos: la tercera aparecia cortada por la mitad.
+              toolbarHeight: 92,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -157,11 +182,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         child: Icon(groupIconForKey(group.iconKey), size: 18, color: Theme.of(context).colorScheme.primary),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(child: Text(group.name)),
-                      if (group.isClosed) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.lock_clock_rounded, size: 18),
-                      ],
+                      Expanded(child: Text(group.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      if (group.isClosed) ...[const SizedBox(width: 8), const Icon(Icons.lock_clock_rounded, size: 18)],
                     ],
                   ),
                   if ((group.description ?? '').trim().isNotEmpty)
@@ -177,13 +199,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   Text(
                     tr(
                       context,
-                      es: '${group.totalDisplayedMembers} miembros · invite ${group.inviteCode}',
-                      en: '${group.totalDisplayedMembers} members · invite ${group.inviteCode}',
-                      gl: '${group.totalDisplayedMembers} membros · invite ${group.inviteCode}',
-                      fr: '${group.totalDisplayedMembers} membres · invite ${group.inviteCode}',
-                      it: '${group.totalDisplayedMembers} membri · invite ${group.inviteCode}',
-                      pt: '${group.totalDisplayedMembers} membros · invite ${group.inviteCode}',
+                      es: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
+                      en: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
+                      gl: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
+                      fr: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
+                      it: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
+                      pt: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode}',
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -193,7 +217,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   IconButton(
                     onPressed: group.isClosed ? null : () => _showJoinSettingsDialog(context, group),
                     icon: const Icon(Icons.settings_rounded),
-                    tooltip: tr(context, es: 'Ajustes del grupo', en: 'Group settings', gl: 'Axustes do grupo', fr: 'Parametres du groupe', it: 'Impostazioni del gruppo', pt: 'Definicoes do grupo'),
+                    tooltip: tr(
+                      context,
+                      es: 'Ajustes del grupo',
+                      en: 'Group settings',
+                      gl: 'Axustes do grupo',
+                      fr: 'Parametres du groupe',
+                      it: 'Impostazioni del gruppo',
+                      pt: 'Definicoes do grupo',
+                    ),
                   ),
                 PopupMenuButton<_GroupMenuAction>(
                   onSelected: (action) async {
@@ -228,7 +260,27 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             children: [
                               Icon(group.isClosed ? Icons.lock_open_rounded : Icons.lock_rounded, size: 18),
                               const SizedBox(width: 10),
-                              Text(group.isClosed ? tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo') : tr(context, es: 'Archivar grupo', en: 'Archive group', gl: 'Arquivar grupo', fr: 'Archiver le groupe', it: 'Archivia gruppo', pt: 'Arquivar grupo')),
+                              Text(
+                                group.isClosed
+                                    ? tr(
+                                        context,
+                                        es: 'Reabrir grupo',
+                                        en: 'Reopen group',
+                                        gl: 'Reabrir grupo',
+                                        fr: 'Rouvrir le groupe',
+                                        it: 'Riapri gruppo',
+                                        pt: 'Reabrir grupo',
+                                      )
+                                    : tr(
+                                        context,
+                                        es: 'Archivar grupo',
+                                        en: 'Archive group',
+                                        gl: 'Arquivar grupo',
+                                        fr: 'Archiver le groupe',
+                                        it: 'Archivia gruppo',
+                                        pt: 'Arquivar grupo',
+                                      ),
+                              ),
                             ],
                           ),
                         ),
@@ -240,7 +292,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             children: [
                               const Icon(Icons.campaign_rounded, size: 18),
                               const SizedBox(width: 10),
-                              Text(tr(context, es: 'Solicitar pagos al grupo', en: 'Request payments from group', gl: 'Solicitar pagos ao grupo', fr: 'Demander les paiements du groupe', it: 'Richiedi pagamenti al gruppo', pt: 'Solicitar pagamentos ao grupo')),
+                              Text(
+                                tr(
+                                  context,
+                                  es: 'Solicitar pagos al grupo',
+                                  en: 'Request payments from group',
+                                  gl: 'Solicitar pagos ao grupo',
+                                  fr: 'Demander les paiements du groupe',
+                                  it: 'Richiedi pagamenti al gruppo',
+                                  pt: 'Solicitar pagamentos ao grupo',
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -266,7 +328,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             children: [
                               const Icon(Icons.admin_panel_settings_rounded, size: 18),
                               const SizedBox(width: 10),
-                              Text(tr(context, es: 'Reasignar admin', en: 'Transfer admin', gl: 'Reasignar admin', fr: 'Transferer admin', it: 'Trasferisci admin', pt: 'Reatribuir admin')),
+                              Text(
+                                tr(
+                                  context,
+                                  es: 'Reasignar admin',
+                                  en: 'Transfer admin',
+                                  gl: 'Reasignar admin',
+                                  fr: 'Transferer admin',
+                                  it: 'Trasferisci admin',
+                                  pt: 'Reatribuir admin',
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -279,7 +351,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           children: [
                             const Icon(Icons.logout_rounded, size: 18),
                             const SizedBox(width: 10),
-                            Text(tr(context, es: 'Abandonar grupo', en: 'Leave group', gl: 'Abandonar grupo', fr: 'Quitter le groupe', it: 'Lascia gruppo', pt: 'Sair do grupo')),
+                            Text(
+                              tr(
+                                context,
+                                es: 'Abandonar grupo',
+                                en: 'Leave group',
+                                gl: 'Abandonar grupo',
+                                fr: 'Quitter le groupe',
+                                it: 'Lascia gruppo',
+                                pt: 'Sair do grupo',
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -293,7 +375,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               const Icon(Icons.delete_forever_rounded, size: 18, color: Color(0xFFC62828)),
                               const SizedBox(width: 10),
                               Text(
-                                tr(context, es: 'Eliminar grupo', en: 'Delete group', gl: 'Eliminar grupo', fr: 'Supprimer groupe', it: 'Elimina gruppo', pt: 'Eliminar grupo'),
+                                tr(
+                                  context,
+                                  es: 'Eliminar grupo',
+                                  en: 'Delete group',
+                                  gl: 'Eliminar grupo',
+                                  fr: 'Supprimer groupe',
+                                  it: 'Elimina gruppo',
+                                  pt: 'Eliminar grupo',
+                                ),
                                 style: const TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w700),
                               ),
                             ],
@@ -310,10 +400,22 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 tabAlignment: TabAlignment.fill,
                 labelPadding: const EdgeInsets.symmetric(horizontal: 6),
                 tabs: [
-                  Tab(text: tr(context, es: 'Resumen', en: 'Overview', gl: 'Resumo', fr: 'Resume', it: 'Riepilogo', pt: 'Resumo'), icon: const Icon(Icons.dashboard_rounded, size: 18)),
-                  Tab(text: tr(context, es: 'Deudas', en: 'Debts', gl: 'Debedas', fr: 'Dettes', it: 'Debiti', pt: 'Dividas'), icon: const Icon(Icons.account_balance_wallet_rounded, size: 18)),
-                  Tab(text: tr(context, es: 'Gastos', en: 'Expenses', gl: 'Gastos', fr: 'Depenses', it: 'Spese', pt: 'Despesas'), icon: const Icon(Icons.receipt_long_rounded, size: 18)),
-                  Tab(text: tr(context, es: 'Estad.', en: 'Stats', gl: 'Estat.', fr: 'Stats', it: 'Stat.', pt: 'Estat.'), icon: const Icon(Icons.query_stats_rounded, size: 18)),
+                  Tab(
+                    text: tr(context, es: 'Resumen', en: 'Overview', gl: 'Resumo', fr: 'Resume', it: 'Riepilogo', pt: 'Resumo'),
+                    icon: const Icon(Icons.dashboard_rounded, size: 18),
+                  ),
+                  Tab(
+                    text: tr(context, es: 'Deudas', en: 'Debts', gl: 'Debedas', fr: 'Dettes', it: 'Debiti', pt: 'Dividas'),
+                    icon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                  ),
+                  Tab(
+                    text: tr(context, es: 'Gastos', en: 'Expenses', gl: 'Gastos', fr: 'Depenses', it: 'Spese', pt: 'Despesas'),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                  ),
+                  Tab(
+                    text: tr(context, es: 'Estad.', en: 'Stats', gl: 'Estat.', fr: 'Stats', it: 'Stat.', pt: 'Estat.'),
+                    icon: const Icon(Icons.query_stats_rounded, size: 18),
+                  ),
                 ],
               ),
             ),
@@ -322,32 +424,32 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
               notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
               child: TabBarView(
                 children: [
-                _OverviewTab(
-                  user: widget.user,
-                  group: group,
-                  balances: balances,
-                  categories: categories,
-                  onInvite: () => _showInviteSheet(context, group),
-                  onCategories: () => _showCategoryDialog(context, group),
-                  onAddExpense: () => _openAddExpenseScreen(context, group),
-                  onOcrCamera: () => _importTicket(context, group, ImageSource.camera),
-                  onOcrGallery: () => _importTicket(context, group, ImageSource.gallery),
-                  groupClosed: group.isClosed,
-                  onManagePeople: () => _showJoinSettingsDialog(context, group),
-                ),
-                _BalancesTab(group: group, balances: balances, currentUserId: widget.user.id),
-                _ExpensesTab(
-                  group: group,
-                  currentUserId: widget.user.id,
-                  categories: categories,
-                  allowChanges: !group.isClosed,
-                  onEditAllocations: (expense, item) => _editAllocations(context, group, expense, item),
-                  onEditExpense: (expense) => _showExpenseEditorDialog(context, group, expense),
-                  onDeleteExpense: (expense) => _confirmDeleteExpense(context, group, expense),
-                ),
-                _GroupChartsTab(group: group, categories: categories, currentUserId: widget.user.id),
-              ],
-            ),
+                  _OverviewTab(
+                    user: widget.user,
+                    group: group,
+                    balances: balances,
+                    categories: categories,
+                    onInvite: () => _showInviteSheet(context, group),
+                    onCategories: () => _showCategoryDialog(context, group),
+                    onAddExpense: () => _openAddExpenseScreen(context, group),
+                    onOcrCamera: () => _importTicket(context, group, ImageSource.camera),
+                    onOcrGallery: () => _importTicket(context, group, ImageSource.gallery),
+                    groupClosed: group.isClosed,
+                    onManagePeople: () => _showJoinSettingsDialog(context, group),
+                  ),
+                  _BalancesTab(group: group, balances: balances, currentUserId: widget.user.id),
+                  _ExpensesTab(
+                    group: group,
+                    currentUserId: widget.user.id,
+                    categories: categories,
+                    allowChanges: !group.isClosed,
+                    onEditAllocations: (expense, item) => _editAllocations(context, group, expense, item),
+                    onEditExpense: (expense) => _showExpenseEditorDialog(context, group, expense),
+                    onDeleteExpense: (expense) => _confirmDeleteExpense(context, group, expense),
+                  ),
+                  _GroupChartsTab(group: group, categories: categories, currentUserId: widget.user.id),
+                ],
+              ),
             ),
           ),
         );
@@ -366,7 +468,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Administradores del grupo', en: 'Group admins', gl: 'Admins do grupo', fr: 'Admins du groupe', it: 'Admin del gruppo', pt: 'Admins do grupo')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Administradores del grupo',
+                  en: 'Group admins',
+                  gl: 'Admins do grupo',
+                  fr: 'Admins du groupe',
+                  it: 'Admin del gruppo',
+                  pt: 'Admins do grupo',
+                ),
+              ),
               content: SizedBox(
                 width: 420,
                 child: SingleChildScrollView(
@@ -374,14 +486,36 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(tr(context, es: 'La persona propietaria sigue siendo quien puede borrar el grupo o reasignar la propiedad. Aquí puedes añadir o quitar admins adicionales.', en: 'The owner still controls deletion and ownership transfer. Here you can add or remove extra admins.', gl: 'A persoa propietaria segue controlando o borrado e a propiedade. Aqui podes engadir ou quitar admins adicionais.', fr: 'Le proprietaire conserve la suppression et le transfert. Ici vous pouvez ajouter ou retirer des admins supplementaires.', it: 'Il proprietario mantiene eliminazione e trasferimento. Qui puoi aggiungere o rimuovere admin aggiuntivi.', pt: 'A pessoa proprietaria continua a controlar apagar e transferir propriedade. Aqui podes adicionar ou remover admins extra.')),
+                      Text(
+                        tr(
+                          context,
+                          es: 'La persona propietaria sigue siendo quien puede borrar el grupo o reasignar la propiedad. Aquí puedes añadir o quitar admins adicionales.',
+                          en: 'The owner still controls deletion and ownership transfer. Here you can add or remove extra admins.',
+                          gl: 'A persoa propietaria segue controlando o borrado e a propiedade. Aqui podes engadir ou quitar admins adicionais.',
+                          fr: 'Le proprietaire conserve la suppression et le transfert. Ici vous pouvez ajouter ou retirer des admins supplementaires.',
+                          it: 'Il proprietario mantiene eliminazione e trasferimento. Qui puoi aggiungere o rimuovere admin aggiuntivi.',
+                          pt: 'A pessoa proprietaria continua a controlar apagar e transferir propriedade. Aqui podes adicionar ou remover admins extra.',
+                        ),
+                      ),
                       const SizedBox(height: 14),
                       ...group.activeMembers.where((member) => member.userId != group.ownerId).map((member) {
                         return CheckboxListTile.adaptive(
                           value: selectedAdminIds.contains(member.userId),
                           contentPadding: EdgeInsets.zero,
                           title: Text(member.name),
-                          subtitle: Text(member.email.isEmpty ? tr(context, es: 'Miembro del grupo', en: 'Group member', gl: 'Membro do grupo', fr: 'Membre du groupe', it: 'Membro del gruppo', pt: 'Membro do grupo') : member.email),
+                          subtitle: Text(
+                            member.email.isEmpty
+                                ? tr(
+                                    context,
+                                    es: 'Miembro del grupo',
+                                    en: 'Group member',
+                                    gl: 'Membro do grupo',
+                                    fr: 'Membre du groupe',
+                                    it: 'Membro del gruppo',
+                                    pt: 'Membro do grupo',
+                                  )
+                                : member.email,
+                          ),
                           onChanged: (value) {
                             setDialogState(() {
                               if (value == true) {
@@ -398,10 +532,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
-                    await ref.read(repositoryProvider).setGroupAdmins(groupId: group.id, requesterId: widget.user.id, adminIds: selectedAdminIds.toList());
+                    await ref
+                        .read(repositoryProvider)
+                        .setGroupAdmins(groupId: group.id, requesterId: widget.user.id, adminIds: selectedAdminIds.toList());
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -422,10 +561,26 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       return;
     }
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => AddExpenseScreen(user: widget.user, group: group)),
+      MaterialPageRoute(
+        builder: (_) => AddExpenseScreen(user: widget.user, group: group),
+      ),
     );
     if (created == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'Gasto guardado.', en: 'Expense saved.', gl: 'Gasto gardado.', fr: 'Depense enregistree.', it: 'Spesa salvata.', pt: 'Despesa guardada.'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              context,
+              es: 'Gasto guardado.',
+              en: 'Expense saved.',
+              gl: 'Gasto gardado.',
+              fr: 'Depense enregistree.',
+              it: 'Spesa salvata.',
+              pt: 'Despesa guardada.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -445,9 +600,32 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
               SelectableText(payload, textAlign: TextAlign.center),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: () => SharePlus.instance.share(ShareParams(text: payload, subject: tr(context, es: 'Únete a ${group.name} en ShardPay', en: 'Join ${group.name} on ShardPay', gl: 'Unete a ${group.name} en ShardPay', fr: 'Rejoignez ${group.name} sur ShardPay', it: 'Unisciti a ${group.name} su ShardPay', pt: 'Junta-te a ${group.name} no ShardPay'))),
+                onPressed: () => SharePlus.instance.share(
+                  ShareParams(
+                    text: payload,
+                    subject: tr(
+                      context,
+                      es: 'Únete a ${group.name} en ShardPay',
+                      en: 'Join ${group.name} on ShardPay',
+                      gl: 'Unete a ${group.name} en ShardPay',
+                      fr: 'Rejoignez ${group.name} sur ShardPay',
+                      it: 'Unisciti a ${group.name} su ShardPay',
+                      pt: 'Junta-te a ${group.name} no ShardPay',
+                    ),
+                  ),
+                ),
                 icon: const Icon(Icons.share_rounded),
-                label: Text(tr(context, es: 'Compartir enlace', en: 'Share link', gl: 'Compartir ligazon', fr: 'Partager le lien', it: 'Condividi link', pt: 'Partilhar link')),
+                label: Text(
+                  tr(
+                    context,
+                    es: 'Compartir enlace',
+                    en: 'Share link',
+                    gl: 'Compartir ligazon',
+                    fr: 'Partager le lien',
+                    it: 'Condividi link',
+                    pt: 'Partilhar link',
+                  ),
+                ),
               ),
             ],
           ),
@@ -472,7 +650,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     var allowAnonymousJoin = group.allowAnonymousJoin;
     var currency = group.currency;
     var iconKey = group.iconKey;
-    final uuid = const Uuid();
+    const uuid = Uuid();
 
     await showDialog<void>(
       context: context,
@@ -482,7 +660,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             return AlertDialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               title: Text(
-                tr(context, es: 'Ajustes del grupo', en: 'Group settings', gl: 'Axustes do grupo', fr: 'Parametres du groupe', it: 'Impostazioni del gruppo', pt: 'Definicoes do grupo'),
+                tr(
+                  context,
+                  es: 'Ajustes del grupo',
+                  en: 'Group settings',
+                  gl: 'Axustes do grupo',
+                  fr: 'Parametres du groupe',
+                  it: 'Impostazioni del gruppo',
+                  pt: 'Definicoes do grupo',
+                ),
                 maxLines: 2,
               ),
               content: SizedBox(
@@ -497,7 +683,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         controller: groupNameController,
                         enabled: canManageAll,
                         decoration: InputDecoration(
-                          labelText: tr(context, es: 'Nombre del grupo', en: 'Group name', gl: 'Nome do grupo', fr: 'Nom du groupe', it: 'Nome del gruppo', pt: 'Nome do grupo'),
+                          labelText: tr(
+                            context,
+                            es: 'Nombre del grupo',
+                            en: 'Group name',
+                            gl: 'Nome do grupo',
+                            fr: 'Nom du groupe',
+                            it: 'Nome del gruppo',
+                            pt: 'Nome do grupo',
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
@@ -507,14 +701,32 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         enabled: canManageAll,
                         maxLines: 2,
                         decoration: InputDecoration(
-                          labelText: tr(context, es: 'Descripción', en: 'Description', gl: 'Descricion', fr: 'Description', it: 'Descrizione', pt: 'Descricao'),
+                          labelText: tr(
+                            context,
+                            es: 'Descripción',
+                            en: 'Description',
+                            gl: 'Descricion',
+                            fr: 'Description',
+                            it: 'Descrizione',
+                            pt: 'Descricao',
+                          ),
                           alignLabelWithHint: true,
                         ),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         initialValue: iconKey,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo')),
+                        decoration: InputDecoration(
+                          labelText: tr(
+                            context,
+                            es: 'Icono del grupo',
+                            en: 'Group icon',
+                            gl: 'Icona do grupo',
+                            fr: 'Icone du groupe',
+                            it: 'Icona del gruppo',
+                            pt: 'Icone do grupo',
+                          ),
+                        ),
                         items: groupIcons.entries.map((entry) {
                           return DropdownMenuItem<String>(
                             value: entry.key,
@@ -540,8 +752,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               keyboardType: TextInputType.number,
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
                               decoration: InputDecoration(
-                                labelText: tr(context, es: 'PIN de acceso al grupo', en: 'Group access PIN', gl: 'PIN de acceso ao grupo', fr: 'PIN d acces du groupe', it: 'PIN di accesso al gruppo', pt: 'PIN de acesso ao grupo'),
-                                helperText: tr(context, es: 'Se pedirá para entrar al grupo con enlace o código.', en: 'It will be required to join the group with link or code.', gl: 'Pedirase para entrar no grupo con ligazon ou codigo.', fr: 'Il sera requis pour rejoindre le groupe avec lien ou code.', it: 'Sarà richiesto per entrare nel gruppo con link o codice.', pt: 'Sera pedido para entrar no grupo com link ou codigo.'),
+                                labelText: tr(
+                                  context,
+                                  es: 'PIN de acceso al grupo',
+                                  en: 'Group access PIN',
+                                  gl: 'PIN de acceso ao grupo',
+                                  fr: 'PIN d acces du groupe',
+                                  it: 'PIN di accesso al gruppo',
+                                  pt: 'PIN de acesso ao grupo',
+                                ),
+                                helperText: tr(
+                                  context,
+                                  es: 'Se pedirá para entrar al grupo con enlace o código.',
+                                  en: 'It will be required to join the group with link or code.',
+                                  gl: 'Pedirase para entrar no grupo con ligazon ou codigo.',
+                                  fr: 'Il sera requis pour rejoindre le groupe avec lien ou code.',
+                                  it: 'Sarà richiesto per entrare nel gruppo con link o codice.',
+                                  pt: 'Sera pedido para entrar no grupo com link ou codigo.',
+                                ),
                               ),
                             ),
                           ),
@@ -549,21 +777,77 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           FilledButton.tonalIcon(
                             onPressed: canManageAll ? () => setDialogState(() => pinController.text = generateGroupJoinPin()) : null,
                             icon: const Icon(Icons.refresh_rounded),
-                            label: Text(tr(context, es: 'Aleatorio', en: 'Random', gl: 'Aleatorio', fr: 'Aleatoire', it: 'Casuale', pt: 'Aleatorio')),
+                            label: Text(
+                              tr(context, es: 'Aleatorio', en: 'Random', gl: 'Aleatorio', fr: 'Aleatoire', it: 'Casuale', pt: 'Aleatorio'),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 18),
-                      Text(tr(context, es: 'Fechas del grupo', en: 'Group dates', gl: 'Datas do grupo', fr: 'Dates du groupe', it: 'Date del gruppo', pt: 'Datas do grupo'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(
+                        tr(
+                          context,
+                          es: 'Fechas del grupo',
+                          en: 'Group dates',
+                          gl: 'Datas do grupo',
+                          fr: 'Dates du groupe',
+                          it: 'Date del gruppo',
+                          pt: 'Datas do grupo',
+                        ),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                       const SizedBox(height: 10),
-                      _DateLine(label: tr(context, es: 'Creado', en: 'Created', gl: 'Creado', fr: 'Cree', it: 'Creato', pt: 'Criado'), value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.createdAt)),
-                      _DateLine(label: tr(context, es: 'Última modificación', en: 'Last update', gl: 'Ultima modificacion', fr: 'Derniere mise a jour', it: 'Ultimo aggiornamento', pt: 'Ultima atualizacao'), value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.updatedAt)),
-                      _DateLine(label: tr(context, es: 'Cierre', en: 'Closed at', gl: 'Peche', fr: 'Fermeture', it: 'Chiusura', pt: 'Fecho'), value: group.closedAt == null ? tr(context, es: 'Sin cierre activo', en: 'No active closure', gl: 'Sen peche activo', fr: 'Aucune fermeture active', it: 'Nessuna chiusura attiva', pt: 'Sem fecho ativo') : DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.closedAt!)),
+                      _DateLine(
+                        label: tr(context, es: 'Creado', en: 'Created', gl: 'Creado', fr: 'Cree', it: 'Creato', pt: 'Criado'),
+                        value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.createdAt),
+                      ),
+                      _DateLine(
+                        label: tr(
+                          context,
+                          es: 'Última modificación',
+                          en: 'Last update',
+                          gl: 'Ultima modificacion',
+                          fr: 'Derniere mise a jour',
+                          it: 'Ultimo aggiornamento',
+                          pt: 'Ultima atualizacao',
+                        ),
+                        value: DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.updatedAt),
+                      ),
+                      _DateLine(
+                        label: tr(context, es: 'Cierre', en: 'Closed at', gl: 'Peche', fr: 'Fermeture', it: 'Chiusura', pt: 'Fecho'),
+                        value: group.closedAt == null
+                            ? tr(
+                                context,
+                                es: 'Sin cierre activo',
+                                en: 'No active closure',
+                                gl: 'Sen peche activo',
+                                fr: 'Aucune fermeture active',
+                                it: 'Nessuna chiusura attiva',
+                                pt: 'Sem fecho ativo',
+                              )
+                            : DateFormat.yMMMd(localeTag(context)).add_Hm().format(group.closedAt!),
+                      ),
                       const SizedBox(height: 18),
                       Text(
                         canManageAll
-                            ? tr(context, es: 'Alias de miembros', en: 'Member aliases', gl: 'Alias dos membros', fr: 'Alias des membres', it: 'Alias dei membri', pt: 'Alias dos membros')
-                            : tr(context, es: 'Tu alias en este grupo', en: 'Your alias in this group', gl: 'O teu alias neste grupo', fr: 'Votre alias dans ce groupe', it: 'Il tuo alias in questo gruppo', pt: 'O teu alias neste grupo'),
+                            ? tr(
+                                context,
+                                es: 'Alias de miembros',
+                                en: 'Member aliases',
+                                gl: 'Alias dos membros',
+                                fr: 'Alias des membres',
+                                it: 'Alias dei membri',
+                                pt: 'Alias dos membros',
+                              )
+                            : tr(
+                                context,
+                                es: 'Tu alias en este grupo',
+                                en: 'Your alias in this group',
+                                gl: 'O teu alias neste grupo',
+                                fr: 'Votre alias dans ce groupe',
+                                it: 'Il tuo alias in questo gruppo',
+                                pt: 'O teu alias neste grupo',
+                              ),
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 12),
@@ -577,140 +861,267 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             decoration: InputDecoration(
                               labelText: canManageAll
                                   ? '${tr(context, es: 'Alias de', en: 'Alias for', gl: 'Alias de', fr: 'Alias de', it: 'Alias di', pt: 'Alias de')} ${member.email.isEmpty ? member.name : member.email}'
-                                  : tr(context, es: 'Tu alias', en: 'Your alias', gl: 'O teu alias', fr: 'Votre alias', it: 'Il tuo alias', pt: 'O teu alias'),
+                                  : tr(
+                                      context,
+                                      es: 'Tu alias',
+                                      en: 'Your alias',
+                                      gl: 'O teu alias',
+                                      fr: 'Votre alias',
+                                      it: 'Il tuo alias',
+                                      pt: 'O teu alias',
+                                    ),
                               floatingLabelBehavior: FloatingLabelBehavior.always,
                             ),
                           ),
                         );
                       }),
                       if (canManageAll) ...[
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              tr(context, es: 'Acceso e identidades preparadas', en: 'Access and prepared identities', gl: 'Acceso e identidades preparadas', fr: 'Acces et identites preparees', it: 'Accesso e identita preparate', pt: 'Acesso e identidades preparadas'),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _showInfoDialog(
-                              context,
-                              title: tr(context, es: 'Cómo funciona', en: 'How it works', gl: 'Como funciona', fr: 'Comment ca marche', it: 'Come funziona', pt: 'Como funciona'),
-                              message: tr(context, es: 'Añade nombres para que quien entre por invitación pueda elegir quién es. Si activas el acceso libre, también podrá entrar sin escoger una identidad preparada.', en: 'Add prepared names so people joining can choose who they are. If open access is enabled, they can also join without choosing a prepared identity.', gl: 'Engade nomes para que quen entre por invitacion poida escoller quen e. Se activas o acceso libre, tamen podera entrar sen escoller unha identidade preparada.', fr: 'Ajoutez des noms prepares pour que les personnes rejoignant le groupe puissent choisir qui elles sont. Si l acces libre est actif, elles peuvent aussi entrer sans identite preparee.', it: 'Aggiungi nomi preparati cosi chi entra puo scegliere chi e. Se attivi l accesso libero, puo entrare anche senza identita preparata.', pt: 'Adiciona nomes preparados para que quem entra possa escolher quem e. Se ativares o acesso livre, tambem podera entrar sem identidade preparada.'),
-                            ),
-                            icon: const Icon(Icons.help_outline_rounded),
-                            tooltip: tr(context, es: 'Más información', en: 'More information', gl: 'Mais informacion', fr: 'Plus d informations', it: 'Maggiori informazioni', pt: 'Mais informacao'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        value: allowAnonymousJoin,
-                        onChanged: canManageAll ? (value) => setDialogState(() => allowAnonymousJoin = value) : null,
-                        title: Row(
+                        const SizedBox(height: 18),
+                        Row(
                           children: [
                             Expanded(
                               child: Text(
-                                tr(context, es: 'Permitir entrar solo clicando el enlace', en: 'Allow joining directly from the link', gl: 'Permitir entrar so clicando a ligazon', fr: 'Autoriser l entree directe par lien', it: 'Consenti accesso diretto dal link', pt: 'Permitir entrar so clicando no link'),
+                                tr(
+                                  context,
+                                  es: 'Acceso e identidades preparadas',
+                                  en: 'Access and prepared identities',
+                                  gl: 'Acceso e identidades preparadas',
+                                  fr: 'Acces et identites preparees',
+                                  it: 'Accesso e identita preparate',
+                                  pt: 'Acesso e identidades preparadas',
+                                ),
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
                             IconButton(
                               onPressed: () => _showInfoDialog(
                                 context,
-                                title: tr(context, es: 'Acceso libre por enlace', en: 'Open link access', gl: 'Acceso libre por ligazon', fr: 'Acces libre par lien', it: 'Accesso libero da link', pt: 'Acesso livre por link'),
-                                message: tr(context, es: 'Desactivado por defecto. Si se activa, no hará falta elegir un nombre preparado.', en: 'Off by default. When enabled, choosing a prepared identity is optional.', gl: 'Desactivado por defecto. Se se activa, non fara falla escoller unha identidade preparada.', fr: 'Desactive par defaut. Si active, choisir un nom prepare devient optionnel.', it: 'Disattivato di default. Se attivo, scegliere un nome preparato e opzionale.', pt: 'Desativado por defeito. Se ativado, escolher um nome preparado deixa de ser obrigatorio.'),
+                                title: tr(
+                                  context,
+                                  es: 'Cómo funciona',
+                                  en: 'How it works',
+                                  gl: 'Como funciona',
+                                  fr: 'Comment ca marche',
+                                  it: 'Come funziona',
+                                  pt: 'Como funciona',
+                                ),
+                                message: tr(
+                                  context,
+                                  es: 'Añade nombres para que quien entre por invitación pueda elegir quién es. Si activas el acceso libre, también podrá entrar sin escoger una identidad preparada.',
+                                  en: 'Add prepared names so people joining can choose who they are. If open access is enabled, they can also join without choosing a prepared identity.',
+                                  gl: 'Engade nomes para que quen entre por invitacion poida escoller quen e. Se activas o acceso libre, tamen podera entrar sen escoller unha identidade preparada.',
+                                  fr: 'Ajoutez des noms prepares pour que les personnes rejoignant le groupe puissent choisir qui elles sont. Si l acces libre est actif, elles peuvent aussi entrer sans identite preparee.',
+                                  it: 'Aggiungi nomi preparati cosi chi entra puo scegliere chi e. Se attivi l accesso libero, puo entrare anche senza identita preparata.',
+                                  pt: 'Adiciona nomes preparados para que quem entra possa escolher quem e. Se ativares o acesso livre, tambem podera entrar sem identidade preparada.',
+                                ),
                               ),
                               icon: const Icon(Icons.help_outline_rounded),
-                              tooltip: tr(context, es: 'Más información', en: 'More information', gl: 'Mais informacion', fr: 'Plus d informations', it: 'Maggiori informazioni', pt: 'Mais informacao'),
+                              tooltip: tr(
+                                context,
+                                es: 'Más información',
+                                en: 'More information',
+                                gl: 'Mais informacion',
+                                fr: 'Plus d informations',
+                                it: 'Maggiori informazioni',
+                                pt: 'Mais informacao',
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: currency,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Divisa del grupo', en: 'Group currency', gl: 'Divisa do grupo', fr: 'Devise du groupe', it: 'Valuta del gruppo', pt: 'Moeda do grupo')),
-                        items: currencyOptions.map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}'))).toList(),
-                        onChanged: canManageAll ? (value) => setDialogState(() => currency = value ?? currency) : null,
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: nameController,
-                              enabled: canManageAll,
-                              decoration: InputDecoration(
-                                labelText: tr(context, es: 'Añadir participante', en: 'Add participant', gl: 'Engadir participante', fr: 'Ajouter un participant', it: 'Aggiungi partecipante', pt: 'Adicionar participante'),
-                                floatingLabelBehavior: FloatingLabelBehavior.always,
+                        const SizedBox(height: 16),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          value: allowAnonymousJoin,
+                          onChanged: canManageAll ? (value) => setDialogState(() => allowAnonymousJoin = value) : null,
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  tr(
+                                    context,
+                                    es: 'Permitir entrar solo clicando el enlace',
+                                    en: 'Allow joining directly from the link',
+                                    gl: 'Permitir entrar so clicando a ligazon',
+                                    fr: 'Autoriser l entree directe par lien',
+                                    it: 'Consenti accesso diretto dal link',
+                                    pt: 'Permitir entrar so clicando no link',
+                                  ),
+                                ),
                               ),
+                              IconButton(
+                                onPressed: () => _showInfoDialog(
+                                  context,
+                                  title: tr(
+                                    context,
+                                    es: 'Acceso libre por enlace',
+                                    en: 'Open link access',
+                                    gl: 'Acceso libre por ligazon',
+                                    fr: 'Acces libre par lien',
+                                    it: 'Accesso libero da link',
+                                    pt: 'Acesso livre por link',
+                                  ),
+                                  message: tr(
+                                    context,
+                                    es: 'Desactivado por defecto. Si se activa, no hará falta elegir un nombre preparado.',
+                                    en: 'Off by default. When enabled, choosing a prepared identity is optional.',
+                                    gl: 'Desactivado por defecto. Se se activa, non fara falla escoller unha identidade preparada.',
+                                    fr: 'Desactive par defaut. Si active, choisir un nom prepare devient optionnel.',
+                                    it: 'Disattivato di default. Se attivo, scegliere un nome preparato e opzionale.',
+                                    pt: 'Desativado por defeito. Se ativado, escolher um nome preparado deixa de ser obrigatorio.',
+                                  ),
+                                ),
+                                icon: const Icon(Icons.help_outline_rounded),
+                                tooltip: tr(
+                                  context,
+                                  es: 'Más información',
+                                  en: 'More information',
+                                  gl: 'Mais informacion',
+                                  fr: 'Plus d informations',
+                                  it: 'Maggiori informazioni',
+                                  pt: 'Mais informacao',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: currency,
+                          decoration: InputDecoration(
+                            labelText: tr(
+                              context,
+                              es: 'Divisa del grupo',
+                              en: 'Group currency',
+                              gl: 'Divisa do grupo',
+                              fr: 'Devise du groupe',
+                              it: 'Valuta del gruppo',
+                              pt: 'Moeda do grupo',
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          FilledButton(
-                            onPressed: canManageAll ? () {
-                              final value = nameController.text.trim();
-                              if (value.isEmpty) {
-                                return;
-                              }
-                              setDialogState(() {
-                                pendingMembers.add(PendingGroupMember(id: uuid.v4(), name: value));
-                                nameController.clear();
-                              });
-                            } : null,
-                            child: Text(tr(context, es: 'Añadir', en: 'Add', gl: 'Engadir', fr: 'Ajouter', it: 'Aggiungi', pt: 'Adicionar')),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (pendingMembers.isEmpty)
-                        Text(tr(context, es: 'Todavía no hay nombres preparados.', en: 'There are no prepared names yet.', gl: 'Ainda non hai nomes preparados.', fr: 'Il n y a pas encore de noms prepares.', it: 'Non ci sono ancora nomi preparati.', pt: 'Ainda nao ha nomes preparados.'))
-                      else
-                        _readableChipWrap(
-                          context,
-                          children: pendingMembers.map((member) {
-                            return InputChip(
-                              label: Text(member.name),
-                              onDeleted: canManageAll ? () => setDialogState(() => pendingMembers.removeWhere((entry) => entry.id == member.id)) : null,
-                            );
-                          }).toList(),
+                          items: currencyOptions
+                              .map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}')))
+                              .toList(),
+                          onChanged: canManageAll ? (value) => setDialogState(() => currency = value ?? currency) : null,
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: nameController,
+                                enabled: canManageAll,
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Añadir participante',
+                                    en: 'Add participant',
+                                    gl: 'Engadir participante',
+                                    fr: 'Ajouter un participant',
+                                    it: 'Aggiungi partecipante',
+                                    pt: 'Adicionar participante',
+                                  ),
+                                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton(
+                              onPressed: canManageAll
+                                  ? () {
+                                      final value = nameController.text.trim();
+                                      if (value.isEmpty) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        pendingMembers.add(PendingGroupMember(id: uuid.v4(), name: value));
+                                        nameController.clear();
+                                      });
+                                    }
+                                  : null,
+                              child: Text(
+                                tr(context, es: 'Añadir', en: 'Add', gl: 'Engadir', fr: 'Ajouter', it: 'Aggiungi', pt: 'Adicionar'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (pendingMembers.isEmpty)
+                          Text(
+                            tr(
+                              context,
+                              es: 'Todavía no hay nombres preparados.',
+                              en: 'There are no prepared names yet.',
+                              gl: 'Ainda non hai nomes preparados.',
+                              fr: 'Il n y a pas encore de noms prepares.',
+                              it: 'Non ci sono ancora nomi preparati.',
+                              pt: 'Ainda nao ha nomes preparados.',
+                            ),
+                          )
+                        else
+                          _readableChipWrap(
+                            context,
+                            children: pendingMembers.map((member) {
+                              return InputChip(
+                                label: Text(member.name),
+                                onDeleted: canManageAll
+                                    ? () => setDialogState(() => pendingMembers.removeWhere((entry) => entry.id == member.id))
+                                    : null,
+                              );
+                            }).toList(),
+                          ),
                       ],
                     ],
                   ),
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
                     final updatedMembers = members
                         .map(
                           (member) => member.copyWith(
-                            name: (memberNameControllers[member.userId]?.text.trim().isEmpty ?? true) ? member.name : memberNameControllers[member.userId]!.text.trim(),
+                            name: (memberNameControllers[member.userId]?.text.trim().isEmpty ?? true)
+                                ? member.name
+                                : memberNameControllers[member.userId]!.text.trim(),
                           ),
                         )
                         .toList(growable: false);
                     final normalizedPin = pinController.text.trim();
                     if (canManageAll && normalizedPin.length != 4) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text(tr(context, es: 'El PIN del grupo debe tener 4 dígitos.', en: 'The group PIN must have 4 digits.', gl: 'O PIN do grupo debe ter 4 dixitos.', fr: 'Le PIN du groupe doit contenir 4 chiffres.', it: 'Il PIN del gruppo deve avere 4 cifre.', pt: 'O PIN do grupo deve ter 4 digitos.'))),
+                        SnackBar(
+                          content: Text(
+                            tr(
+                              context,
+                              es: 'El PIN del grupo debe tener 4 dígitos.',
+                              en: 'The group PIN must have 4 digits.',
+                              gl: 'O PIN do grupo debe ter 4 dixitos.',
+                              fr: 'Le PIN du groupe doit contenir 4 chiffres.',
+                              it: 'Il PIN del gruppo deve avere 4 cifre.',
+                              pt: 'O PIN do grupo deve ter 4 digitos.',
+                            ),
+                          ),
+                        ),
                       );
                       return;
                     }
-                    await ref.read(repositoryProvider).updateGroupJoinSettings(
-                      groupId: group.id,
-                      name: canManageAll && groupNameController.text.trim().isNotEmpty ? groupNameController.text.trim() : group.name,
-                      description: canManageAll ? groupDescriptionController.text.trim() : group.description,
-                      iconKey: canManageAll ? iconKey : group.iconKey,
-                      members: updatedMembers,
-                      pendingMembers: pendingMembers,
-                      allowAnonymousJoin: canManageAll ? allowAnonymousJoin : group.allowAnonymousJoin,
-                      currency: canManageAll ? currency : group.currency,
-                      joinPin: canManageAll ? normalizedPin : group.joinPin,
-                    );
+                    await ref
+                        .read(repositoryProvider)
+                        .updateGroupJoinSettings(
+                          groupId: group.id,
+                          name: canManageAll && groupNameController.text.trim().isNotEmpty ? groupNameController.text.trim() : group.name,
+                          description: canManageAll ? groupDescriptionController.text.trim() : group.description,
+                          iconKey: canManageAll ? iconKey : group.iconKey,
+                          members: updatedMembers,
+                          pendingMembers: pendingMembers,
+                          allowAnonymousJoin: canManageAll ? allowAnonymousJoin : group.allowAnonymousJoin,
+                          currency: canManageAll ? currency : group.currency,
+                          joinPin: canManageAll ? normalizedPin : group.joinPin,
+                        );
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -745,16 +1156,46 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Reasignar administración', en: 'Transfer administration', gl: 'Reasignar administracion', fr: 'Transferer l administration', it: 'Trasferisci amministrazione', pt: 'Reatribuir administracao')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Reasignar administración',
+                  en: 'Transfer administration',
+                  gl: 'Reasignar administracion',
+                  fr: 'Transferer l administration',
+                  it: 'Trasferisci amministrazione',
+                  pt: 'Reatribuir administracao',
+                ),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tr(context, es: 'Selecciona la persona que pasará a ser admin del grupo.', en: 'Select the person who will become group admin.', gl: 'Selecciona a persoa que pasara a ser admin do grupo.', fr: 'Selectionnez la personne qui deviendra administrateur du groupe.', it: 'Seleziona la persona che diventera admin del gruppo.', pt: 'Seleciona a pessoa que passara a ser admin do grupo.')),
+                  Text(
+                    tr(
+                      context,
+                      es: 'Selecciona la persona que pasará a ser admin del grupo.',
+                      en: 'Select the person who will become group admin.',
+                      gl: 'Selecciona a persoa que pasara a ser admin do grupo.',
+                      fr: 'Selectionnez la personne qui deviendra administrateur du groupe.',
+                      it: 'Seleziona la persona che diventera admin del gruppo.',
+                      pt: 'Seleciona a pessoa que passara a ser admin do grupo.',
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: selectedOwnerId,
-                    decoration: InputDecoration(labelText: tr(context, es: 'Nuevo admin', en: 'New admin', gl: 'Novo admin', fr: 'Nouvel admin', it: 'Nuovo admin', pt: 'Novo admin')),
+                    decoration: InputDecoration(
+                      labelText: tr(
+                        context,
+                        es: 'Nuevo admin',
+                        en: 'New admin',
+                        gl: 'Novo admin',
+                        fr: 'Nouvel admin',
+                        it: 'Nuovo admin',
+                        pt: 'Novo admin',
+                      ),
+                    ),
                     items: group.members
                         .where((entry) => entry.userId != widget.user.id)
                         .map((member) => DropdownMenuItem(value: member.userId, child: Text(member.name)))
@@ -764,15 +1205,34 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
-                    await ref.read(repositoryProvider).transferGroupOwnership(groupId: group.id, requesterId: widget.user.id, newOwnerId: selectedOwnerId!);
+                    await ref
+                        .read(repositoryProvider)
+                        .transferGroupOwnership(groupId: group.id, requesterId: widget.user.id, newOwnerId: selectedOwnerId!);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'Administración reasignada.', en: 'Administration transferred.', gl: 'Administracion reasignada.', fr: 'Administration transferee.', it: 'Amministrazione trasferita.', pt: 'Administracao reatribuida.'))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            tr(
+                              context,
+                              es: 'Administración reasignada.',
+                              en: 'Administration transferred.',
+                              gl: 'Administracion reasignada.',
+                              fr: 'Administration transferee.',
+                              it: 'Amministrazione trasferita.',
+                              pt: 'Administracao reatribuida.',
+                            ),
+                          ),
+                        ),
+                      );
                     }
                   },
                   child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
@@ -786,20 +1246,52 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   }
 
   Future<void> _confirmLeaveGroup(BuildContext context, ExpenseGroup group) async {
-    final approved = await showDialog<bool>(
+    final approved =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Abandonar grupo', en: 'Leave group', gl: 'Abandonar grupo', fr: 'Quitter le groupe', it: 'Lascia gruppo', pt: 'Sair do grupo')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Abandonar grupo',
+                  en: 'Leave group',
+                  gl: 'Abandonar grupo',
+                  fr: 'Quitter le groupe',
+                  it: 'Lascia gruppo',
+                  pt: 'Sair do grupo',
+                ),
+              ),
               content: Text(
                 group.ownerId == widget.user.id && group.members.length > 1
-                    ? tr(context, es: 'Antes de salir, primero reasigna la administración a otra persona del grupo.', en: 'Before leaving, transfer administration to another group member first.', gl: 'Antes de saires, primeiro reasigna a administracion a outra persoa do grupo.', fr: 'Avant de quitter, transferez d abord l administration a une autre personne.', it: 'Prima di uscire trasferisci l amministrazione a un altra persona del gruppo.', pt: 'Antes de sair, reatribui primeiro a administracao a outra pessoa do grupo.')
-                    : tr(context, es: 'Vas a salir de ${group.name}. Si eras la última persona del grupo, se eliminará automáticamente.', en: 'You are leaving ${group.name}. If you are the last person, the group will be deleted automatically.', gl: 'Vas saír de ${group.name}. Se eras a ultima persoa, o grupo eliminarase automaticamente.', fr: 'Vous allez quitter ${group.name}. Si vous etes la derniere personne, le groupe sera supprime automatiquement.', it: 'Stai per lasciare ${group.name}. Se sei l ultima persona, il gruppo verra eliminato automaticamente.', pt: 'Vais sair de ${group.name}. Se fores a ultima pessoa, o grupo sera eliminado automaticamente.'),
+                    ? tr(
+                        context,
+                        es: 'Antes de salir, primero reasigna la administración a otra persona del grupo.',
+                        en: 'Before leaving, transfer administration to another group member first.',
+                        gl: 'Antes de saires, primeiro reasigna a administracion a outra persoa do grupo.',
+                        fr: 'Avant de quitter, transferez d abord l administration a une autre personne.',
+                        it: 'Prima di uscire trasferisci l amministrazione a un altra persona del gruppo.',
+                        pt: 'Antes de sair, reatribui primeiro a administracao a outra pessoa do grupo.',
+                      )
+                    : tr(
+                        context,
+                        es: 'Vas a salir de ${group.name}. Si eras la última persona del grupo, se eliminará automáticamente.',
+                        en: 'You are leaving ${group.name}. If you are the last person, the group will be deleted automatically.',
+                        gl: 'Vas saír de ${group.name}. Se eras a ultima persoa, o grupo eliminarase automaticamente.',
+                        fr: 'Vous allez quitter ${group.name}. Si vous etes la derniere personne, le groupe sera supprime automatiquement.',
+                        it: 'Stai per lasciare ${group.name}. Se sei l ultima persona, il gruppo verra eliminato automaticamente.',
+                        pt: 'Vais sair de ${group.name}. Se fores a ultima pessoa, o grupo sera eliminado automaticamente.',
+                      ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton.icon(
-                  onPressed: group.ownerId == widget.user.id && group.members.length > 1 ? null : () => Navigator.of(dialogContext).pop(true),
+                  onPressed: group.ownerId == widget.user.id && group.members.length > 1
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(true),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF9B1C1C),
                     foregroundColor: colorOn(const Color(0xFF9B1C1C)),
@@ -830,14 +1322,38 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   }
 
   Future<void> _confirmDeleteGroup(BuildContext context, ExpenseGroup group) async {
-    final approved = await showDialog<bool>(
+    final approved =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Eliminar grupo', en: 'Delete group', gl: 'Eliminar grupo', fr: 'Supprimer groupe', it: 'Elimina gruppo', pt: 'Eliminar grupo')),
-              content: Text(tr(context, es: 'Se eliminarán el grupo, sus gastos y sus invitaciones pendientes. Esta acción no se puede deshacer.', en: 'The group, its expenses and pending invites will be deleted. This action cannot be undone.', gl: 'Eliminaranse o grupo, os seus gastos e os convites pendentes. Esta accion non se pode desfacer.', fr: 'Le groupe, ses depenses et invitations en attente seront supprimes. Cette action est irreversible.', it: 'Il gruppo, le spese e gli inviti pendenti saranno eliminati. Questa azione non puo essere annullata.', pt: 'O grupo, as despesas e os convites pendentes serao eliminados. Esta acao nao pode ser desfeita.')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Eliminar grupo',
+                  en: 'Delete group',
+                  gl: 'Eliminar grupo',
+                  fr: 'Supprimer groupe',
+                  it: 'Elimina gruppo',
+                  pt: 'Eliminar grupo',
+                ),
+              ),
+              content: Text(
+                tr(
+                  context,
+                  es: 'Se eliminarán el grupo, sus gastos y sus invitaciones pendientes. Esta acción no se puede deshacer.',
+                  en: 'The group, its expenses and pending invites will be deleted. This action cannot be undone.',
+                  gl: 'Eliminaranse o grupo, os seus gastos e os convites pendentes. Esta accion non se pode desfacer.',
+                  fr: 'Le groupe, ses depenses et invitations en attente seront supprimes. Cette action est irreversible.',
+                  it: 'Il gruppo, le spese e gli inviti pendenti saranno eliminati. Questa azione non puo essere annullata.',
+                  pt: 'O grupo, as despesas e os convites pendentes serao eliminados. Esta acao nao pode ser desfeita.',
+                ),
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton.icon(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
                   style: FilledButton.styleFrom(
@@ -872,12 +1388,27 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Nueva categoría del grupo', en: 'New group category', gl: 'Nova categoria do grupo', fr: 'Nouvelle categorie du groupe', it: 'Nuova categoria del gruppo', pt: 'Nova categoria do grupo')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Nueva categoría del grupo',
+                  en: 'New group category',
+                  gl: 'Nova categoria do grupo',
+                  fr: 'Nouvelle categorie du groupe',
+                  it: 'Nuova categoria del gruppo',
+                  pt: 'Nova categoria do grupo',
+                ),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(controller: nameController, decoration: InputDecoration(labelText: tr(context, es: 'Nombre', en: 'Name', gl: 'Nome', fr: 'Nom', it: 'Nome', pt: 'Nome'))),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: tr(context, es: 'Nombre', en: 'Name', gl: 'Nome', fr: 'Nom', it: 'Nome', pt: 'Nome'),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
@@ -896,18 +1427,23 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
-                    await ref.read(repositoryProvider).upsertCategory(
-                      groupId: group.id,
-                      category: ExpenseCategory(
-                        id: nameController.text.trim().toLowerCase().replaceAll(' ', '_'),
-                        name: nameController.text.trim(),
-                        iconKey: selectedIcon,
-                        colorHex: '0xFFE4572E',
-                      ),
-                    );
+                    await ref
+                        .read(repositoryProvider)
+                        .upsertCategory(
+                          groupId: group.id,
+                          category: ExpenseCategory(
+                            id: nameController.text.trim().toLowerCase().replaceAll(' ', '_'),
+                            name: nameController.text.trim(),
+                            iconKey: selectedIcon,
+                            colorHex: '0xFFE4572E',
+                          ),
+                        );
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -927,16 +1463,29 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       _showGroupClosedMessage(context);
       return;
     }
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: source);
 
-    if (image == null || !context.mounted) {
+    // La camara pasa por la pantalla propia de captura, con guia de encuadre,
+    // linterna y enfoque al tocar; la galeria sigue usando el selector del
+    // sistema.
+    final String? capturedPath;
+    if (source == ImageSource.camera) {
+      capturedPath = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()));
+    } else {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      capturedPath = image?.path;
+    }
+
+    if (capturedPath == null || !context.mounted) {
       return;
     }
 
-    final editedImagePath = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => ReceiptImageEditorScreen(imagePath: image.path)),
-    );
+    // Copia no anulable: la promocion de tipo de `capturedPath` no llega dentro
+    // del cierre del constructor de rutas.
+    final photoPath = capturedPath;
+
+    final editedImagePath = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => ReceiptImageEditorScreen(imagePath: photoPath)));
 
     if (editedImagePath == null || !context.mounted) {
       return;
@@ -944,20 +1493,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
     _showOcrProcessingDialog(context);
     await WidgetsBinding.instance.endOfFrame;
-    await Future<void>.delayed(const Duration(milliseconds: 16));
     try {
-      final parsed = await ref.read(ticketOcrServiceProvider).parseReceipt(
-            imagePath: editedImagePath,
-            defaultAllocations: equalAllocations(group.selectableMembers),
-            defaultCategoryId: 'food',
-          );
+      final scan = await ref.read(ticketOcrServiceProvider).scanReceipt(imagePath: editedImagePath);
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
       if (!context.mounted) {
         return;
       }
-      await _showParsedTicketDialog(context, group, parsed);
+      await _showParsedTicketDialog(context, group, scan);
     } catch (error) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -966,6 +1510,70 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     }
+  }
+
+  /// Convierte la lectura del ticket en subgastos del grupo.
+  ///
+  /// Los nombres de las lineas sinteticas (propina y ajuste) se traducen aqui:
+  /// el parser vive en el nucleo, no tiene acceso al contexto de Flutter y por
+  /// eso devuelve el tipo de linea en lugar de un texto.
+  List<ExpenseItem> _receiptItems(BuildContext context, ExpenseGroup group, ReceiptScan scan) {
+    const uuid = Uuid();
+    final allocations = equalAllocations(group.selectableMembers);
+
+    return scan.items.map((item) {
+      final trimmed = item.name.trim();
+      final baseName = trimmed.isNotEmpty ? trimmed : _receiptItemFallbackName(context, item.kind);
+      return ExpenseItem(
+        id: uuid.v4(),
+        name: item.quantity > 1 ? '${item.quantity} x $baseName' : baseName,
+        amount: item.amount,
+        categoryId: 'food',
+        allocations: allocations,
+      );
+    }).toList();
+  }
+
+  String _receiptItemFallbackName(BuildContext context, ReceiptItemKind kind) {
+    switch (kind) {
+      case ReceiptItemKind.tip:
+        return tr(context, es: 'Propina', en: 'Tip', gl: 'Propina', fr: 'Pourboire', it: 'Mancia', pt: 'Gorjeta');
+      case ReceiptItemKind.adjustment:
+        return tr(
+          context,
+          es: 'Resto del ticket',
+          en: 'Rest of the receipt',
+          gl: 'Resto do ticket',
+          fr: 'Reste du ticket',
+          it: 'Resto dello scontrino',
+          pt: 'Resto da fatura',
+        );
+      case ReceiptItemKind.product:
+        return tr(context, es: 'Articulo', en: 'Item', gl: 'Artigo', fr: 'Article', it: 'Voce', pt: 'Artigo');
+    }
+  }
+
+  String _receiptNote(BuildContext context, ReceiptScan scan) {
+    if (scan.reconciled) {
+      return tr(
+        context,
+        es: 'Leido del ticket y cuadrado con el total',
+        en: 'Read from the receipt and matched against the total',
+        gl: 'Lido do ticket e cadrado co total',
+        fr: 'Lu sur le ticket et rapproche du total',
+        it: 'Letto dallo scontrino e quadrato con il totale',
+        pt: 'Lido da fatura e conferido com o total',
+      );
+    }
+    return tr(
+      context,
+      es: 'Leido del ticket, revisa los importes',
+      en: 'Read from the receipt, check the amounts',
+      gl: 'Lido do ticket, revisa os importes',
+      fr: 'Lu sur le ticket, verifiez les montants',
+      it: 'Letto dallo scontrino, controlla gli importi',
+      pt: 'Lido da fatura, reve os valores',
+    );
   }
 
   void _showOcrProcessingDialog(BuildContext context) {
@@ -989,24 +1597,36 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   child: const Stack(
                     alignment: Alignment.center,
                     children: [
-                      SizedBox(
-                        width: 54,
-                        height: 54,
-                        child: CircularProgressIndicator(strokeWidth: 3.5),
-                      ),
+                      SizedBox(width: 54, height: 54, child: CircularProgressIndicator(strokeWidth: 3.5)),
                       Icon(Icons.receipt_long_rounded, size: 28),
                     ],
                   ),
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  tr(context, es: 'Analizando ticket', en: 'Analyzing receipt', gl: 'Analizando ticket', fr: 'Analyse du ticket', it: 'Analisi dello scontrino', pt: 'A analisar fatura'),
+                  tr(
+                    context,
+                    es: 'Analizando ticket',
+                    en: 'Analyzing receipt',
+                    gl: 'Analizando ticket',
+                    fr: 'Analyse du ticket',
+                    it: 'Analisi dello scontrino',
+                    pt: 'A analisar fatura',
+                  ),
                   style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  tr(context, es: 'Mejorando la imagen y detectando importes. Puede tardar unos segundos.', en: 'Enhancing the image and detecting amounts. This can take a few seconds.', gl: 'Mellorando a imaxe e detectando importes. Pode tardar uns segundos.', fr: 'Amelioration de l image et detection des montants. Cela peut prendre quelques secondes.', it: 'Miglioro l immagine e rilevo gli importi. Potrebbero volerci alcuni secondi.', pt: 'A melhorar a imagem e a detetar valores. Isto pode demorar alguns segundos.'),
+                  tr(
+                    context,
+                    es: 'Mejorando la imagen y detectando importes. Puede tardar unos segundos.',
+                    en: 'Enhancing the image and detecting amounts. This can take a few seconds.',
+                    gl: 'Mellorando a imaxe e detectando importes. Pode tardar uns segundos.',
+                    fr: 'Amelioration de l image et detection des montants. Cela peut prendre quelques secondes.',
+                    it: 'Miglioro l immagine e rilevo gli importi. Potrebbero volerci alcuni secondi.',
+                    pt: 'A melhorar a imagem e a detetar valores. Isto pode demorar alguns segundos.',
+                  ),
                   style: Theme.of(dialogContext).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -1018,12 +1638,25 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     );
   }
 
-  Future<void> _showParsedTicketDialog(BuildContext context, ExpenseGroup group, ParsedReceipt parsed) async {
-    final items = parsed.items.map((item) => item.copyWith()).toList();
+  Future<void> _showParsedTicketDialog(BuildContext context, ExpenseGroup group, ReceiptScan scan) async {
+    final items = _receiptItems(context, group, scan);
     final payerMembers = sortedMembersByName(group.visibleMembers);
     var payerId = payerMembers.any((member) => member.userId == widget.user.id) ? widget.user.id : payerMembers.first.userId;
-    final titleController = TextEditingController(text: parsed.title ?? parsed.items.firstOrNull?.name ?? 'Ticket importado');
-    final uuid = const Uuid();
+    final titleController = TextEditingController(
+      text:
+          scan.merchant ??
+          items.firstOrNull?.name ??
+          tr(
+            context,
+            es: 'Ticket importado',
+            en: 'Imported receipt',
+            gl: 'Ticket importado',
+            fr: 'Ticket importe',
+            it: 'Scontrino importato',
+            pt: 'Fatura importada',
+          ),
+    );
+    const uuid = Uuid();
     final categories = [...buildDefaultCategories(), ...group.customCategories];
     var isSaving = false;
 
@@ -1033,7 +1666,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Revisar ticket', en: 'Review receipt', gl: 'Revisar ticket', fr: 'Verifier le ticket', it: 'Rivedi scontrino', pt: 'Rever fatura')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Revisar ticket',
+                  en: 'Review receipt',
+                  gl: 'Revisar ticket',
+                  fr: 'Verifier le ticket',
+                  it: 'Rivedi scontrino',
+                  pt: 'Rever fatura',
+                ),
+              ),
               content: SizedBox(
                 width: 540,
                 child: SingleChildScrollView(
@@ -1043,14 +1686,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       TextField(
                         controller: titleController,
                         decoration: InputDecoration(
-                          labelText: tr(context, es: 'Nombre del ticket', en: 'Receipt name', gl: 'Nome do ticket', fr: 'Nom du ticket', it: 'Nome dello scontrino', pt: 'Nome da fatura'),
+                          labelText: tr(
+                            context,
+                            es: 'Nombre del ticket',
+                            en: 'Receipt name',
+                            gl: 'Nome do ticket',
+                            fr: 'Nom du ticket',
+                            it: 'Nome dello scontrino',
+                            pt: 'Nome da fatura',
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: payerId,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por')),
+                        decoration: InputDecoration(
+                          labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por'),
+                        ),
                         items: payerMembers
                             .map(
                               (member) => DropdownMenuItem(
@@ -1068,18 +1721,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         onChanged: (value) => setDialogState(() => payerId = value ?? payerId),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          parsed.note ?? 'Añadido con OCR',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
+                      ReceiptScanSummary(scan: scan, currency: group.currency),
                       const SizedBox(height: 16),
                       if (items.isEmpty)
                         Container(
@@ -1123,7 +1765,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                     child: TextFormField(
                                       key: ValueKey('receipt-name-$itemId'),
                                       initialValue: item.name,
-                                      decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
+                                      decoration: InputDecoration(
+                                        labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item'),
+                                      ),
                                       onChanged: (value) {
                                         final currentIndex = items.indexWhere((entry) => entry.id == itemId);
                                         if (currentIndex >= 0) {
@@ -1136,7 +1780,15 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   IconButton(
                                     onPressed: () => setDialogState(() => items.removeWhere((entry) => entry.id == itemId)),
                                     icon: const Icon(Icons.delete_outline_rounded),
-                                    tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
+                                    tooltip: tr(
+                                      context,
+                                      es: 'Eliminar item',
+                                      en: 'Delete item',
+                                      gl: 'Eliminar item',
+                                      fr: 'Supprimer article',
+                                      it: 'Elimina voce',
+                                      pt: 'Eliminar item',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1144,12 +1796,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               TextFormField(
                                 key: ValueKey('receipt-amount-$itemId'),
                                 initialValue: item.amount.toStringAsFixed(2),
-                                decoration: InputDecoration(labelText: tr(context, es: 'Importe', en: 'Amount', gl: 'Importe', fr: 'Montant', it: 'Importo', pt: 'Valor')),
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Importe',
+                                    en: 'Amount',
+                                    gl: 'Importe',
+                                    fr: 'Montant',
+                                    it: 'Importo',
+                                    pt: 'Valor',
+                                  ),
+                                ),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 onChanged: (value) {
                                   final currentIndex = items.indexWhere((entry) => entry.id == itemId);
                                   if (currentIndex >= 0) {
-                                    items[currentIndex] = items[currentIndex].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount);
+                                    items[currentIndex] = items[currentIndex].copyWith(
+                                      amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount,
+                                    );
                                   }
                                 },
                               ),
@@ -1157,7 +1821,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               DropdownButtonFormField<String>(
                                 key: ValueKey('receipt-category-$itemId'),
                                 initialValue: category.id,
-                                decoration: InputDecoration(labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria')),
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Categoría',
+                                    en: 'Category',
+                                    gl: 'Categoria',
+                                    fr: 'Categorie',
+                                    it: 'Categoria',
+                                    pt: 'Categoria',
+                                  ),
+                                ),
                                 items: categories
                                     .map(
                                       (cat) => DropdownMenuItem(
@@ -1195,7 +1869,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                     }
                                   },
                                   icon: const Icon(Icons.tune_rounded),
-                                  label: Text(tr(context, es: 'Ajustar reparto', en: 'Adjust split', gl: 'Axustar reparto', fr: 'Ajuster la repartition', it: 'Regola ripartizione', pt: 'Ajustar divisao')),
+                                  label: Text(
+                                    tr(
+                                      context,
+                                      es: 'Ajustar reparto',
+                                      en: 'Adjust split',
+                                      gl: 'Axustar reparto',
+                                      fr: 'Ajuster la repartition',
+                                      it: 'Regola ripartizione',
+                                      pt: 'Ajustar divisao',
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1219,7 +1903,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             });
                           },
                           icon: const Icon(Icons.add_rounded),
-                          label: Text(tr(context, es: 'Añadir item', en: 'Add item', gl: 'Engadir item', fr: 'Ajouter article', it: 'Aggiungi voce', pt: 'Adicionar item')),
+                          label: Text(
+                            tr(
+                              context,
+                              es: 'Añadir item',
+                              en: 'Add item',
+                              gl: 'Engadir item',
+                              fr: 'Ajouter article',
+                              it: 'Aggiungi voce',
+                              pt: 'Adicionar item',
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -1227,68 +1921,89 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: isSaving
                       ? null
                       : () async {
                           setDialogState(() => isSaving = true);
                           try {
-                     final validItems = items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).toList(growable: false);
-                    if (validItems.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            tr(
-                              context,
-                              es: 'Revisa los items detectados en el ticket.',
-                              en: 'Check the items detected on the receipt.',
-                              gl: 'Revisa os items detectados no ticket.',
-                              fr: 'Verifiez les articles detectes sur le ticket.',
-                              it: 'Controlla le voci rilevate nello scontrino.',
-                              pt: 'Revê os itens detetados na fatura.',
-                            ),
-                          ),
-                        ),
-                      );
-                      setDialogState(() => isSaving = false);
-                      return;
-                    }
+                            final validItems = items
+                                .where((item) => item.amount > 0 && item.name.trim().isNotEmpty)
+                                .toList(growable: false);
+                            if (validItems.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    tr(
+                                      context,
+                                      es: 'Revisa los items detectados en el ticket.',
+                                      en: 'Check the items detected on the receipt.',
+                                      gl: 'Revisa os items detectados no ticket.',
+                                      fr: 'Verifiez les articles detectes sur le ticket.',
+                                      it: 'Controlla le voci rilevate nello scontrino.',
+                                      pt: 'Revê os itens detetados na fatura.',
+                                    ),
+                                  ),
+                                ),
+                              );
+                              setDialogState(() => isSaving = false);
+                              return;
+                            }
 
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
 
-                     final expense = ExpenseRecord(
-                       id: uuid.v4(),
-                       title: titleController.text.trim().isEmpty ? validItems.first.name.trim() : titleController.text.trim(),
-                       payerId: payerId,
-                       createdAt: DateTime.now(),
-                       note: parsed.note ?? 'Añadido con OCR',
-                       items: validItems
-                           .map(
-                             (item) => item.copyWith(
-                               id: uuid.v4(),
-                               name: item.name.trim(),
-                             ),
-                           )
-                           .toList(growable: false),
-                     );
-                     await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
-                     if (context.mounted) {
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         SnackBar(
-                           content: Text(tr(context, es: 'Ticket guardado con subgastos.', en: 'Receipt saved with subexpenses.', gl: 'Ticket gardado con subgastos.', fr: 'Ticket enregistre avec des sous-depenses.', it: 'Scontrino salvato con sottospese.', pt: 'Fatura guardada com subgastos.')),
-                         ),
-                       );
-                     }
+                            final expense = ExpenseRecord(
+                              id: uuid.v4(),
+                              title: titleController.text.trim().isEmpty ? validItems.first.name.trim() : titleController.text.trim(),
+                              payerId: payerId,
+                              createdAt: DateTime.now(),
+                              note: _receiptNote(context, scan),
+                              items: validItems.map((item) => item.copyWith(id: uuid.v4(), name: item.name.trim())).toList(growable: false),
+                            );
+                            await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+                            ref.read(appPreferencesProvider.notifier).registerRealUse();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    tr(
+                                      context,
+                                      es: 'Ticket guardado con subgastos.',
+                                      en: 'Receipt saved with subexpenses.',
+                                      gl: 'Ticket gardado con subgastos.',
+                                      fr: 'Ticket enregistre avec des sous-depenses.',
+                                      it: 'Scontrino salvato con sottospese.',
+                                      pt: 'Fatura guardada com subgastos.',
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
                           } catch (error) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
                             }
                           }
                         },
-                  child: Text(tr(context, es: 'Guardar ticket', en: 'Save receipt', gl: 'Gardar ticket', fr: 'Enregistrer le ticket', it: 'Salva scontrino', pt: 'Guardar fatura')),
+                  child: Text(
+                    tr(
+                      context,
+                      es: 'Guardar ticket',
+                      en: 'Save receipt',
+                      gl: 'Gardar ticket',
+                      fr: 'Enregistrer le ticket',
+                      it: 'Salva scontrino',
+                      pt: 'Guardar fatura',
+                    ),
+                  ),
                 ),
               ],
             );
@@ -1307,12 +2022,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     if (allocations == null) {
       return;
     }
-    await ref.read(repositoryProvider).updateItemAllocations(
-          groupId: group.id,
-          expenseId: expense.id,
-          itemId: item.id,
-          allocations: allocations,
-        );
+    await ref
+        .read(repositoryProvider)
+        .updateItemAllocations(groupId: group.id, expenseId: expense.id, itemId: item.id, allocations: allocations);
   }
 
   Future<void> _showExpenseEditorDialog(BuildContext context, ExpenseGroup group, ExpenseRecord expense) async {
@@ -1325,7 +2037,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     final items = expense.items.map((item) => item.copyWith()).toList();
     final payerMembers = sortedMembersByName(group.visibleMembers);
     final categories = [...buildDefaultCategories(), ...group.customCategories];
-    final uuid = const Uuid();
+    const uuid = Uuid();
     var payerId = payerMembers.any((member) => member.userId == expense.payerId) ? expense.payerId : payerMembers.first.userId;
 
     await showDialog<void>(
@@ -1334,7 +2046,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Editar gasto', en: 'Edit expense', gl: 'Editar gasto', fr: 'Modifier la depense', it: 'Modifica spesa', pt: 'Editar despesa')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Editar gasto',
+                  en: 'Edit expense',
+                  gl: 'Editar gasto',
+                  fr: 'Modifier la depense',
+                  it: 'Modifica spesa',
+                  pt: 'Editar despesa',
+                ),
+              ),
               content: SizedBox(
                 width: 560,
                 child: SingleChildScrollView(
@@ -1344,14 +2066,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       TextField(
                         controller: titleController,
                         decoration: InputDecoration(
-                          labelText: tr(context, es: 'Título del gasto', en: 'Expense title', gl: 'Titulo do gasto', fr: 'Titre de la depense', it: 'Titolo della spesa', pt: 'Titulo da despesa'),
+                          labelText: tr(
+                            context,
+                            es: 'Título del gasto',
+                            en: 'Expense title',
+                            gl: 'Titulo do gasto',
+                            fr: 'Titre de la depense',
+                            it: 'Titolo della spesa',
+                            pt: 'Titulo da despesa',
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: payerId,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por')),
+                        decoration: InputDecoration(
+                          labelText: tr(context, es: 'Pagó', en: 'Paid by', gl: 'Pagou', fr: 'Paye par', it: 'Pagato da', pt: 'Pago por'),
+                        ),
                         items: payerMembers
                             .map(
                               (member) => DropdownMenuItem(
@@ -1372,12 +2104,18 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       TextField(
                         controller: noteController,
                         maxLines: 2,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Nota', en: 'Note', gl: 'Nota', fr: 'Note', it: 'Nota', pt: 'Nota'), alignLabelWithHint: true),
+                        decoration: InputDecoration(
+                          labelText: tr(context, es: 'Nota', en: 'Note', gl: 'Nota', fr: 'Note', it: 'Nota', pt: 'Nota'),
+                          alignLabelWithHint: true,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: Text(tr(context, es: 'Items', en: 'Items', gl: 'Items', fr: 'Articles', it: 'Voci', pt: 'Itens'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                        child: Text(
+                          tr(context, es: 'Items', en: 'Items', gl: 'Items', fr: 'Articles', it: 'Voci', pt: 'Itens'),
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       ...items.asMap().entries.map((entry) {
@@ -1400,7 +2138,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                     child: TextFormField(
                                       key: ValueKey('expense-name-$itemId'),
                                       initialValue: item.name,
-                                      decoration: InputDecoration(labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item')),
+                                      decoration: InputDecoration(
+                                        labelText: tr(context, es: 'Item', en: 'Item', gl: 'Item', fr: 'Article', it: 'Voce', pt: 'Item'),
+                                      ),
                                       onChanged: (value) {
                                         final currentIndex = items.indexWhere((entry) => entry.id == itemId);
                                         if (currentIndex >= 0) {
@@ -1411,9 +2151,19 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    onPressed: items.length == 1 ? null : () => setDialogState(() => items.removeWhere((entry) => entry.id == itemId)),
+                                    onPressed: items.length == 1
+                                        ? null
+                                        : () => setDialogState(() => items.removeWhere((entry) => entry.id == itemId)),
                                     icon: const Icon(Icons.delete_outline_rounded),
-                                    tooltip: tr(context, es: 'Eliminar item', en: 'Delete item', gl: 'Eliminar item', fr: 'Supprimer article', it: 'Elimina voce', pt: 'Eliminar item'),
+                                    tooltip: tr(
+                                      context,
+                                      es: 'Eliminar item',
+                                      en: 'Delete item',
+                                      gl: 'Eliminar item',
+                                      fr: 'Supprimer article',
+                                      it: 'Elimina voce',
+                                      pt: 'Eliminar item',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1421,12 +2171,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               TextFormField(
                                 key: ValueKey('expense-amount-$itemId'),
                                 initialValue: item.amount.toStringAsFixed(2),
-                                decoration: InputDecoration(labelText: tr(context, es: 'Importe', en: 'Amount', gl: 'Importe', fr: 'Montant', it: 'Importo', pt: 'Valor')),
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Importe',
+                                    en: 'Amount',
+                                    gl: 'Importe',
+                                    fr: 'Montant',
+                                    it: 'Importo',
+                                    pt: 'Valor',
+                                  ),
+                                ),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 onChanged: (value) {
                                   final currentIndex = items.indexWhere((entry) => entry.id == itemId);
                                   if (currentIndex >= 0) {
-                                    items[currentIndex] = items[currentIndex].copyWith(amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount);
+                                    items[currentIndex] = items[currentIndex].copyWith(
+                                      amount: double.tryParse(value.replaceAll(',', '.')) ?? items[currentIndex].amount,
+                                    );
                                   }
                                 },
                               ),
@@ -1434,7 +2196,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               DropdownButtonFormField<String>(
                                 key: ValueKey('expense-category-$itemId'),
                                 initialValue: category.id,
-                                decoration: InputDecoration(labelText: tr(context, es: 'Categoría', en: 'Category', gl: 'Categoria', fr: 'Categorie', it: 'Categoria', pt: 'Categoria')),
+                                decoration: InputDecoration(
+                                  labelText: tr(
+                                    context,
+                                    es: 'Categoría',
+                                    en: 'Category',
+                                    gl: 'Categoria',
+                                    fr: 'Categorie',
+                                    it: 'Categoria',
+                                    pt: 'Categoria',
+                                  ),
+                                ),
                                 items: categories
                                     .map(
                                       (cat) => DropdownMenuItem(
@@ -1472,7 +2244,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                     }
                                   },
                                   icon: const Icon(Icons.tune_rounded),
-                                  label: Text(tr(context, es: 'Ajustar reparto', en: 'Adjust split', gl: 'Axustar reparto', fr: 'Ajuster la repartition', it: 'Regola ripartizione', pt: 'Ajustar divisao')),
+                                  label: Text(
+                                    tr(
+                                      context,
+                                      es: 'Ajustar reparto',
+                                      en: 'Adjust split',
+                                      gl: 'Axustar reparto',
+                                      fr: 'Ajuster la repartition',
+                                      it: 'Regola ripartizione',
+                                      pt: 'Ajustar divisao',
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1496,7 +2278,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                             });
                           },
                           icon: const Icon(Icons.add_rounded),
-                          label: Text(tr(context, es: 'Añadir item', en: 'Add item', gl: 'Engadir item', fr: 'Ajouter article', it: 'Aggiungi voce', pt: 'Adicionar item')),
+                          label: Text(
+                            tr(
+                              context,
+                              es: 'Añadir item',
+                              en: 'Add item',
+                              gl: 'Engadir item',
+                              fr: 'Ajouter article',
+                              it: 'Aggiungi voce',
+                              pt: 'Adicionar item',
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -1504,18 +2296,37 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
                     final validItems = items.where((item) => item.amount > 0 && item.name.trim().isNotEmpty).toList();
                     if (titleController.text.trim().isEmpty || validItems.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'Revisa el título y los items del gasto.', en: 'Check the title and expense items.', gl: 'Revisa o titulo e os items do gasto.', fr: 'Verifiez le titre et les articles de la depense.', it: 'Controlla il titolo e le voci della spesa.', pt: 'Revê o titulo e os itens da despesa.'))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            tr(
+                              context,
+                              es: 'Revisa el título y los items del gasto.',
+                              en: 'Check the title and expense items.',
+                              gl: 'Revisa o titulo e os items do gasto.',
+                              fr: 'Verifiez le titre et les articles de la depense.',
+                              it: 'Controlla il titolo e le voci della spesa.',
+                              pt: 'Revê o titulo e os itens da despesa.',
+                            ),
+                          ),
+                        ),
+                      );
                       return;
                     }
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
-                    await ref.read(repositoryProvider).updateExpense(
+                    await ref
+                        .read(repositoryProvider)
+                        .updateExpense(
                           groupId: group.id,
                           expense: expense.copyWith(
                             title: titleController.text.trim(),
@@ -1527,12 +2338,32 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(tr(context, es: 'Gasto actualizado.', en: 'Expense updated.', gl: 'Gasto actualizado.', fr: 'Depense mise a jour.', it: 'Spesa aggiornata.', pt: 'Despesa atualizada.')),
+                          content: Text(
+                            tr(
+                              context,
+                              es: 'Gasto actualizado.',
+                              en: 'Expense updated.',
+                              gl: 'Gasto actualizado.',
+                              fr: 'Depense mise a jour.',
+                              it: 'Spesa aggiornata.',
+                              pt: 'Despesa atualizada.',
+                            ),
+                          ),
                         ),
                       );
                     }
                   },
-                  child: Text(tr(context, es: 'Guardar cambios', en: 'Save changes', gl: 'Gardar cambios', fr: 'Enregistrer les modifications', it: 'Salva modifiche', pt: 'Guardar alteracoes')),
+                  child: Text(
+                    tr(
+                      context,
+                      es: 'Guardar cambios',
+                      en: 'Save changes',
+                      gl: 'Gardar cambios',
+                      fr: 'Enregistrer les modifications',
+                      it: 'Salva modifiche',
+                      pt: 'Guardar alteracoes',
+                    ),
+                  ),
                 ),
               ],
             );
@@ -1547,17 +2378,44 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       _showGroupClosedMessage(context);
       return;
     }
-    final approved = await showDialog<bool>(
+    final approved =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Eliminar gasto', en: 'Delete expense', gl: 'Eliminar gasto', fr: 'Supprimer la depense', it: 'Elimina spesa', pt: 'Eliminar despesa')),
-              content: Text(tr(context, es: 'Se eliminará "${expense.title}" y ya no contará en balances ni gráficos.', en: '"${expense.title}" will be deleted and will no longer count in balances or charts.', gl: 'Eliminarase "${expense.title}" e xa non contara en balances nin graficos.', fr: '"${expense.title}" sera supprimee et ne comptera plus dans les soldes ni les graphiques.', it: '"${expense.title}" verra eliminata e non comparira piu in saldi o grafici.', pt: '"${expense.title}" sera eliminada e deixara de contar em saldos e graficos.')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Eliminar gasto',
+                  en: 'Delete expense',
+                  gl: 'Eliminar gasto',
+                  fr: 'Supprimer la depense',
+                  it: 'Elimina spesa',
+                  pt: 'Eliminar despesa',
+                ),
+              ),
+              content: Text(
+                tr(
+                  context,
+                  es: 'Se eliminará "${expense.title}" y ya no contará en balances ni gráficos.',
+                  en: '"${expense.title}" will be deleted and will no longer count in balances or charts.',
+                  gl: 'Eliminarase "${expense.title}" e xa non contara en balances nin graficos.',
+                  fr: '"${expense.title}" sera supprimee et ne comptera plus dans les soldes ni les graphiques.',
+                  it: '"${expense.title}" verra eliminata e non comparira piu in saldi o grafici.',
+                  pt: '"${expense.title}" sera eliminada e deixara de contar em saldos e graficos.',
+                ),
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton.icon(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC62828), foregroundColor: colorOn(const Color(0xFFC62828))),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC62828),
+                    foregroundColor: colorOn(const Color(0xFFC62828)),
+                  ),
                   icon: const Icon(Icons.delete_forever_rounded),
                   label: Text(tr(context, es: 'Eliminar', en: 'Delete', gl: 'Eliminar', fr: 'Supprimer', it: 'Elimina', pt: 'Eliminar')),
                 ),
@@ -1605,15 +2463,47 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Reparto avanzado', en: 'Advanced split', gl: 'Reparto avanzado', fr: 'Repartition avancee', it: 'Ripartizione avanzata', pt: 'Divisao avancada')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Reparto avanzado',
+                  en: 'Advanced split',
+                  gl: 'Reparto avanzado',
+                  fr: 'Repartition avancee',
+                  it: 'Ripartizione avanzata',
+                  pt: 'Divisao avancada',
+                ),
+              ),
               content: SizedBox(
                 width: 420,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(tr(context, es: 'Decide qué porcentaje paga cada persona. La suma total debe dar 100%.', en: 'Set the percentage paid by each person. The total must be 100%.', gl: 'Decide que porcentaxe paga cada persoa. A suma total debe dar 100%.', fr: 'Decidez quel pourcentage paie chaque personne. Le total doit faire 100 %.', it: 'Decidi quale percentuale paga ogni persona. Il totale deve essere 100%.', pt: 'Decide que percentagem paga cada pessoa. O total deve ser 100%.'), style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      tr(
+                        context,
+                        es: 'Decide qué porcentaje paga cada persona. La suma total debe dar 100%.',
+                        en: 'Set the percentage paid by each person. The total must be 100%.',
+                        gl: 'Decide que porcentaxe paga cada persoa. A suma total debe dar 100%.',
+                        fr: 'Decidez quel pourcentage paie chaque personne. Le total doit faire 100 %.',
+                        it: 'Decidi quale percentuale paga ogni persona. Il totale deve essere 100%.',
+                        pt: 'Decide que percentagem paga cada pessoa. O total deve ser 100%.',
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                     const SizedBox(height: 8),
-                    Text(tr(context, es: 'Si una persona no tiene este gasto, márcala como sin gasto: se pondrá a 0 y se recalculará el resto.', en: 'If someone is not part of this expense, mark them as no expense: they will be set to 0 and the rest will be recalculated.', gl: 'Se unha persoa non ten este gasto, marcaa sen gasto: porase a 0 e recalcularase o resto.', fr: 'Si une personne ne participe pas a cette depense, marquez-la sans depense : elle passera a 0 et le reste sera recalcule.', it: 'Se una persona non partecipa a questa spesa, segnala nessuna spesa: verra impostata a 0 e il resto verra ricalcolato.', pt: 'Se uma pessoa nao entra nesta despesa, marca-a sem despesa: fica a 0 e o resto sera recalculado.'), style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      tr(
+                        context,
+                        es: 'Si una persona no tiene este gasto, márcala como sin gasto: se pondrá a 0 y se recalculará el resto.',
+                        en: 'If someone is not part of this expense, mark them as no expense: they will be set to 0 and the rest will be recalculated.',
+                        gl: 'Se unha persoa non ten este gasto, marcaa sen gasto: porase a 0 e recalcularase o resto.',
+                        fr: 'Si une personne ne participe pas a cette depense, marquez-la sans depense : elle passera a 0 et le reste sera recalcule.',
+                        it: 'Se una persona non partecipa a questa spesa, segnala nessuna spesa: verra impostata a 0 e il resto verra ricalcolato.',
+                        pt: 'Se uma pessoa nao entra nesta despesa, marca-a sem despesa: fica a 0 e o resto sera recalculado.',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     const SizedBox(height: 12),
                     ...members.map((member) {
                       final included = includedUserIds.contains(member.userId);
@@ -1646,7 +2536,27 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                                   applyEqualSplitToIncludedMembers();
                                 });
                               },
-                              child: Text(included ? tr(context, es: 'Tiene gasto', en: 'Included', gl: 'Ten gasto', fr: 'Inclus', it: 'Incluso', pt: 'Incluido') : tr(context, es: 'Sin gasto', en: 'No expense', gl: 'Sen gasto', fr: 'Sans depense', it: 'Senza spesa', pt: 'Sem despesa')),
+                              child: Text(
+                                included
+                                    ? tr(
+                                        context,
+                                        es: 'Tiene gasto',
+                                        en: 'Included',
+                                        gl: 'Ten gasto',
+                                        fr: 'Inclus',
+                                        it: 'Incluso',
+                                        pt: 'Incluido',
+                                      )
+                                    : tr(
+                                        context,
+                                        es: 'Sin gasto',
+                                        en: 'No expense',
+                                        gl: 'Sen gasto',
+                                        fr: 'Sans depense',
+                                        it: 'Senza spesa',
+                                        pt: 'Sem despesa',
+                                      ),
+                              ),
                             ),
                           ],
                         ),
@@ -1660,9 +2570,14 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   onPressed: () {
                     setDialogState(applyEqualSplitToIncludedMembers);
                   },
-                  child: Text(tr(context, es: 'Equitativo', en: 'Equal split', gl: 'Equitativo', fr: 'Egalitaire', it: 'Equo', pt: 'Equitativo')),
+                  child: Text(
+                    tr(context, es: 'Equitativo', en: 'Equal split', gl: 'Equitativo', fr: 'Egalitaire', it: 'Equo', pt: 'Equitativo'),
+                  ),
                 ),
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () {
                     final allocations = members.map((member) {
@@ -1674,7 +2589,21 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     }).toList();
                     final sum = allocations.fold<double>(0, (value, item) => value + item.percentage);
                     if ((sum - 100).abs() > 0.01) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'La suma de porcentajes debe ser 100%.', en: 'The percentage sum must be 100%.', gl: 'A suma de porcentaxes debe ser 100%.', fr: 'La somme des pourcentages doit etre de 100 %.', it: 'La somma delle percentuali deve essere 100%.', pt: 'A soma das percentagens deve ser 100%.'))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            tr(
+                              context,
+                              es: 'La suma de porcentajes debe ser 100%.',
+                              en: 'The percentage sum must be 100%.',
+                              gl: 'A suma de porcentaxes debe ser 100%.',
+                              fr: 'La somme des pourcentages doit etre de 100 %.',
+                              it: 'La somma delle percentuali deve essere 100%.',
+                              pt: 'A soma das percentagens deve ser 100%.',
+                            ),
+                          ),
+                        ),
+                      );
                       return;
                     }
                     Navigator.of(dialogContext).pop(allocations);
@@ -1697,15 +2626,66 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
 
   Future<void> _toggleGroupClosed(BuildContext context, ExpenseGroup group) async {
     final closing = !group.isClosed;
-    final approved = await showDialog<bool>(
+    final approved =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: Text(closing ? tr(context, es: 'Archivar grupo', en: 'Archive group', gl: 'Arquivar grupo', fr: 'Archiver le groupe', it: 'Archivia gruppo', pt: 'Arquivar grupo') : tr(context, es: 'Reabrir grupo', en: 'Reopen group', gl: 'Reabrir grupo', fr: 'Rouvrir le groupe', it: 'Riapri gruppo', pt: 'Reabrir grupo')),
-              content: Text(closing ? tr(context, es: 'Los importes pendientes pasarán a 0 y nadie podrá añadir gastos ni modificar datos mientras el grupo esté archivado.', en: 'Pending amounts will be reset to 0 and no one will be able to add expenses or modify data while the group is archived.', gl: 'Os importes pendentes pasarán a 0 e ninguén poderá engadir gastos nin modificar datos mentres o grupo estea arquivado.', fr: 'Les montants en attente seront remis a 0 et personne ne pourra ajouter des depenses ni modifier les donnees tant que le groupe sera archive.', it: 'Gli importi pendenti verranno azzerati e nessuno potra aggiungere spese o modificare dati mentre il gruppo e archiviato.', pt: 'Os valores pendentes serão colocados a 0 e ninguém poderá adicionar despesas nem modificar dados enquanto o grupo estiver arquivado.') : tr(context, es: 'El grupo volverá a permitir acciones, pero los importes archivados seguirán a 0.', en: 'The group will allow actions again, but archived amounts will stay at 0.', gl: 'O grupo volverá permitir accións, pero os importes arquivados seguirán a 0.', fr: 'Le groupe permettra de nouveau les actions, mais les montants archives resteront a 0.', it: 'Il gruppo permettera di nuovo le azioni, ma gli importi archiviati resteranno a 0.', pt: 'O grupo voltará a permitir ações, mas os valores arquivados continuarão a 0.')),
+              title: Text(
+                closing
+                    ? tr(
+                        context,
+                        es: 'Archivar grupo',
+                        en: 'Archive group',
+                        gl: 'Arquivar grupo',
+                        fr: 'Archiver le groupe',
+                        it: 'Archivia gruppo',
+                        pt: 'Arquivar grupo',
+                      )
+                    : tr(
+                        context,
+                        es: 'Reabrir grupo',
+                        en: 'Reopen group',
+                        gl: 'Reabrir grupo',
+                        fr: 'Rouvrir le groupe',
+                        it: 'Riapri gruppo',
+                        pt: 'Reabrir grupo',
+                      ),
+              ),
+              content: Text(
+                closing
+                    ? tr(
+                        context,
+                        es: 'Los importes pendientes pasarán a 0 y nadie podrá añadir gastos ni modificar datos mientras el grupo esté archivado.',
+                        en: 'Pending amounts will be reset to 0 and no one will be able to add expenses or modify data while the group is archived.',
+                        gl: 'Os importes pendentes pasarán a 0 e ninguén poderá engadir gastos nin modificar datos mentres o grupo estea arquivado.',
+                        fr: 'Les montants en attente seront remis a 0 et personne ne pourra ajouter des depenses ni modifier les donnees tant que le groupe sera archive.',
+                        it: 'Gli importi pendenti verranno azzerati e nessuno potra aggiungere spese o modificare dati mentre il gruppo e archiviato.',
+                        pt: 'Os valores pendentes serão colocados a 0 e ninguém poderá adicionar despesas nem modificar dados enquanto o grupo estiver arquivado.',
+                      )
+                    : tr(
+                        context,
+                        es: 'El grupo volverá a permitir acciones, pero los importes archivados seguirán a 0.',
+                        en: 'The group will allow actions again, but archived amounts will stay at 0.',
+                        gl: 'O grupo volverá permitir accións, pero os importes arquivados seguirán a 0.',
+                        fr: 'Le groupe permettra de nouveau les actions, mais les montants archives resteront a 0.',
+                        it: 'Il gruppo permettera di nuovo le azioni, ma gli importi archiviati resteranno a 0.',
+                        pt: 'O grupo voltará a permitir ações, mas os valores arquivados continuarão a 0.',
+                      ),
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-                FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(closing ? tr(context, es: 'Archivar', en: 'Archive', gl: 'Arquivar', fr: 'Archiver', it: 'Archivia', pt: 'Arquivar') : tr(context, es: 'Reabrir', en: 'Reopen', gl: 'Reabrir', fr: 'Rouvrir', it: 'Riapri', pt: 'Reabrir'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(
+                    closing
+                        ? tr(context, es: 'Archivar', en: 'Archive', gl: 'Arquivar', fr: 'Archiver', it: 'Archivia', pt: 'Arquivar')
+                        : tr(context, es: 'Reabrir', en: 'Reopen', gl: 'Reabrir', fr: 'Rouvrir', it: 'Riapri', pt: 'Reabrir'),
+                  ),
+                ),
               ],
             );
           },
@@ -1718,7 +2698,27 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(closing ? tr(context, es: 'Grupo archivado y saldos puestos a 0.', en: 'Group archived and balances reset to 0.', gl: 'Grupo arquivado e saldos postos a 0.', fr: 'Groupe archive et soldes remis a 0.', it: 'Gruppo archiviato e saldi azzerati.', pt: 'Grupo arquivado e saldos colocados a 0.') : tr(context, es: 'Grupo reabierto.', en: 'Group reopened.', gl: 'Grupo reaberto.', fr: 'Groupe rouvert.', it: 'Gruppo riaperto.', pt: 'Grupo reaberto.')),
+          content: Text(
+            closing
+                ? tr(
+                    context,
+                    es: 'Grupo archivado y saldos puestos a 0.',
+                    en: 'Group archived and balances reset to 0.',
+                    gl: 'Grupo arquivado e saldos postos a 0.',
+                    fr: 'Groupe archive et soldes remis a 0.',
+                    it: 'Gruppo archiviato e saldi azzerati.',
+                    pt: 'Grupo arquivado e saldos colocados a 0.',
+                  )
+                : tr(
+                    context,
+                    es: 'Grupo reabierto.',
+                    en: 'Group reopened.',
+                    gl: 'Grupo reaberto.',
+                    fr: 'Groupe rouvert.',
+                    it: 'Gruppo riaperto.',
+                    pt: 'Grupo reaberto.',
+                  ),
+          ),
         ),
       );
     }
@@ -1734,8 +2734,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         SnackBar(
           content: Text(
             sent == 0
-                ? tr(context, es: 'No hay deudas pendientes que reclamar a integrantes validados.', en: 'There are no pending debts to request from validated members.', gl: 'Non hai debedas pendentes que reclamar a integrantes validados.', fr: 'Il n y a pas de dettes en attente a reclamer a des membres valides.', it: 'Non ci sono debiti pendenti da richiedere ai membri validati.', pt: 'Nao ha dividas pendentes para pedir a integrantes validados.')
-                : tr(context, es: 'Aviso enviado a $sent integrante(s) validado(s).', en: 'Notice sent to $sent validated member(s).', gl: 'Aviso enviado a $sent integrante(s) validado(s).', fr: 'Avis envoye a $sent membre(s) valide(s).', it: 'Avviso inviato a $sent membro/i validato/i.', pt: 'Aviso enviado a $sent integrante(s) validado(s).'),
+                ? tr(
+                    context,
+                    es: 'No hay deudas pendientes que reclamar a integrantes validados.',
+                    en: 'There are no pending debts to request from validated members.',
+                    gl: 'Non hai debedas pendentes que reclamar a integrantes validados.',
+                    fr: 'Il n y a pas de dettes en attente a reclamer a des membres valides.',
+                    it: 'Non ci sono debiti pendenti da richiedere ai membri validati.',
+                    pt: 'Nao ha dividas pendentes para pedir a integrantes validados.',
+                  )
+                : tr(
+                    context,
+                    es: 'Aviso enviado a $sent integrante(s) validado(s).',
+                    en: 'Notice sent to $sent validated member(s).',
+                    gl: 'Aviso enviado a $sent integrante(s) validado(s).',
+                    fr: 'Avis envoye a $sent membre(s) valide(s).',
+                    it: 'Avviso inviato a $sent membro/i validato/i.',
+                    pt: 'Aviso enviado a $sent integrante(s) validado(s).',
+                  ),
           ),
         ),
       );
@@ -1749,7 +2765,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   void _showGroupClosedMessage(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(tr(context, es: 'El grupo está cerrado. Solo está disponible en modo consulta.', en: 'The group is closed. It is available in read-only mode.', gl: 'O grupo esta pechado. So esta dispoñible en modo consulta.', fr: 'Le groupe est ferme. Il est disponible en lecture seule.', it: 'Il gruppo e chiuso. E disponibile solo in modalita lettura.', pt: 'O grupo esta fechado. So esta disponivel em modo de consulta.')),
+        content: Text(
+          tr(
+            context,
+            es: 'El grupo está cerrado. Solo está disponible en modo consulta.',
+            en: 'The group is closed. It is available in read-only mode.',
+            gl: 'O grupo esta pechado. So esta dispoñible en modo consulta.',
+            fr: 'Le groupe est ferme. Il est disponible en lecture seule.',
+            it: 'Il gruppo e chiuso. E disponibile solo in modalita lettura.',
+            pt: 'O grupo esta fechado. So esta disponivel em modo de consulta.',
+          ),
+        ),
       ),
     );
   }
@@ -1787,10 +2813,33 @@ class _OverviewTab extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(tr(context, es: 'Acciones rápidas', en: 'Quick actions', gl: 'Accions rapidas', fr: 'Actions rapides', it: 'Azioni rapide', pt: 'Acoes rapidas')),
-          content: Text(tr(context, es: 'Aquí tienes accesos directos para invitar, añadir gastos, gestionar categorías y subir tickets sin salir del resumen del grupo.', en: 'Here you have direct access to invite people, add expenses, manage categories, and upload receipts without leaving the group overview.', gl: 'Aqui tes accesos directos para convidar, engadir gastos, xestionar categorias e subir tickets sen saír do resumo do grupo.', fr: 'Vous avez ici des acces directs pour inviter, ajouter des depenses, gerer les categories et importer des tickets sans quitter le resume du groupe.', it: 'Qui hai accessi rapidi per invitare, aggiungere spese, gestire categorie e caricare scontrini senza uscire dal riepilogo del gruppo.', pt: 'Aqui tens acessos diretos para convidar, adicionar despesas, gerir categorias e carregar faturas sem sair do resumo do grupo.')),
+          title: Text(
+            tr(
+              context,
+              es: 'Acciones rápidas',
+              en: 'Quick actions',
+              gl: 'Accions rapidas',
+              fr: 'Actions rapides',
+              it: 'Azioni rapide',
+              pt: 'Acoes rapidas',
+            ),
+          ),
+          content: Text(
+            tr(
+              context,
+              es: 'Aquí tienes accesos directos para invitar, añadir gastos, gestionar categorías y subir tickets sin salir del resumen del grupo.',
+              en: 'Here you have direct access to invite people, add expenses, manage categories, and upload receipts without leaving the group overview.',
+              gl: 'Aqui tes accesos directos para convidar, engadir gastos, xestionar categorias e subir tickets sen saír do resumo do grupo.',
+              fr: 'Vous avez ici des acces directs pour inviter, ajouter des depenses, gerer les categories et importer des tickets sans quitter le resume du groupe.',
+              it: 'Qui hai accessi rapidi per invitare, aggiungere spese, gestire categorie e caricare scontrini senza uscire dal riepilogo del gruppo.',
+              pt: 'Aqui tens acessos diretos para convidar, adicionar despesas, gerir categorias e carregar faturas sem sair do resumo do grupo.',
+            ),
+          ),
           actions: [
-            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cerrar', en: 'Close', gl: 'Pechar', fr: 'Fermer', it: 'Chiudi', pt: 'Fechar'))),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(context, es: 'Cerrar', en: 'Close', gl: 'Pechar', fr: 'Fermer', it: 'Chiudi', pt: 'Fechar')),
+            ),
           ],
         );
       },
@@ -1808,11 +2857,32 @@ class _OverviewTab extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: _SummaryCard(label: tr(context, es: 'Total grupo', en: 'Group total', gl: 'Total do grupo', fr: 'Total du groupe', it: 'Totale gruppo', pt: 'Total do grupo'), value: money(totalGroupSpend(group), group.currency))),
+            Expanded(
+              child: _SummaryCard(
+                label: tr(
+                  context,
+                  es: 'Total grupo',
+                  en: 'Group total',
+                  gl: 'Total do grupo',
+                  fr: 'Total du groupe',
+                  it: 'Totale gruppo',
+                  pt: 'Total do grupo',
+                ),
+                value: money(totalGroupSpend(group), group.currency),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: _SummaryCard(
-                label: tr(context, es: 'Tu balance', en: 'Your balance', gl: 'O teu balance', fr: 'Votre solde', it: 'Il tuo saldo', pt: 'O teu saldo'),
+                label: tr(
+                  context,
+                  es: 'Tu balance',
+                  en: 'Your balance',
+                  gl: 'O teu balance',
+                  fr: 'Votre solde',
+                  it: 'Il tuo saldo',
+                  pt: 'O teu saldo',
+                ),
                 value: '${myBalance >= 0 ? '+' : ''}${money(myBalance, group.currency)}',
                 labelColor: balancePalette.label,
                 valueColor: balancePalette.foreground,
@@ -1825,9 +2895,19 @@ class _OverviewTab extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _SummaryCard(label: tr(context, es: 'Miembros', en: 'Members', gl: 'Membros', fr: 'Membres', it: 'Membri', pt: 'Membros'), value: '${group.totalDisplayedMembers}')),
+            Expanded(
+              child: _SummaryCard(
+                label: tr(context, es: 'Miembros', en: 'Members', gl: 'Membros', fr: 'Membres', it: 'Membri', pt: 'Membros'),
+                value: '${group.totalDisplayedMembers}',
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _SummaryCard(label: tr(context, es: 'Gastos', en: 'Expenses', gl: 'Gastos', fr: 'Depenses', it: 'Spese', pt: 'Despesas'), value: '${group.expenses.length}')),
+            Expanded(
+              child: _SummaryCard(
+                label: tr(context, es: 'Gastos', en: 'Expenses', gl: 'Gastos', fr: 'Depenses', it: 'Spese', pt: 'Despesas'),
+                value: '${group.expenses.length}',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 20),
@@ -1840,7 +2920,19 @@ class _OverviewTab extends StatelessWidget {
                 children: [
                   const Icon(Icons.lock_clock_rounded),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(tr(context, es: 'Este grupo está cerrado y solo se puede consultar. El administrador puede reabrirlo desde el menú superior.', en: 'This group is closed and can only be viewed. The admin can reopen it from the top menu.', gl: 'Este grupo esta pechado e so se pode consultar. A administracion pode reabrilo desde o menu superior.', fr: 'Ce groupe est ferme et uniquement consultable. L administrateur peut le rouvrir depuis le menu superieur.', it: 'Questo gruppo e chiuso e consultabile soltanto. L admin puo riaprirlo dal menu superiore.', pt: 'Este grupo esta fechado e so pode ser consultado. A administracao pode reabri-lo no menu superior.'))),
+                  Expanded(
+                    child: Text(
+                      tr(
+                        context,
+                        es: 'Este grupo está cerrado y solo se puede consultar. El administrador puede reabrirlo desde el menú superior.',
+                        en: 'This group is closed and can only be viewed. The admin can reopen it from the top menu.',
+                        gl: 'Este grupo esta pechado e so se pode consultar. A administracion pode reabrilo desde o menu superior.',
+                        fr: 'Ce groupe est ferme et uniquement consultable. L administrateur peut le rouvrir depuis le menu superieur.',
+                        it: 'Questo gruppo e chiuso e consultabile soltanto. L admin puo riaprirlo dal menu superiore.',
+                        pt: 'Este grupo esta fechado e so pode ser consultado. A administracao pode reabri-lo no menu superior.',
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1849,18 +2941,106 @@ class _OverviewTab extends StatelessWidget {
         ],
         Row(
           children: [
-            Expanded(child: Text(tr(context, es: 'Acciones rápidas', en: 'Quick actions', gl: 'Accions rapidas', fr: 'Actions rapides', it: 'Azioni rapide', pt: 'Acoes rapidas'), style: Theme.of(context).textTheme.headlineSmall)),
-            IconButton(onPressed: () => _showQuickActionsInfo(context), icon: const Icon(Icons.help_outline_rounded), tooltip: tr(context, es: 'Cómo usar estas acciones', en: 'How to use these actions', gl: 'Como usar estas accions', fr: 'Comment utiliser ces actions', it: 'Come usare queste azioni', pt: 'Como usar estas acoes')),
+            Expanded(
+              child: Text(
+                tr(
+                  context,
+                  es: 'Acciones rápidas',
+                  en: 'Quick actions',
+                  gl: 'Accions rapidas',
+                  fr: 'Actions rapides',
+                  it: 'Azioni rapide',
+                  pt: 'Acoes rapidas',
+                ),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            IconButton(
+              onPressed: () => _showQuickActionsInfo(context),
+              icon: const Icon(Icons.help_outline_rounded),
+              tooltip: tr(
+                context,
+                es: 'Cómo usar estas acciones',
+                en: 'How to use these actions',
+                gl: 'Como usar estas accions',
+                fr: 'Comment utiliser ces actions',
+                it: 'Come usare queste azioni',
+                pt: 'Como usar estas acoes',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         ...[
-          _ActionTile(icon: Icons.qr_code_2_rounded, label: tr(context, es: 'Invitar', en: 'Invite', gl: 'Convidar', fr: 'Inviter', it: 'Invita', pt: 'Convidar'), onTap: onInvite, enabled: !groupClosed),
-          _ActionTile(icon: Icons.edit_note_rounded, label: tr(context, es: 'Añadir gasto', en: 'Add expense', gl: 'Engadir gasto', fr: 'Ajouter depense', it: 'Aggiungi spesa', pt: 'Adicionar despesa'), onTap: onAddExpense, enabled: !groupClosed),
-          _ActionTile(icon: Icons.category_rounded, label: tr(context, es: 'Categorías', en: 'Categories', gl: 'Categorias', fr: 'Categories', it: 'Categorie', pt: 'Categorias'), onTap: onCategories, enabled: !groupClosed),
-          if (onManagePeople != null) _ActionTile(icon: Icons.people_alt_rounded, label: tr(context, es: 'Personas y acceso', en: 'People and access', gl: 'Persoas e acceso', fr: 'Personnes et acces', it: 'Persone e accesso', pt: 'Pessoas e acesso'), onTap: onManagePeople!, enabled: !groupClosed),
-          _ActionTile(icon: Icons.photo_library_rounded, label: tr(context, es: 'Subir ticket', en: 'Upload receipt', gl: 'Subir ticket', fr: 'Importer ticket', it: 'Carica scontrino', pt: 'Carregar fatura'), onTap: onOcrGallery, enabled: !groupClosed),
-          _ActionTile(icon: Icons.photo_camera_back_rounded, label: tr(context, es: 'Ticket con cámara', en: 'Receipt with camera', gl: 'Ticket con camara', fr: 'Ticket avec camera', it: 'Scontrino con fotocamera', pt: 'Fatura com camara'), onTap: onOcrCamera, enabled: !groupClosed),
+          _ActionTile(
+            icon: Icons.qr_code_2_rounded,
+            label: tr(context, es: 'Invitar', en: 'Invite', gl: 'Convidar', fr: 'Inviter', it: 'Invita', pt: 'Convidar'),
+            onTap: onInvite,
+            enabled: !groupClosed,
+          ),
+          _ActionTile(
+            icon: Icons.edit_note_rounded,
+            label: tr(
+              context,
+              es: 'Añadir gasto',
+              en: 'Add expense',
+              gl: 'Engadir gasto',
+              fr: 'Ajouter depense',
+              it: 'Aggiungi spesa',
+              pt: 'Adicionar despesa',
+            ),
+            onTap: onAddExpense,
+            enabled: !groupClosed,
+          ),
+          _ActionTile(
+            icon: Icons.category_rounded,
+            label: tr(context, es: 'Categorías', en: 'Categories', gl: 'Categorias', fr: 'Categories', it: 'Categorie', pt: 'Categorias'),
+            onTap: onCategories,
+            enabled: !groupClosed,
+          ),
+          if (onManagePeople != null)
+            _ActionTile(
+              icon: Icons.people_alt_rounded,
+              label: tr(
+                context,
+                es: 'Personas y acceso',
+                en: 'People and access',
+                gl: 'Persoas e acceso',
+                fr: 'Personnes et acces',
+                it: 'Persone e accesso',
+                pt: 'Pessoas e acesso',
+              ),
+              onTap: onManagePeople!,
+              enabled: !groupClosed,
+            ),
+          _ActionTile(
+            icon: Icons.photo_library_rounded,
+            label: tr(
+              context,
+              es: 'Subir ticket',
+              en: 'Upload receipt',
+              gl: 'Subir ticket',
+              fr: 'Importer ticket',
+              it: 'Carica scontrino',
+              pt: 'Carregar fatura',
+            ),
+            onTap: onOcrGallery,
+            enabled: !groupClosed,
+          ),
+          _ActionTile(
+            icon: Icons.photo_camera_back_rounded,
+            label: tr(
+              context,
+              es: 'Ticket con cámara',
+              en: 'Receipt with camera',
+              gl: 'Ticket con camara',
+              fr: 'Ticket avec camera',
+              it: 'Scontrino con fotocamera',
+              pt: 'Fatura com camara',
+            ),
+            onTap: onOcrCamera,
+            enabled: !groupClosed,
+          ),
         ].slices(2).map((row) {
           final tiles = row.toList(growable: false);
           return Padding(
@@ -1881,7 +3061,18 @@ class _OverviewTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(tr(context, es: 'Personas del grupo', en: 'Group people', gl: 'Persoas do grupo', fr: 'Personnes du groupe', it: 'Persone del gruppo', pt: 'Pessoas do grupo'), style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  tr(
+                    context,
+                    es: 'Personas del grupo',
+                    en: 'Group people',
+                    gl: 'Persoas do grupo',
+                    fr: 'Personnes du groupe',
+                    it: 'Persone del gruppo',
+                    pt: 'Pessoas do grupo',
+                  ),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 12),
                 _readableChipWrap(
                   context,
@@ -1891,14 +3082,30 @@ class _OverviewTab extends StatelessWidget {
                     final suffix = member.isPending
                         ? null
                         : member.isDeletedAccount
-                            ? tr(context, es: 'cuenta eliminada', en: 'deleted account', gl: 'conta eliminada', fr: 'compte supprime', it: 'account eliminato', pt: 'conta eliminada')
-                            : member.isArchived
-                                ? tr(context, es: 'histórico', en: 'historical', gl: 'historico', fr: 'historique', it: 'storico', pt: 'historico')
-                                : isOwner
-                                    ? tr(context, es: 'propietario', en: 'owner', gl: 'propietario', fr: 'proprietaire', it: 'proprietario', pt: 'proprietario')
-                                    : isAdmin
-                                        ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
-                                        : null;
+                        ? tr(
+                            context,
+                            es: 'cuenta eliminada',
+                            en: 'deleted account',
+                            gl: 'conta eliminada',
+                            fr: 'compte supprime',
+                            it: 'account eliminato',
+                            pt: 'conta eliminada',
+                          )
+                        : member.isArchived
+                        ? tr(context, es: 'histórico', en: 'historical', gl: 'historico', fr: 'historique', it: 'storico', pt: 'historico')
+                        : isOwner
+                        ? tr(
+                            context,
+                            es: 'propietario',
+                            en: 'owner',
+                            gl: 'propietario',
+                            fr: 'proprietaire',
+                            it: 'proprietario',
+                            pt: 'proprietario',
+                          )
+                        : isAdmin
+                        ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
+                        : null;
                     return Chip(label: Text(suffix == null ? member.name : '${member.name} · $suffix'));
                   }).toList(),
                 ),
@@ -1916,39 +3123,91 @@ class _OverviewTab extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text(tr(context, es: 'Acceso por invitación', en: 'Invite access', gl: 'Acceso por convite', fr: 'Acces par invitation', it: 'Accesso da invito', pt: 'Acesso por convite'), style: Theme.of(context).textTheme.headlineSmall)),
+                      Expanded(
+                        child: Text(
+                          tr(
+                            context,
+                            es: 'Acceso por invitación',
+                            en: 'Invite access',
+                            gl: 'Acceso por convite',
+                            fr: 'Acces par invitation',
+                            it: 'Accesso da invito',
+                            pt: 'Acesso por convite',
+                          ),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
                       IconButton(
                         onPressed: () => _showInfoDialog(
                           context,
-                          title: tr(context, es: 'Enlace del grupo', en: 'Group link', gl: 'Ligazon do grupo', fr: 'Lien du groupe', it: 'Link del gruppo', pt: 'Link do grupo'),
-                          message: group.allowAnonymousJoin ? tr(context, es: 'El grupo permite entrar solo clicando el enlace.', en: 'The group allows joining directly from the link.', gl: 'O grupo permite entrar so clicando a ligazon.', fr: 'Le groupe autorise l entree directe via le lien.', it: 'Il gruppo consente l accesso diretto dal link.', pt: 'O grupo permite entrar so clicando no link.') : tr(context, es: 'El acceso libre por enlace está desactivado.', en: 'Open link access is disabled.', gl: 'O acceso libre por ligazon esta desactivado.', fr: 'L acces libre par lien est desactive.', it: 'L accesso libero da link e disattivato.', pt: 'O acesso livre por link esta desativado.'),
+                          title: tr(
+                            context,
+                            es: 'Enlace del grupo',
+                            en: 'Group link',
+                            gl: 'Ligazon do grupo',
+                            fr: 'Lien du groupe',
+                            it: 'Link del gruppo',
+                            pt: 'Link do grupo',
+                          ),
+                          message: group.allowAnonymousJoin
+                              ? tr(
+                                  context,
+                                  es: 'El grupo permite entrar solo clicando el enlace.',
+                                  en: 'The group allows joining directly from the link.',
+                                  gl: 'O grupo permite entrar so clicando a ligazon.',
+                                  fr: 'Le groupe autorise l entree directe via le lien.',
+                                  it: 'Il gruppo consente l accesso diretto dal link.',
+                                  pt: 'O grupo permite entrar so clicando no link.',
+                                )
+                              : tr(
+                                  context,
+                                  es: 'El acceso libre por enlace está desactivado.',
+                                  en: 'Open link access is disabled.',
+                                  gl: 'O acceso libre por ligazon esta desactivado.',
+                                  fr: 'L acces libre par lien est desactive.',
+                                  it: 'L accesso libero da link e disattivato.',
+                                  pt: 'O acesso livre por link esta desativado.',
+                                ),
                         ),
                         icon: const Icon(Icons.help_outline_rounded),
-                        tooltip: tr(context, es: 'Cómo funciona el enlace', en: 'How the link works', gl: 'Como funciona a ligazon', fr: 'Comment fonctionne le lien', it: 'Come funziona il link', pt: 'Como funciona o link'),
+                        tooltip: tr(
+                          context,
+                          es: 'Cómo funciona el enlace',
+                          en: 'How the link works',
+                          gl: 'Como funciona a ligazon',
+                          fr: 'Comment fonctionne le lien',
+                          it: 'Come funziona il link',
+                          pt: 'Como funciona o link',
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   const SizedBox(height: 12),
                   if (group.pendingMembers.isNotEmpty)
-                    _readableChipWrap(
-                      context,
-                      children: group.pendingMembers.map((member) => Chip(label: Text(member.name))).toList(),
-                    ),
+                    _readableChipWrap(context, children: group.pendingMembers.map((member) => Chip(label: Text(member.name))).toList()),
                 ],
               ),
             ),
           ),
         const SizedBox(height: 20),
-                Text(tr(context, es: 'Categorías activas', en: 'Active categories', gl: 'Categorias activas', fr: 'Categories actives', it: 'Categorie attive', pt: 'Categorias ativas'), style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          tr(
+            context,
+            es: 'Categorías activas',
+            en: 'Active categories',
+            gl: 'Categorias activas',
+            fr: 'Categories actives',
+            it: 'Categorie attive',
+            pt: 'Categorias ativas',
+          ),
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         const SizedBox(height: 12),
         _readableChipWrap(
           context,
           children: categories.map((category) {
-            return Chip(
-              avatar: Icon(categoryIcons[category.iconKey] ?? Icons.receipt_long_rounded, size: 18),
-              label: Text(category.name),
-            );
+            return Chip(avatar: Icon(categoryIcons[category.iconKey] ?? Icons.receipt_long_rounded, size: 18), label: Text(category.name));
           }).toList(),
         ),
       ],
@@ -1965,12 +3224,8 @@ class _BalancesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final incomingByMember = <String, double>{
-      for (final member in group.visibleMembers) member.userId: 0,
-    };
-    final outgoingByMember = <String, double>{
-      for (final member in group.visibleMembers) member.userId: 0,
-    };
+    final incomingByMember = <String, double>{for (final member in group.visibleMembers) member.userId: 0};
+    final outgoingByMember = <String, double>{for (final member in group.visibleMembers) member.userId: 0};
 
     for (final edge in settlementEdges(group, activeAccountsOnly: false)) {
       outgoingByMember.update(edge.fromUserId, (value) => value + edge.amount, ifAbsent: () => edge.amount);
@@ -1985,7 +3240,11 @@ class _BalancesTab extends StatelessWidget {
         final incomingAmount = double.parse((incomingByMember[member.userId] ?? 0).toStringAsFixed(2));
         final outgoingAmount = double.parse((outgoingByMember[member.userId] ?? 0).toStringAsFixed(2));
         final palette = _balanceTilePalette(context, balance);
-        final status = balance > 0 ? tr(context, es: 'Recibe', en: 'Gets back', gl: 'Recibe', fr: 'Recoit', it: 'Riceve', pt: 'Recebe') : balance < 0 ? tr(context, es: 'Debe', en: 'Owes', gl: 'Debe', fr: 'Doit', it: 'Deve', pt: 'Deve') : tr(context, es: 'A cero', en: 'Settled', gl: 'A cero', fr: 'A zero', it: 'In pari', pt: 'A zero');
+        final status = balance > 0
+            ? tr(context, es: 'Recibe', en: 'Gets back', gl: 'Recibe', fr: 'Recoit', it: 'Riceve', pt: 'Recebe')
+            : balance < 0
+            ? tr(context, es: 'Debe', en: 'Owes', gl: 'Debe', fr: 'Doit', it: 'Deve', pt: 'Deve')
+            : tr(context, es: 'A cero', en: 'Settled', gl: 'A cero', fr: 'A zero', it: 'In pari', pt: 'A zero');
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Material(
@@ -2010,12 +3269,16 @@ class _BalancesTab extends StatelessWidget {
                         children: [
                           Text(
                             member.name,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: palette.title,
-                            ),
+                            // Un nombre largo sin espacios se partia a mitad de
+                            // palabra y descolocaba la fila.
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: palette.title),
                           ),
-                          Text(status, style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600)),
+                          Text(
+                            status,
+                            style: TextStyle(color: palette.foreground, fontWeight: FontWeight.w600),
+                          ),
                           if (incomingAmount > 0.009 || outgoingAmount > 0.009)
                             Text(
                               tr(
@@ -2033,12 +3296,10 @@ class _BalancesTab extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        '${balance >= 0 ? '+' : ''}${money(balance, group.currency)}',
-                        textAlign: TextAlign.right,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: palette.foreground),
-                      ),
+                    Text(
+                      '${balance >= 0 ? '+' : ''}${money(balance, group.currency)}',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: palette.foreground),
                     ),
                   ],
                 ),
@@ -2051,7 +3312,13 @@ class _BalancesTab extends StatelessWidget {
   }
 }
 
-Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup group, GroupMember member, double balance, String currentUserId) {
+Future<void> _showBalanceSettlementDialog(
+  BuildContext context,
+  ExpenseGroup group,
+  GroupMember member,
+  double balance,
+  String currentUserId,
+) {
   final container = ProviderScope.containerOf(context, listen: false);
   final counterparties = settlementEdges(group, activeAccountsOnly: false)
       .where((edge) => edge.fromUserId == member.userId || edge.toUserId == member.userId)
@@ -2074,128 +3341,204 @@ Future<void> _showBalanceSettlementDialog(BuildContext context, ExpenseGroup gro
     showDragHandle: true,
     builder: (dialogContext) {
       return FractionallySizedBox(
-            heightFactor: 0.84,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(member.name, style: Theme.of(dialogContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text(
-                      balance >= 0 ? '+${money(balance, group.currency)}' : '-${money(balance.abs(), group.currency)}',
-                      style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        heightFactor: 0.84,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(member.name, style: Theme.of(dialogContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  balance >= 0 ? '+${money(balance, group.currency)}' : '-${money(balance.abs(), group.currency)}',
+                  style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                if (group.isClosed) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    if (group.isClosed) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          tr(context, es: 'El grupo está cerrado. Puedes solicitar pagos, pero para registrar uno primero hay que reabrir el grupo.', en: 'The group is closed. You can request payments, but you need to reopen the group before recording one.', gl: 'O grupo está pechado. Podes solicitar pagos, pero para rexistrar un primeiro hai que reabrir o grupo.', fr: 'Le groupe est ferme. Vous pouvez demander des paiements, mais il faut le rouvrir avant d en enregistrer un.', it: 'Il gruppo e chiuso. Puoi richiedere pagamenti, ma devi riaprirlo prima di registrarne uno.', pt: 'O grupo esta fechado. Podes solicitar pagamentos, mas tens de o reabrir antes de registar um.'),
-                        ),
+                    child: Text(
+                      tr(
+                        context,
+                        es: 'El grupo está cerrado. Puedes solicitar pagos, pero para registrar uno primero hay que reabrir el grupo.',
+                        en: 'The group is closed. You can request payments, but you need to reopen the group before recording one.',
+                        gl: 'O grupo está pechado. Podes solicitar pagos, pero para rexistrar un primeiro hai que reabrir o grupo.',
+                        fr: 'Le groupe est ferme. Vous pouvez demander des paiements, mais il faut le rouvrir avant d en enregistrer un.',
+                        it: 'Il gruppo e chiuso. Puoi richiedere pagamenti, ma devi riaprirlo prima di registrarne uno.',
+                        pt: 'O grupo esta fechado. Podes solicitar pagamentos, mas tens de o reabrir antes de registar um.',
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    if (counterparties.isEmpty)
-                      Text(tr(context, es: 'No queda ningún movimiento pendiente en el plan mínimo para esta persona.', en: 'There is no pending transfer for this person in the minimum plan.', gl: 'Non queda ningun movemento pendente no plan minimo para esta persoa.', fr: 'Il ne reste aucun mouvement en attente pour cette personne dans le plan minimum.', it: 'Non resta alcun movimento pendente per questa persona nel piano minimo.', pt: 'Nao resta nenhum movimento pendente para esta pessoa no plano minimo.'))
-                    else
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: counterparties.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 12),
-                          itemBuilder: (_, index) {
-                            final entry = counterparties[index];
-                            final counterparty = entry.member;
-                            final counterpartyName = entry.label;
-                            final tappedMemberPays = entry.amount < 0;
-                            final debtorId = tappedMemberPays ? member.userId : entry.userId;
-                            final creditorId = tappedMemberPays ? entry.userId : member.userId;
-                            final currentUserIsInvolved = currentUserId == creditorId || currentUserId == debtorId;
-                            final currentUserCanManageSettlement = currentUserIsInvolved || group.isAdmin(currentUserId);
-                            final requestEnabled = currentUserCanManageSettlement && counterparty != null && !counterparty.isPending && !counterparty.isDeletedAccount;
-                            final payEnabled = currentUserCanManageSettlement && !group.isClosed;
-                            final amount = entry.amount.abs();
-                            final accent = tappedMemberPays ? const Color(0xFFC77600) : const Color(0xFF1E8E5A);
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                if (counterparties.isEmpty)
+                  Text(
+                    tr(
+                      context,
+                      es: 'No queda ningún movimiento pendiente en el plan mínimo para esta persona.',
+                      en: 'There is no pending transfer for this person in the minimum plan.',
+                      gl: 'Non queda ningun movemento pendente no plan minimo para esta persoa.',
+                      fr: 'Il ne reste aucun mouvement en attente pour cette personne dans le plan minimum.',
+                      it: 'Non resta alcun movimento pendente per questa persona nel piano minimo.',
+                      pt: 'Nao resta nenhum movimento pendente para esta pessoa no plano minimo.',
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: counterparties.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (_, index) {
+                        final entry = counterparties[index];
+                        final counterparty = entry.member;
+                        final counterpartyName = entry.label;
+                        final tappedMemberPays = entry.amount < 0;
+                        final debtorId = tappedMemberPays ? member.userId : entry.userId;
+                        final creditorId = tappedMemberPays ? entry.userId : member.userId;
+                        final currentUserIsInvolved = currentUserId == creditorId || currentUserId == debtorId;
+                        final currentUserCanManageSettlement = currentUserIsInvolved || group.isAdmin(currentUserId);
+                        final requestEnabled =
+                            currentUserCanManageSettlement &&
+                            counterparty != null &&
+                            !counterparty.isPending &&
+                            !counterparty.isDeletedAccount;
+                        final payEnabled = currentUserCanManageSettlement && !group.isClosed;
+                        final amount = entry.amount.abs();
+                        final accent = tappedMemberPays ? const Color(0xFFC77600) : const Color(0xFF1E8E5A);
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(dialogContext).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(counterpartyName, style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              tappedMemberPays
-                                                  ? tr(context, es: '${member.name} paga a $counterpartyName', en: '${member.name} pays $counterpartyName', gl: '${member.name} paga a $counterpartyName', fr: '${member.name} paie $counterpartyName', it: '${member.name} paga $counterpartyName', pt: '${member.name} paga a $counterpartyName')
-                                                  : tr(context, es: '$counterpartyName paga a ${member.name}', en: '$counterpartyName pays ${member.name}', gl: '$counterpartyName paga a ${member.name}', fr: '$counterpartyName paie ${member.name}', it: '$counterpartyName paga ${member.name}', pt: '$counterpartyName paga a ${member.name}'),
-                                            ),
-                                          ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          counterpartyName,
+                                          style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
-                                        child: Text(money(amount, group.currency), style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          tappedMemberPays
+                                              ? tr(
+                                                  context,
+                                                  es: '${member.name} paga a $counterpartyName',
+                                                  en: '${member.name} pays $counterpartyName',
+                                                  gl: '${member.name} paga a $counterpartyName',
+                                                  fr: '${member.name} paie $counterpartyName',
+                                                  it: '${member.name} paga $counterpartyName',
+                                                  pt: '${member.name} paga a $counterpartyName',
+                                                )
+                                              : tr(
+                                                  context,
+                                                  es: '$counterpartyName paga a ${member.name}',
+                                                  en: '$counterpartyName pays ${member.name}',
+                                                  gl: '$counterpartyName paga a ${member.name}',
+                                                  fr: '$counterpartyName paie ${member.name}',
+                                                  it: '$counterpartyName paga ${member.name}',
+                                                  pt: '$counterpartyName paga a ${member.name}',
+                                                ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(height: 14),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                            onPressed: !requestEnabled
-                                              ? null
-                                              : () async {
-                                                  Navigator.of(dialogContext).pop();
-                                                  await _requestDirectSettlement(context, container, group, creditorId, debtorId, amount);
-                                                },
-                                          icon: const Icon(Icons.notifications_active_rounded),
-                                          label: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: FilledButton.icon(
-                                            onPressed: !payEnabled
-                                              ? null
-                                              : () async {
-                                                  Navigator.of(dialogContext).pop();
-                                                  await _recordDirectSettlement(context, container, group, debtorId, creditorId, amount, debtorName: tappedMemberPays ? member.name : counterpartyName, creditorName: tappedMemberPays ? counterpartyName : member.name);
-                                                },
-                                          icon: const Icon(Icons.check_circle_rounded),
-                                          label: Text(tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
-                                        ),
-                                      ),
-                                    ],
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      money(amount, group.currency),
+                                      style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+                                    ),
                                   ),
                                 ],
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: !requestEnabled
+                                          ? null
+                                          : () async {
+                                              Navigator.of(dialogContext).pop();
+                                              await _requestDirectSettlement(context, container, group, creditorId, debtorId, amount);
+                                            },
+                                      icon: const Icon(Icons.notifications_active_rounded),
+                                      label: Text(
+                                        tr(
+                                          context,
+                                          es: 'Solicitar dinero',
+                                          en: 'Request money',
+                                          gl: 'Solicitar diñeiro',
+                                          fr: 'Demander argent',
+                                          it: 'Richiedi denaro',
+                                          pt: 'Solicitar dinheiro',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: FilledButton.icon(
+                                      onPressed: !payEnabled
+                                          ? null
+                                          : () async {
+                                              Navigator.of(dialogContext).pop();
+                                              await _recordDirectSettlement(
+                                                context,
+                                                container,
+                                                group,
+                                                debtorId,
+                                                creditorId,
+                                                amount,
+                                                debtorName: tappedMemberPays ? member.name : counterpartyName,
+                                                creditorName: tappedMemberPays ? counterpartyName : member.name,
+                                              );
+                                            },
+                                      icon: const Icon(Icons.check_circle_rounded),
+                                      label: Text(
+                                        tr(
+                                          context,
+                                          es: 'Ya está pagado',
+                                          en: 'Already paid',
+                                          gl: 'Xa esta pagado',
+                                          fr: 'Deja paye',
+                                          it: 'Gia pagato',
+                                          pt: 'Ja esta pago',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
             ),
-          );
+          ),
+        ),
+      );
     },
   );
 }
@@ -2217,15 +3560,33 @@ Future<void> _requestDirectSettlement(
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+        title: Text(
+          tr(
+            context,
+            es: 'Solicitar dinero',
+            en: 'Request money',
+            gl: 'Solicitar diñeiro',
+            fr: 'Demander argent',
+            it: 'Richiedi denaro',
+            pt: 'Solicitar dinheiro',
+          ),
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
+          decoration: InputDecoration(
+            labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia'),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar'))),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))),
+            child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar')),
+          ),
         ],
       );
     },
@@ -2241,15 +3602,47 @@ Future<void> _requestDirectSettlement(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(tr(context, es: 'Confirmar solicitud', en: 'Confirm request', gl: 'Confirmar solicitude', fr: 'Confirmer la demande', it: 'Conferma richiesta', pt: 'Confirmar pedido')),
+            title: Text(
+              tr(
+                context,
+                es: 'Confirmar solicitud',
+                en: 'Confirm request',
+                gl: 'Confirmar solicitude',
+                fr: 'Confirmer la demande',
+                it: 'Conferma richiesta',
+                pt: 'Confirmar pedido',
+              ),
+            ),
             content: Text(
               targetIsPending
-                  ? tr(context, es: 'Se registrará la solicitud por ${money(amount, group.currency)}, pero no se enviará notificación hasta que esa identidad se vincule a una cuenta real.', en: 'The request for ${money(amount, group.currency)} will be recorded, but no notification will be sent until that identity is linked to a real account.', gl: 'Rexistrarase a solicitude por ${money(amount, group.currency)}, pero non se enviará notificacion ata que esa identidade se vincule a unha conta real.', fr: 'La demande de ${money(amount, group.currency)} sera enregistree, mais aucune notification ne sera envoyee tant que cette identite ne sera pas liee a un compte reel.', it: 'La richiesta di ${money(amount, group.currency)} verra registrata, ma non verra inviata alcuna notifica finche questa identita non sara collegata a un account reale.', pt: 'O pedido de ${money(amount, group.currency)} vai ficar registado, mas nenhuma notificacao sera enviada ate que essa identidade seja ligada a uma conta real.')
-                  : tr(context, es: 'Se enviará una solicitud por ${money(amount, group.currency)}.', en: 'A request for ${money(amount, group.currency)} will be sent.', gl: 'Enviarase unha solicitude por ${money(amount, group.currency)}.', fr: 'Une demande de ${money(amount, group.currency)} sera envoyee.', it: 'Verrà inviata una richiesta di ${money(amount, group.currency)}.', pt: 'Vai ser enviado um pedido de ${money(amount, group.currency)}.'),
+                  ? tr(
+                      context,
+                      es: 'Se registrará la solicitud por ${money(amount, group.currency)}, pero no se enviará notificación hasta que esa identidad se vincule a una cuenta real.',
+                      en: 'The request for ${money(amount, group.currency)} will be recorded, but no notification will be sent until that identity is linked to a real account.',
+                      gl: 'Rexistrarase a solicitude por ${money(amount, group.currency)}, pero non se enviará notificacion ata que esa identidade se vincule a unha conta real.',
+                      fr: 'La demande de ${money(amount, group.currency)} sera enregistree, mais aucune notification ne sera envoyee tant que cette identite ne sera pas liee a un compte reel.',
+                      it: 'La richiesta di ${money(amount, group.currency)} verra registrata, ma non verra inviata alcuna notifica finche questa identita non sara collegata a un account reale.',
+                      pt: 'O pedido de ${money(amount, group.currency)} vai ficar registado, mas nenhuma notificacao sera enviada ate que essa identidade seja ligada a uma conta real.',
+                    )
+                  : tr(
+                      context,
+                      es: 'Se enviará una solicitud por ${money(amount, group.currency)}.',
+                      en: 'A request for ${money(amount, group.currency)} will be sent.',
+                      gl: 'Enviarase unha solicitude por ${money(amount, group.currency)}.',
+                      fr: 'Une demande de ${money(amount, group.currency)} sera envoyee.',
+                      it: 'Verrà inviata una richiesta di ${money(amount, group.currency)}.',
+                      pt: 'Vai ser enviado um pedido de ${money(amount, group.currency)}.',
+                    ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar'))),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar')),
+              ),
             ],
           );
         },
@@ -2264,20 +3657,46 @@ Future<void> _requestDirectSettlement(
         SnackBar(
           content: Text(
             targetIsPending
-                ? tr(context, es: 'No se puede enviar la solicitud hasta que esa identidad se vincule a una cuenta real.', en: 'The request cannot be sent until that identity is linked to a real account.', gl: 'Non se pode enviar a solicitude ata que esa identidade se vincule a unha conta real.', fr: 'La demande ne peut pas etre envoyee tant que cette identite n est pas liee a un compte reel.', it: 'La richiesta non puo essere inviata finche questa identita non viene collegata a un account reale.', pt: 'O pedido nao pode ser enviado ate que essa identidade seja ligada a uma conta real.')
-                : tr(context, es: 'No se puede enviar la solicitud a esta persona desde el grupo.', en: 'The request cannot be sent to this person from the group.', gl: 'Non se pode enviar a solicitude a esta persoa desde o grupo.', fr: 'La demande ne peut pas etre envoyee a cette personne depuis le groupe.', it: 'La richiesta non puo essere inviata a questa persona dal gruppo.', pt: 'O pedido nao pode ser enviado a esta pessoa a partir do grupo.'),
+                ? tr(
+                    context,
+                    es: 'No se puede enviar la solicitud hasta que esa identidad se vincule a una cuenta real.',
+                    en: 'The request cannot be sent until that identity is linked to a real account.',
+                    gl: 'Non se pode enviar a solicitude ata que esa identidade se vincule a unha conta real.',
+                    fr: 'La demande ne peut pas etre envoyee tant que cette identite n est pas liee a un compte reel.',
+                    it: 'La richiesta non puo essere inviata finche questa identita non viene collegata a un account reale.',
+                    pt: 'O pedido nao pode ser enviado ate que essa identidade seja ligada a uma conta real.',
+                  )
+                : tr(
+                    context,
+                    es: 'No se puede enviar la solicitud a esta persona desde el grupo.',
+                    en: 'The request cannot be sent to this person from the group.',
+                    gl: 'Non se pode enviar a solicitude a esta persoa desde o grupo.',
+                    fr: 'La demande ne peut pas etre envoyee a cette personne depuis le groupe.',
+                    it: 'La richiesta non puo essere inviata a questa persona dal gruppo.',
+                    pt: 'O pedido nao pode ser enviado a esta pessoa a partir do grupo.',
+                  ),
           ),
         ),
       );
     }
     return;
   }
-  await container.read(repositoryProvider).requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: canonicalTargetUserId, amount: amount);
+  await container
+      .read(repositoryProvider)
+      .requestReimbursement(groupId: group.id, requesterId: requesterId, targetUserId: canonicalTargetUserId, amount: amount);
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          tr(context, es: 'Solicitud enviada.', en: 'Request sent.', gl: 'Solicitude enviada.', fr: 'Demande envoyee.', it: 'Richiesta inviata.', pt: 'Pedido enviado.'),
+          tr(
+            context,
+            es: 'Solicitud enviada.',
+            en: 'Request sent.',
+            gl: 'Solicitude enviada.',
+            fr: 'Demande envoyee.',
+            it: 'Richiesta inviata.',
+            pt: 'Pedido enviado.',
+          ),
         ),
       ),
     );
@@ -2297,28 +3716,80 @@ Future<void> _recordDirectSettlement(
   if (group.isClosed) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(tr(context, es: 'Reabre el grupo antes de registrar un pago.', en: 'Reopen the group before recording a payment.', gl: 'Reabre o grupo antes de rexistrar un pago.', fr: 'Rouvrez le groupe avant d enregistrer un paiement.', it: 'Riapri il gruppo prima di registrare un pagamento.', pt: 'Reabre o grupo antes de registar um pagamento.')),
+        content: Text(
+          tr(
+            context,
+            es: 'Reabre el grupo antes de registrar un pago.',
+            en: 'Reopen the group before recording a payment.',
+            gl: 'Reabre o grupo antes de rexistrar un pago.',
+            fr: 'Rouvrez le groupe avant d enregistrer un paiement.',
+            it: 'Riapri il gruppo prima di registrare un pagamento.',
+            pt: 'Reabre o grupo antes de registar um pagamento.',
+          ),
+        ),
       ),
     );
     return;
   }
-  final settlementTitle = tr(context, es: 'Liquidación directa', en: 'Direct settlement', gl: 'Liquidacion directa', fr: 'Reglement direct', it: 'Liquidazione diretta', pt: 'Liquidacao direta');
-  final settlementNote = tr(context, es: 'Pago entre $debtorName y $creditorName.', en: 'Payment between $debtorName and $creditorName.', gl: 'Pago entre $debtorName e $creditorName.', fr: 'Paiement entre $debtorName et $creditorName.', it: 'Pagamento tra $debtorName e $creditorName.', pt: 'Pagamento entre $debtorName e $creditorName.');
-  final settlementItemName = tr(context, es: 'Pago registrado', en: 'Recorded payment', gl: 'Pago rexistrado', fr: 'Paiement enregistre', it: 'Pagamento registrato', pt: 'Pagamento registado');
+  final settlementTitle = tr(
+    context,
+    es: 'Liquidación directa',
+    en: 'Direct settlement',
+    gl: 'Liquidacion directa',
+    fr: 'Reglement direct',
+    it: 'Liquidazione diretta',
+    pt: 'Liquidacao direta',
+  );
+  final settlementNote = tr(
+    context,
+    es: 'Pago entre $debtorName y $creditorName.',
+    en: 'Payment between $debtorName and $creditorName.',
+    gl: 'Pago entre $debtorName e $creditorName.',
+    fr: 'Paiement entre $debtorName et $creditorName.',
+    it: 'Pagamento tra $debtorName e $creditorName.',
+    pt: 'Pagamento entre $debtorName e $creditorName.',
+  );
+  final settlementItemName = tr(
+    context,
+    es: 'Pago registrado',
+    en: 'Recorded payment',
+    gl: 'Pago rexistrado',
+    fr: 'Paiement enregistre',
+    it: 'Pagamento registrato',
+    pt: 'Pagamento registado',
+  );
   final controller = TextEditingController(text: suggestedAmount.toStringAsFixed(2));
   final amount = await showDialog<double>(
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: Text(tr(context, es: 'Registrar pago', en: 'Record payment', gl: 'Rexistrar pago', fr: 'Enregistrer paiement', it: 'Registra pagamento', pt: 'Registar pagamento')),
+        title: Text(
+          tr(
+            context,
+            es: 'Registrar pago',
+            en: 'Record payment',
+            gl: 'Rexistrar pago',
+            fr: 'Enregistrer paiement',
+            it: 'Registra pagamento',
+            pt: 'Registar pagamento',
+          ),
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
+          decoration: InputDecoration(
+            labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia'),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar'))),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))),
+            child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
+          ),
         ],
       );
     },
@@ -2334,13 +3805,37 @@ Future<void> _recordDirectSettlement(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(tr(context, es: 'Confirmar pago', en: 'Confirm payment', gl: 'Confirmar pago', fr: 'Confirmer le paiement', it: 'Conferma pagamento', pt: 'Confirmar pagamento')),
+            title: Text(
+              tr(
+                context,
+                es: 'Confirmar pago',
+                en: 'Confirm payment',
+                gl: 'Confirmar pago',
+                fr: 'Confirmer le paiement',
+                it: 'Conferma pagamento',
+                pt: 'Confirmar pagamento',
+              ),
+            ),
             content: Text(
-              tr(context, es: 'Se registrará un pago de ${money(amount, group.currency)} entre $debtorName y $creditorName.', en: 'A payment of ${money(amount, group.currency)} between $debtorName and $creditorName will be recorded.', gl: 'Rexistrarase un pago de ${money(amount, group.currency)} entre $debtorName e $creditorName.', fr: 'Un paiement de ${money(amount, group.currency)} entre $debtorName et $creditorName sera enregistre.', it: 'Verrà registrato un pagamento di ${money(amount, group.currency)} tra $debtorName e $creditorName.', pt: 'Vai ser registado um pagamento de ${money(amount, group.currency)} entre $debtorName e $creditorName.'),
+              tr(
+                context,
+                es: 'Se registrará un pago de ${money(amount, group.currency)} entre $debtorName y $creditorName.',
+                en: 'A payment of ${money(amount, group.currency)} between $debtorName and $creditorName will be recorded.',
+                gl: 'Rexistrarase un pago de ${money(amount, group.currency)} entre $debtorName e $creditorName.',
+                fr: 'Un paiement de ${money(amount, group.currency)} entre $debtorName et $creditorName sera enregistre.',
+                it: 'Verrà registrato un pagamento di ${money(amount, group.currency)} tra $debtorName e $creditorName.',
+                pt: 'Vai ser registado um pagamento de ${money(amount, group.currency)} entre $debtorName e $creditorName.',
+              ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar'))),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(tr(context, es: 'Confirmar', en: 'Confirm', gl: 'Confirmar', fr: 'Confirmer', it: 'Conferma', pt: 'Confirmar')),
+              ),
             ],
           );
         },
@@ -2357,7 +3852,15 @@ Future<void> _recordDirectSettlement(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            tr(context, es: 'No se pudo registrar este pago con los participantes actuales.', en: 'This payment could not be recorded with the current participants.', gl: 'Non se puido rexistrar este pago cos participantes actuais.', fr: 'Ce paiement n a pas pu etre enregistre avec les participants actuels.', it: 'Non e stato possibile registrare questo pagamento con i partecipanti attuali.', pt: 'Nao foi possivel registar este pagamento com os participantes atuais.'),
+            tr(
+              context,
+              es: 'No se pudo registrar este pago con los participantes actuales.',
+              en: 'This payment could not be recorded with the current participants.',
+              gl: 'Non se puido rexistrar este pago cos participantes actuais.',
+              fr: 'Ce paiement n a pas pu etre enregistre avec les participants actuels.',
+              it: 'Non e stato possibile registrare questo pagamento con i partecipanti attuali.',
+              pt: 'Nao foi possivel registar este pagamento com os participantes atuais.',
+            ),
           ),
         ),
       );
@@ -2365,7 +3868,7 @@ Future<void> _recordDirectSettlement(
     return;
   }
 
-  final uuid = const Uuid();
+  const uuid = Uuid();
   final expense = ExpenseRecord(
     id: uuid.v4(),
     title: settlementTitle,
@@ -2388,6 +3891,7 @@ Future<void> _recordDirectSettlement(
   );
   try {
     await container.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+    container.read(appPreferencesProvider.notifier).registerRealUse();
     container.invalidate(groupProvider(group.id));
     final updatedGroup = await container.read(groupProvider(group.id).future).timeout(const Duration(seconds: 5));
     final settlementWasPersisted = updatedGroup?.expenses.any((entry) => entry.id == expense.id) ?? false;
@@ -2396,7 +3900,15 @@ Future<void> _recordDirectSettlement(
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              tr(context, es: 'No se pudo confirmar la liquidación. Inténtalo de nuevo.', en: 'The settlement could not be confirmed. Please try again.', gl: 'Non se puido confirmar a liquidacion. Téntao de novo.', fr: 'La liquidation n a pas pu etre confirmee. Reessayez.', it: 'Non e stato possibile confermare la liquidazione. Riprova.', pt: 'Nao foi possivel confirmar a liquidacao. Tenta de novo.'),
+              tr(
+                context,
+                es: 'No se pudo confirmar la liquidación. Inténtalo de nuevo.',
+                en: 'The settlement could not be confirmed. Please try again.',
+                gl: 'Non se puido confirmar a liquidacion. Téntao de novo.',
+                fr: 'La liquidation n a pas pu etre confirmee. Reessayez.',
+                it: 'Non e stato possibile confermare la liquidazione. Riprova.',
+                pt: 'Nao foi possivel confirmar a liquidacao. Tenta de novo.',
+              ),
             ),
           ),
         );
@@ -2407,18 +3919,22 @@ Future<void> _recordDirectSettlement(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            tr(context, es: 'Pago registrado.', en: 'Payment recorded.', gl: 'Pago rexistrado.', fr: 'Paiement enregistre.', it: 'Pagamento registrato.', pt: 'Pagamento registado.'),
+            tr(
+              context,
+              es: 'Pago registrado.',
+              en: 'Payment recorded.',
+              gl: 'Pago rexistrado.',
+              fr: 'Paiement enregistre.',
+              it: 'Pagamento registrato.',
+              pt: 'Pagamento registado.',
+            ),
           ),
         ),
       );
     }
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
     }
   }
 }
@@ -2452,7 +3968,8 @@ class _ExpensesTabState extends State<_ExpensesTab> {
   String _payerId = 'all';
   String _participantId = 'all';
 
-  bool get _hasActiveFilters => _payerId != 'all' || _participantId != 'all' || _minController.text.trim().isNotEmpty || _maxController.text.trim().isNotEmpty;
+  bool get _hasActiveFilters =>
+      _payerId != 'all' || _participantId != 'all' || _minController.text.trim().isNotEmpty || _maxController.text.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -2466,14 +3983,21 @@ class _ExpensesTabState extends State<_ExpensesTab> {
     final visibleMembers = sortedMembersByName(widget.group.visibleMembers);
     final minValue = double.tryParse(_minController.text.replaceAll(',', '.'));
     final maxValue = double.tryParse(_maxController.text.replaceAll(',', '.'));
-    final filteredExpenses = widget.group.expenses.where((expense) {
-      final total = totalExpense(expense);
-      final payerMatch = _payerId == 'all' || expense.payerId == _payerId;
-      final participantMatch = _participantId == 'all' || expense.items.any((item) => item.allocations.any((allocation) => allocation.userId == _participantId && allocation.percentage > 0));
-      final minMatch = minValue == null || total >= minValue;
-      final maxMatch = maxValue == null || total <= maxValue;
-      return payerMatch && participantMatch && minMatch && maxMatch;
-    }).sorted((a, b) => b.createdAt.compareTo(a.createdAt)).toList();
+    final filteredExpenses = widget.group.expenses
+        .where((expense) {
+          final total = totalExpense(expense);
+          final payerMatch = _payerId == 'all' || expense.payerId == _payerId;
+          final participantMatch =
+              _participantId == 'all' ||
+              expense.items.any(
+                (item) => item.allocations.any((allocation) => allocation.userId == _participantId && allocation.percentage > 0),
+              );
+          final minMatch = minValue == null || total >= minValue;
+          final maxMatch = maxValue == null || total <= maxValue;
+          return payerMatch && participantMatch && minMatch && maxMatch;
+        })
+        .sorted((a, b) => b.createdAt.compareTo(a.createdAt))
+        .toList();
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -2484,7 +4008,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
             color: Theme.of(context).colorScheme.surfaceContainerHigh,
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(tr(context, es: 'El grupo está cerrado: puedes revisar gastos, pero no editarlos ni eliminarlos.', en: 'The group is closed: you can review expenses, but not edit or delete them.', gl: 'O grupo esta pechado: podes revisar gastos, pero non editalos nin eliminalos.', fr: 'Le groupe est ferme : vous pouvez consulter les depenses, mais pas les modifier ni les supprimer.', it: 'Il gruppo e chiuso: puoi consultare le spese, ma non modificarle o eliminarle.', pt: 'O grupo esta fechado: podes rever despesas, mas nao edita-las nem elimina-las.')),
+              child: Text(
+                tr(
+                  context,
+                  es: 'El grupo está cerrado: puedes revisar gastos, pero no editarlos ni eliminarlos.',
+                  en: 'The group is closed: you can review expenses, but not edit or delete them.',
+                  gl: 'O grupo esta pechado: podes revisar gastos, pero non editalos nin eliminalos.',
+                  fr: 'Le groupe est ferme : vous pouvez consulter les depenses, mais pas les modifier ni les supprimer.',
+                  it: 'Il gruppo e chiuso: puoi consultare le spese, ma non modificarle o eliminarle.',
+                  pt: 'O grupo esta fechado: podes rever despesas, mas nao edita-las nem elimina-las.',
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -2497,7 +4031,12 @@ class _ExpensesTabState extends State<_ExpensesTab> {
             childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             title: Row(
               children: [
-                Expanded(child: Text(tr(context, es: 'Filtros', en: 'Filters', gl: 'Filtros', fr: 'Filtres', it: 'Filtri', pt: 'Filtros'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+                Expanded(
+                  child: Text(
+                    tr(context, es: 'Filtros', en: 'Filters', gl: 'Filtros', fr: 'Filtres', it: 'Filtri', pt: 'Filtros'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
                 if (_hasActiveFilters)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2505,7 +4044,12 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: Text(tr(context, es: 'Activos', en: 'Active', gl: 'Activos', fr: 'Actifs', it: 'Attivi', pt: 'Ativos'), style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
+                    child: Text(
+                      tr(context, es: 'Activos', en: 'Active', gl: 'Activos', fr: 'Actifs', it: 'Attivi', pt: 'Ativos'),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
+                    ),
                   ),
               ],
             ),
@@ -2519,14 +4063,34 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       children: [
                         TextField(
                           controller: _minController,
-                          decoration: InputDecoration(labelText: tr(context, es: 'Importe mínimo', en: 'Minimum amount', gl: 'Importe minimo', fr: 'Montant minimum', it: 'Importo minimo', pt: 'Valor minimo')),
+                          decoration: InputDecoration(
+                            labelText: tr(
+                              context,
+                              es: 'Importe mínimo',
+                              en: 'Minimum amount',
+                              gl: 'Importe minimo',
+                              fr: 'Montant minimum',
+                              it: 'Importo minimo',
+                              pt: 'Valor minimo',
+                            ),
+                          ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _maxController,
-                          decoration: InputDecoration(labelText: tr(context, es: 'Importe máximo', en: 'Maximum amount', gl: 'Importe maximo', fr: 'Montant maximum', it: 'Importo massimo', pt: 'Valor maximo')),
+                          decoration: InputDecoration(
+                            labelText: tr(
+                              context,
+                              es: 'Importe máximo',
+                              en: 'Maximum amount',
+                              gl: 'Importe maximo',
+                              fr: 'Montant maximum',
+                              it: 'Importo massimo',
+                              pt: 'Valor maximo',
+                            ),
+                          ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                         ),
@@ -2538,7 +4102,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       Expanded(
                         child: TextField(
                           controller: _minController,
-                          decoration: InputDecoration(labelText: tr(context, es: 'Importe mínimo', en: 'Minimum amount', gl: 'Importe minimo', fr: 'Montant minimum', it: 'Importo minimo', pt: 'Valor minimo')),
+                          decoration: InputDecoration(
+                            labelText: tr(
+                              context,
+                              es: 'Importe mínimo',
+                              en: 'Minimum amount',
+                              gl: 'Importe minimo',
+                              fr: 'Montant minimum',
+                              it: 'Importo minimo',
+                              pt: 'Valor minimo',
+                            ),
+                          ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                         ),
@@ -2547,7 +4121,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       Expanded(
                         child: TextField(
                           controller: _maxController,
-                          decoration: InputDecoration(labelText: tr(context, es: 'Importe máximo', en: 'Maximum amount', gl: 'Importe maximo', fr: 'Montant maximum', it: 'Importo massimo', pt: 'Valor maximo')),
+                          decoration: InputDecoration(
+                            labelText: tr(
+                              context,
+                              es: 'Importe máximo',
+                              en: 'Maximum amount',
+                              gl: 'Importe maximo',
+                              fr: 'Montant maximum',
+                              it: 'Importo massimo',
+                              pt: 'Valor maximo',
+                            ),
+                          ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                         ),
@@ -2559,9 +4143,32 @@ class _ExpensesTabState extends State<_ExpensesTab> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _payerId,
-                decoration: InputDecoration(labelText: tr(context, es: 'Añadido por', en: 'Added by', gl: 'Engadido por', fr: 'Ajoute par', it: 'Aggiunto da', pt: 'Adicionado por')),
+                decoration: InputDecoration(
+                  labelText: tr(
+                    context,
+                    es: 'Añadido por',
+                    en: 'Added by',
+                    gl: 'Engadido por',
+                    fr: 'Ajoute par',
+                    it: 'Aggiunto da',
+                    pt: 'Adicionado por',
+                  ),
+                ),
                 items: [
-                  DropdownMenuItem(value: 'all', child: Text(tr(context, es: 'Todas las personas', en: 'Everyone', gl: 'Todas as persoas', fr: 'Toutes les personnes', it: 'Tutte le persone', pt: 'Todas as pessoas'))),
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(
+                      tr(
+                        context,
+                        es: 'Todas las personas',
+                        en: 'Everyone',
+                        gl: 'Todas as persoas',
+                        fr: 'Toutes les personnes',
+                        it: 'Tutte le persone',
+                        pt: 'Todas as pessoas',
+                      ),
+                    ),
+                  ),
                   ...visibleMembers.map((member) => DropdownMenuItem(value: member.userId, child: Text(member.name))),
                 ],
                 onChanged: (value) => setState(() => _payerId = value ?? 'all'),
@@ -2569,9 +4176,32 @@ class _ExpensesTabState extends State<_ExpensesTab> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _participantId,
-                decoration: InputDecoration(labelText: tr(context, es: 'Participó', en: 'Participated', gl: 'Participou', fr: 'A participe', it: 'Ha partecipato', pt: 'Participou')),
+                decoration: InputDecoration(
+                  labelText: tr(
+                    context,
+                    es: 'Participó',
+                    en: 'Participated',
+                    gl: 'Participou',
+                    fr: 'A participe',
+                    it: 'Ha partecipato',
+                    pt: 'Participou',
+                  ),
+                ),
                 items: [
-                  DropdownMenuItem(value: 'all', child: Text(tr(context, es: 'Cualquier participante', en: 'Any participant', gl: 'Calquera participante', fr: 'N importe quel participant', it: 'Qualsiasi partecipante', pt: 'Qualquer participante'))),
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(
+                      tr(
+                        context,
+                        es: 'Cualquier participante',
+                        en: 'Any participant',
+                        gl: 'Calquera participante',
+                        fr: 'N importe quel participant',
+                        it: 'Qualsiasi partecipante',
+                        pt: 'Qualquer participante',
+                      ),
+                    ),
+                  ),
                   ...visibleMembers.map((member) => DropdownMenuItem(value: member.userId, child: Text(member.name))),
                 ],
                 onChanged: (value) => setState(() => _participantId = value ?? 'all'),
@@ -2590,7 +4220,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                       });
                     },
                     icon: const Icon(Icons.filter_alt_off_rounded),
-                    label: Text(tr(context, es: 'Limpiar filtros', en: 'Clear filters', gl: 'Limpar filtros', fr: 'Effacer les filtres', it: 'Pulisci filtri', pt: 'Limpar filtros')),
+                    label: Text(
+                      tr(
+                        context,
+                        es: 'Limpiar filtros',
+                        en: 'Clear filters',
+                        gl: 'Limpar filtros',
+                        fr: 'Effacer les filtres',
+                        it: 'Pulisci filtri',
+                        pt: 'Limpar filtros',
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2600,7 +4240,22 @@ class _ExpensesTabState extends State<_ExpensesTab> {
         ),
         const SizedBox(height: 16),
         if (filteredExpenses.isEmpty)
-          Card(child: Padding(padding: const EdgeInsets.all(20), child: Text(tr(context, es: 'No hay gastos que coincidan con los filtros.', en: 'No expenses match the filters.', gl: 'Non hai gastos que coincidan cos filtros.', fr: 'Aucune depense ne correspond aux filtres.', it: 'Nessuna spesa corrisponde ai filtri.', pt: 'Nenhuma despesa corresponde aos filtros.')))),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                tr(
+                  context,
+                  es: 'No hay gastos que coincidan con los filtros.',
+                  en: 'No expenses match the filters.',
+                  gl: 'Non hai gastos que coincidan cos filtros.',
+                  fr: 'Aucune depense ne correspond aux filtres.',
+                  it: 'Nessuna spesa corrisponde ai filtri.',
+                  pt: 'Nenhuma despesa corresponde aos filtros.',
+                ),
+              ),
+            ),
+          ),
         ...filteredExpenses.map((expense) {
           final payer = _groupParticipantName(
             context,
@@ -2608,23 +4263,25 @@ class _ExpensesTabState extends State<_ExpensesTab> {
             expense.payerId,
             emptyLabel: tr(context, es: 'Alguien', en: 'Someone', gl: 'Alguen', fr: 'Quelqu un', it: 'Qualcuno', pt: 'Alguem'),
           );
-            final isSettlement = expense.kind == ExpenseRecordKind.settlement;
-            final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
+          final isSettlement = expense.kind == ExpenseRecordKind.settlement;
+          final primaryCategory = widget.categories.firstWhereOrNull((entry) => entry.id == expense.items.firstOrNull?.categoryId);
           final isPayer = expense.payerId == widget.currentUserId;
-          final isParticipant = expense.items.any((item) => item.allocations.any((allocation) => allocation.userId == widget.currentUserId && allocation.percentage > 0));
-            final status = isSettlement
+          final isParticipant = expense.items.any(
+            (item) => item.allocations.any((allocation) => allocation.userId == widget.currentUserId && allocation.percentage > 0),
+          );
+          final status = isSettlement
               ? _ExpenseStatus.settlement
               : isPayer
-                ? _ExpenseStatus.paid
-                : isParticipant
-                  ? _ExpenseStatus.participated
-                  : _ExpenseStatus.outside;
+              ? _ExpenseStatus.paid
+              : isParticipant
+              ? _ExpenseStatus.participated
+              : _ExpenseStatus.outside;
           final colors = _expenseStatusPalette(context, status);
-            final leadingColor = isSettlement ? const Color(0xFF2D6CDF) : colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E');
-            final leadingIcon = isSettlement ? Icons.payments_rounded : categoryIconForKey(primaryCategory?.iconKey ?? 'receipt');
+          final leadingColor = isSettlement ? const Color(0xFF2D6CDF) : colorFromHex(primaryCategory?.colorHex ?? '0xFFE4572E');
+          final leadingIcon = isSettlement ? Icons.payments_rounded : categoryIconForKey(primaryCategory?.iconKey ?? 'receipt');
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
+            child: DecoratedBox(
               decoration: BoxDecoration(
                 color: colors.background,
                 borderRadius: BorderRadius.circular(28),
@@ -2638,20 +4295,14 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                     Container(
                       width: 34,
                       height: 34,
-                      decoration: BoxDecoration(
-                        color: leadingColor.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: BoxDecoration(color: leadingColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
                       child: Icon(leadingIcon, size: 18, color: leadingColor),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         expense.title,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: colors.title,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, color: colors.title),
                       ),
                     ),
                   ],
@@ -2674,25 +4325,28 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                     ),
                   ],
                 ),
-                trailing: Text(money(totalExpense(expense), widget.group.currency), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: colors.accent)),
+                trailing: Text(
+                  money(totalExpense(expense), widget.group.currency),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: colors.accent),
+                ),
                 children: [
                   if (expense.note != null && expense.note!.trim().isNotEmpty)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          expense.note!,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.subtitle),
-                        ),
+                        child: Text(expense.note!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.subtitle)),
                       ),
                     ),
                   ...expense.items.map((item) {
                     final category = widget.categories.firstWhereOrNull((entry) => entry.id == item.categoryId);
-                    final participants = item.allocations.where((allocation) => allocation.percentage > 0).map((allocation) {
-                      final member = resolveGroupMember(widget.group, allocation.userId);
-                      return '${member?.name ?? tr(context, es: 'Miembro', en: 'Member', gl: 'Membro', fr: 'Membre', it: 'Membro', pt: 'Membro')} ${allocation.percentage.toStringAsFixed(0)}%';
-                    }).join(' · ');
+                    final participants = item.allocations
+                        .where((allocation) => allocation.percentage > 0)
+                        .map((allocation) {
+                          final member = resolveGroupMember(widget.group, allocation.userId);
+                          return '${member?.name ?? tr(context, es: 'Miembro', en: 'Member', gl: 'Membro', fr: 'Membre', it: 'Membro', pt: 'Membro')} ${allocation.percentage.toStringAsFixed(0)}%';
+                        })
+                        .join(' · ');
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(16),
@@ -2714,14 +4368,39 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                             context,
                             children: [
                               Chip(
-                                label: Text(category?.name ?? item.categoryId),
+                                label: Text(
+                                  categoryDisplayName(
+                                    category,
+                                    tr(
+                                      context,
+                                      es: 'Otros',
+                                      en: 'Other',
+                                      gl: 'Outros',
+                                      ca: 'Altres',
+                                      eu: 'Bestelakoak',
+                                      fr: 'Autres',
+                                      it: 'Altro',
+                                      pt: 'Outros',
+                                      de: 'Sonstiges',
+                                      el: 'Άλλα',
+                                      ru: 'Прочее',
+                                      ar: 'أخرى',
+                                      zh: '其他',
+                                      ja: 'その他',
+                                    ),
+                                  ),
+                                ),
                                 avatar: Icon(categoryIcons[category?.iconKey ?? 'receipt'] ?? Icons.receipt_long_rounded, size: 16),
                               ),
                               if (participants.isNotEmpty) Chip(label: Text(participants)),
                               if (expense.receiptDownloadUrl != null)
                                 ActionChip(
-                                  onPressed: () => SharePlus.instance.share(ShareParams(text: expense.receiptDownloadUrl, subject: 'Ticket de ${expense.title}')),
-                                  label: Text(tr(context, es: 'Ticket', en: 'Receipt', gl: 'Ticket', fr: 'Ticket', it: 'Scontrino', pt: 'Fatura')),
+                                  onPressed: () => SharePlus.instance.share(
+                                    ShareParams(text: expense.receiptDownloadUrl, subject: 'Ticket de ${expense.title}'),
+                                  ),
+                                  label: Text(
+                                    tr(context, es: 'Ticket', en: 'Receipt', gl: 'Ticket', fr: 'Ticket', it: 'Scontrino', pt: 'Fatura'),
+                                  ),
                                   avatar: const Icon(Icons.cloud_done_rounded, size: 16),
                                 ),
                             ],
@@ -2733,7 +4412,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                               TextButton.icon(
                                 onPressed: widget.allowChanges ? () => widget.onEditExpense(expense) : null,
                                 icon: const Icon(Icons.edit_rounded),
-                                label: Text(tr(context, es: 'Editar gasto', en: 'Edit expense', gl: 'Editar gasto', fr: 'Modifier depense', it: 'Modifica spesa', pt: 'Editar despesa')),
+                                label: Text(
+                                  tr(
+                                    context,
+                                    es: 'Editar gasto',
+                                    en: 'Edit expense',
+                                    gl: 'Editar gasto',
+                                    fr: 'Modifier depense',
+                                    it: 'Modifica spesa',
+                                    pt: 'Editar despesa',
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               TextButton.icon(
@@ -2751,7 +4440,17 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                             child: TextButton.icon(
                               onPressed: widget.allowChanges ? () => widget.onEditAllocations(expense, item) : null,
                               icon: const Icon(Icons.tune_rounded),
-                              label: Text(tr(context, es: 'Ajustar reparto', en: 'Adjust split', gl: 'Axustar reparto', fr: 'Ajuster la repartition', it: 'Regola ripartizione', pt: 'Ajustar divisao')),
+                              label: Text(
+                                tr(
+                                  context,
+                                  es: 'Ajustar reparto',
+                                  en: 'Adjust split',
+                                  gl: 'Axustar reparto',
+                                  fr: 'Ajuster la repartition',
+                                  it: 'Regola ripartizione',
+                                  pt: 'Ajustar divisao',
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -2770,7 +4469,10 @@ class _ExpensesTabState extends State<_ExpensesTab> {
 
 enum _ExpenseStatus { settlement, paid, participated, outside }
 
-({Color background, Color border, Color accent, Color title, Color subtitle}) _expenseStatusPalette(BuildContext context, _ExpenseStatus status) {
+({Color background, Color border, Color accent, Color title, Color subtitle}) _expenseStatusPalette(
+  BuildContext context,
+  _ExpenseStatus status,
+) {
   final colorScheme = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -2818,11 +4520,35 @@ String _expenseStatusLabel(BuildContext context, _ExpenseStatus status) {
     case _ExpenseStatus.settlement:
       return tr(context, es: 'Liquidación', en: 'Settlement', gl: 'Liquidacion', fr: 'Liquidation', it: 'Liquidazione', pt: 'Liquidacao');
     case _ExpenseStatus.paid:
-      return tr(context, es: 'Lo pagaste', en: 'You paid it', gl: 'Pagachelo ti', fr: 'Vous l avez paye', it: 'L hai pagato tu', pt: 'Pagaste tu');
+      return tr(
+        context,
+        es: 'Lo pagaste',
+        en: 'You paid it',
+        gl: 'Pagachelo ti',
+        fr: 'Vous l avez paye',
+        it: 'L hai pagato tu',
+        pt: 'Pagaste tu',
+      );
     case _ExpenseStatus.participated:
-      return tr(context, es: 'Participaste', en: 'You joined', gl: 'Participaches', fr: 'Vous avez participe', it: 'Hai partecipato', pt: 'Participaste');
+      return tr(
+        context,
+        es: 'Participaste',
+        en: 'You joined',
+        gl: 'Participaches',
+        fr: 'Vous avez participe',
+        it: 'Hai partecipato',
+        pt: 'Participaste',
+      );
     case _ExpenseStatus.outside:
-      return tr(context, es: 'No participaste', en: 'You were not involved', gl: 'Non participaches', fr: 'Vous n etiez pas implique', it: 'Non eri coinvolto', pt: 'Nao participaste');
+      return tr(
+        context,
+        es: 'No participaste',
+        en: 'You were not involved',
+        gl: 'Non participaches',
+        fr: 'Vous n etiez pas implique',
+        it: 'Non eri coinvolto',
+        pt: 'Nao participaste',
+      );
   }
 }
 
@@ -2842,27 +4568,50 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
   late String _memberId;
   _GroupChartKind _selectedChart = _GroupChartKind.insights;
 
-  static const _chartPalette = [
-    Color(0xFFE4572E),
-    Color(0xFF1E8E5A),
-    Color(0xFFC77600),
-    Color(0xFF2D6CDF),
-    Color(0xFF8E44AD),
-  ];
+  static const _chartPalette = [Color(0xFFE4572E), Color(0xFF1E8E5A), Color(0xFFC77600), Color(0xFF2D6CDF), Color(0xFF8E44AD)];
 
   Future<void> _showCategoryChartInfo(BuildContext context) {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(tr(context, es: 'Cómo leer categorías', en: 'How to read categories', gl: 'Como ler categorias', fr: 'Comment lire les categories', it: 'Come leggere le categorie', pt: 'Como ler categorias')),
+          title: Text(
+            tr(
+              context,
+              es: 'Cómo leer categorías',
+              en: 'How to read categories',
+              gl: 'Como ler categorias',
+              fr: 'Comment lire les categories',
+              it: 'Come leggere le categorie',
+              pt: 'Como ler categorias',
+            ),
+          ),
           content: Text(
             _global
-                ? tr(context, es: 'Este gráfico resume en qué categorías se está yendo más dinero dentro del grupo completo.', en: 'This chart shows which categories account for the most spending across the whole group.', gl: 'Este grafico resume en que categorias se vai máis diñeiro dentro do grupo completo.', fr: 'Ce graphique montre quelles categories concentrent le plus de depenses dans tout le groupe.', it: 'Questo grafico mostra quali categorie concentrano piu spesa nell intero gruppo.', pt: 'Este grafico mostra que categorias concentram mais despesa em todo o grupo.')
-                : tr(context, es: 'Aquí ves solo la parte del gasto que corresponde a la persona seleccionada, agrupada por categoría.', en: 'Here you only see the selected person\'s share of spending, grouped by category.', gl: 'Aqui ves so a parte do gasto que corresponde á persoa seleccionada, agrupada por categoria.', fr: 'Ici vous voyez seulement la part de depense de la personne selectionnee, regroupee par categorie.', it: 'Qui vedi solo la quota di spesa della persona selezionata, raggruppata per categoria.', pt: 'Aqui ves apenas a parte da despesa da pessoa selecionada, agrupada por categoria.'),
+                ? tr(
+                    context,
+                    es: 'Este gráfico resume en qué categorías se está yendo más dinero dentro del grupo completo.',
+                    en: 'This chart shows which categories account for the most spending across the whole group.',
+                    gl: 'Este grafico resume en que categorias se vai máis diñeiro dentro do grupo completo.',
+                    fr: 'Ce graphique montre quelles categories concentrent le plus de depenses dans tout le groupe.',
+                    it: 'Questo grafico mostra quali categorie concentrano piu spesa nell intero gruppo.',
+                    pt: 'Este grafico mostra que categorias concentram mais despesa em todo o grupo.',
+                  )
+                : tr(
+                    context,
+                    es: 'Aquí ves solo la parte del gasto que corresponde a la persona seleccionada, agrupada por categoría.',
+                    en: 'Here you only see the selected person\'s share of spending, grouped by category.',
+                    gl: 'Aqui ves so a parte do gasto que corresponde á persoa seleccionada, agrupada por categoria.',
+                    fr: 'Ici vous voyez seulement la part de depense de la personne selectionnee, regroupee par categorie.',
+                    it: 'Qui vedi solo la quota di spesa della persona selezionata, raggruppata per categoria.',
+                    pt: 'Aqui ves apenas a parte da despesa da pessoa selecionada, agrupada por categoria.',
+                  ),
           ),
           actions: [
-            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido'))),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido')),
+            ),
           ],
         );
       },
@@ -2882,14 +4631,43 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(tr(context, es: 'Cómo leer este gráfico', en: 'How to read this chart', gl: 'Como ler este grafico', fr: 'Comment lire ce graphique', it: 'Come leggere questo grafico', pt: 'Como ler este grafico')),
+          title: Text(
+            tr(
+              context,
+              es: 'Cómo leer este gráfico',
+              en: 'How to read this chart',
+              gl: 'Como ler este grafico',
+              fr: 'Comment lire ce graphique',
+              it: 'Come leggere questo grafico',
+              pt: 'Como ler este grafico',
+            ),
+          ),
           content: Text(
             _global
-                ? tr(context, es: 'Verde significa saldo a favor y rojo saldo pendiente. El plan mínimo de transferencias aparece en la pestaña anterior al tocar una persona.', en: 'Green means money to receive and red means money to pay. The minimum transfer plan appears in the previous tab when you tap a person.', gl: 'Verde significa saldo a favor e vermello saldo pendente. O plan minimo de transferencias aparece na lapela anterior ao tocar unha persoa.', fr: 'Le vert signifie un solde a recevoir et le rouge un solde a payer. Le plan minimal apparait dans l onglet precedent en touchant une personne.', it: 'Il verde indica saldo da ricevere e il rosso saldo da pagare. Il piano minimo appare nella scheda precedente toccando una persona.', pt: 'Verde significa saldo a favor e vermelho saldo por pagar. O plano minimo aparece no separador anterior ao tocar numa pessoa.')
-                : tr(context, es: 'Mide qué parte de tus gastos está cubriendo cada pagador real del grupo.', en: 'It shows how much of your share is being covered by each real payer in the group.', gl: 'Mide que parte dos teus gastos esta a cubrir cada pagador real do grupo.', fr: 'Montre quelle part de vos depenses est couverte par chaque payeur reel du groupe.', it: 'Mostra quale parte della tua quota e coperta da ciascun pagatore reale del gruppo.', pt: 'Mostra que parte da tua quota esta a ser coberta por cada pagador real do grupo.'),
+                ? tr(
+                    context,
+                    es: 'Verde significa saldo a favor y rojo saldo pendiente. El plan mínimo de transferencias aparece en la pestaña anterior al tocar una persona.',
+                    en: 'Green means money to receive and red means money to pay. The minimum transfer plan appears in the previous tab when you tap a person.',
+                    gl: 'Verde significa saldo a favor e vermello saldo pendente. O plan minimo de transferencias aparece na lapela anterior ao tocar unha persoa.',
+                    fr: 'Le vert signifie un solde a recevoir et le rouge un solde a payer. Le plan minimal apparait dans l onglet precedent en touchant une personne.',
+                    it: 'Il verde indica saldo da ricevere e il rosso saldo da pagare. Il piano minimo appare nella scheda precedente toccando una persona.',
+                    pt: 'Verde significa saldo a favor e vermelho saldo por pagar. O plano minimo aparece no separador anterior ao tocar numa pessoa.',
+                  )
+                : tr(
+                    context,
+                    es: 'Mide qué parte de tus gastos está cubriendo cada pagador real del grupo.',
+                    en: 'It shows how much of your share is being covered by each real payer in the group.',
+                    gl: 'Mide que parte dos teus gastos esta a cubrir cada pagador real do grupo.',
+                    fr: 'Montre quelle part de vos depenses est couverte par chaque payeur reel du groupe.',
+                    it: 'Mostra quale parte della tua quota e coperta da ciascun pagatore reale del gruppo.',
+                    pt: 'Mostra que parte da tua quota esta a ser coberta por cada pagador real do grupo.',
+                  ),
           ),
           actions: [
-            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido'))),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(context, es: 'Entendido', en: 'Got it', gl: 'Entendido', fr: 'Compris', it: 'Capito', pt: 'Entendido')),
+            ),
           ],
         );
       },
@@ -2907,7 +4685,7 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
     final visibleMembers = sortedMembersByName(widget.group.visibleMembers);
     final selectedMemberId = visibleMembers.any((member) => member.userId == _memberId)
         ? _memberId
-      : (visibleMembers.isNotEmpty ? visibleMembers.first.userId : widget.currentUserId);
+        : (visibleMembers.isNotEmpty ? visibleMembers.first.userId : widget.currentUserId);
     final spendingExpenses = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.expense).toList(growable: false);
     final categoryMap = {for (final category in widget.categories) category.id: category};
     final categoryTotalsData = <String, double>{};
@@ -2925,12 +4703,16 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       for (final item in expense.items) {
         final value = _global
             ? item.amount
-            : ((item.allocations.firstWhereOrNull(
-                      (entry) => canonicalGroupUserId(widget.group, entry.userId) == canonicalGroupUserId(widget.group, selectedMemberId),
-                    )?.percentage ??
-                    0) /
-                100) *
-                item.amount;
+            : ((item.allocations
+                              .firstWhereOrNull(
+                                (entry) =>
+                                    canonicalGroupUserId(widget.group, entry.userId) ==
+                                    canonicalGroupUserId(widget.group, selectedMemberId),
+                              )
+                              ?.percentage ??
+                          0) /
+                      100) *
+                  item.amount;
         if (value <= 0) {
           continue;
         }
@@ -2962,43 +4744,104 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
 
     final categoryEntries = categoryTotalsData.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final memberEntries = memberBars.entries.toList()..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
-    final payerEntries = payerTotals.entries.where((entry) => entry.key.trim().isNotEmpty).toList()..sort((a, b) => b.value.compareTo(a.value));
+    final payerEntries = payerTotals.entries.where((entry) => entry.key.trim().isNotEmpty).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final monthlyEntries = monthlyTotals.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    final emptyChartText = tr(context, es: 'Todavía no hay datos suficientes.', en: 'Not enough data yet.', gl: 'Ainda non hai datos suficientes.', fr: 'Pas assez de donnees pour le moment.', it: 'Non ci sono ancora dati sufficienti.', pt: 'Ainda nao ha dados suficientes.');
+    final emptyChartText = tr(
+      context,
+      es: 'Todavía no hay datos suficientes.',
+      en: 'Not enough data yet.',
+      gl: 'Ainda non hai datos suficientes.',
+      fr: 'Pas assez de donnees pour le moment.',
+      it: 'Non ci sono ancora dati sufficienti.',
+      pt: 'Ainda nao ha dados suficientes.',
+    );
     final maxBarValue = memberEntries.isEmpty ? 100.0 : clampChartMax(memberEntries.map((entry) => entry.value.abs()));
     final totalSpend = spendingExpenses.fold<double>(0, (sum, expense) => sum + totalExpense(expense));
     final averageExpense = spendingExpenses.isEmpty ? 0.0 : totalSpend / spendingExpenses.length;
     final largestExpense = spendingExpenses.isEmpty
-      ? null
-      : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
+        ? null
+        : spendingExpenses.reduce((current, next) => totalExpense(current) >= totalExpense(next) ? current : next);
     final topPayerEntry = payerEntries.firstWhereOrNull((entry) => entry.key.trim().isNotEmpty);
     final topPayerName = topPayerEntry == null ? null : _groupParticipantName(context, widget.group, topPayerEntry.key);
     final topCategory = categoryEntries.isEmpty ? null : categoryMap[categoryEntries.first.key];
     final settlementCount = widget.group.expenses.where((expense) => expense.kind == ExpenseRecordKind.settlement).length;
-    final noDataText = tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados');
+    final noDataText = tr(
+      context,
+      es: 'Sin datos',
+      en: 'No data',
+      gl: 'Sen datos',
+      fr: 'Pas de donnees',
+      it: 'Nessun dato',
+      pt: 'Sem dados',
+    );
     final insights = [
       _InsightTileData(
-        label: tr(context, es: 'Gasto medio', en: 'Average expense', gl: 'Gasto medio', fr: 'Depense moyenne', it: 'Spesa media', pt: 'Despesa media'),
+        label: tr(
+          context,
+          es: 'Gasto medio',
+          en: 'Average expense',
+          gl: 'Gasto medio',
+          fr: 'Depense moyenne',
+          it: 'Spesa media',
+          pt: 'Despesa media',
+        ),
         value: money(averageExpense, widget.group.currency),
         icon: Icons.auto_graph_rounded,
       ),
       _InsightTileData(
-        label: tr(context, es: 'Mayor gasto', en: 'Largest expense', gl: 'Maior gasto', fr: 'Plus grosse depense', it: 'Spesa maggiore', pt: 'Maior despesa'),
-        value: largestExpense == null ? noDataText : '${largestExpense.title} · ${money(totalExpense(largestExpense), widget.group.currency)}',
+        label: tr(
+          context,
+          es: 'Mayor gasto',
+          en: 'Largest expense',
+          gl: 'Maior gasto',
+          fr: 'Plus grosse depense',
+          it: 'Spesa maggiore',
+          pt: 'Maior despesa',
+        ),
+        value: largestExpense == null
+            ? noDataText
+            : '${largestExpense.title} · ${money(totalExpense(largestExpense), widget.group.currency)}',
         icon: Icons.local_fire_department_rounded,
       ),
       _InsightTileData(
-        label: tr(context, es: 'Más pagó', en: 'Top payer', gl: 'Máis pagou', fr: 'Principal payeur', it: 'Chi ha pagato di piu', pt: 'Quem mais pagou'),
-        value: topPayerEntry == null || topPayerName == null ? noDataText : '$topPayerName · ${money(topPayerEntry.value, widget.group.currency)}',
+        label: tr(
+          context,
+          es: 'Más pagó',
+          en: 'Top payer',
+          gl: 'Máis pagou',
+          fr: 'Principal payeur',
+          it: 'Chi ha pagato di piu',
+          pt: 'Quem mais pagou',
+        ),
+        value: topPayerEntry == null || topPayerName == null
+            ? noDataText
+            : '$topPayerName · ${money(topPayerEntry.value, widget.group.currency)}',
         icon: Icons.emoji_events_rounded,
       ),
       _InsightTileData(
-        label: tr(context, es: 'Categoría top', en: 'Top category', gl: 'Categoria top', fr: 'Categorie principale', it: 'Categoria top', pt: 'Categoria principal'),
+        label: tr(
+          context,
+          es: 'Categoría top',
+          en: 'Top category',
+          gl: 'Categoria top',
+          fr: 'Categorie principale',
+          it: 'Categoria top',
+          pt: 'Categoria principal',
+        ),
         value: topCategory == null ? noDataText : '${topCategory.name} · ${money(categoryEntries.first.value, widget.group.currency)}',
         icon: categoryIconForKey(topCategory?.iconKey ?? 'receipt'),
       ),
       _InsightTileData(
-        label: tr(context, es: 'Pagos registrados', en: 'Recorded settlements', gl: 'Pagos rexistrados', fr: 'Paiements enregistres', it: 'Pagamenti registrati', pt: 'Pagamentos registados'),
+        label: tr(
+          context,
+          es: 'Pagos registrados',
+          en: 'Recorded settlements',
+          gl: 'Pagos rexistrados',
+          fr: 'Paiements enregistres',
+          it: 'Pagamenti registrati',
+          pt: 'Pagamentos registados',
+        ),
         value: '$settlementCount',
         icon: Icons.payments_rounded,
       ),
@@ -3014,15 +4857,44 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(tr(context, es: 'Vista del gráfico', en: 'Chart view', gl: 'Vista do grafico', fr: 'Vue du graphique', it: 'Vista del grafico', pt: 'Vista do grafico'), style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  tr(
+                    context,
+                    es: 'Vista del gráfico',
+                    en: 'Chart view',
+                    gl: 'Vista do grafico',
+                    fr: 'Vue du graphique',
+                    it: 'Vista del grafico',
+                    pt: 'Vista do grafico',
+                  ),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: SegmentedButton<bool>(
                     expandedInsets: EdgeInsets.zero,
                     segments: [
-                      ButtonSegment<bool>(value: true, icon: const Icon(Icons.public_rounded), label: Text(tr(context, es: 'Global', en: 'Global', gl: 'Global', fr: 'Global', it: 'Globale', pt: 'Global'))),
-                      ButtonSegment<bool>(value: false, icon: const Icon(Icons.person_rounded), label: Text(tr(context, es: 'Individual', en: 'Individual', gl: 'Individual', fr: 'Individuel', it: 'Individuale', pt: 'Individual'))),
+                      ButtonSegment<bool>(
+                        value: true,
+                        icon: const Icon(Icons.public_rounded),
+                        label: Text(tr(context, es: 'Global', en: 'Global', gl: 'Global', fr: 'Global', it: 'Globale', pt: 'Global')),
+                      ),
+                      ButtonSegment<bool>(
+                        value: false,
+                        icon: const Icon(Icons.person_rounded),
+                        label: Text(
+                          tr(
+                            context,
+                            es: 'Individual',
+                            en: 'Individual',
+                            gl: 'Individual',
+                            fr: 'Individuel',
+                            it: 'Individuale',
+                            pt: 'Individual',
+                          ),
+                        ),
+                      ),
                     ],
                     selected: {_global},
                     onSelectionChanged: (selection) => setState(() => _global = selection.first),
@@ -3032,7 +4904,17 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
                     initialValue: selectedMemberId,
-                    decoration: InputDecoration(labelText: tr(context, es: 'Ver participante', en: 'View participant', gl: 'Ver participante', fr: 'Voir participant', it: 'Vedi partecipante', pt: 'Ver participante')),
+                    decoration: InputDecoration(
+                      labelText: tr(
+                        context,
+                        es: 'Ver participante',
+                        en: 'View participant',
+                        gl: 'Ver participante',
+                        fr: 'Voir participant',
+                        it: 'Vedi partecipante',
+                        pt: 'Ver participante',
+                      ),
+                    ),
                     items: visibleMembers
                         .map(
                           (member) => DropdownMenuItem<String>(
@@ -3058,7 +4940,17 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
                 const SizedBox(height: 14),
                 DropdownButtonFormField<_GroupChartKind>(
                   initialValue: _selectedChart,
-                  decoration: InputDecoration(labelText: tr(context, es: 'Gráfico activo', en: 'Active chart', gl: 'Grafico activo', fr: 'Graphique actif', it: 'Grafico attivo', pt: 'Grafico ativo')),
+                  decoration: InputDecoration(
+                    labelText: tr(
+                      context,
+                      es: 'Gráfico activo',
+                      en: 'Active chart',
+                      gl: 'Grafico activo',
+                      fr: 'Graphique actif',
+                      it: 'Grafico attivo',
+                      pt: 'Grafico ativo',
+                    ),
+                  ),
                   items: _groupChartOptions.map((option) {
                     return DropdownMenuItem<_GroupChartKind>(
                       value: option.kind,
@@ -3084,313 +4976,403 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
         ),
         const SizedBox(height: 16),
         if (_selectedChart == _GroupChartKind.insights)
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr(context, es: 'Insights', en: 'Insights', gl: 'Insights', fr: 'Insights', it: 'Insights', pt: 'Insights'), style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= 640;
-                    final tileWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: insights.map((insight) => SizedBox(width: tileWidth, child: _InsightCard(data: insight))).toList(),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_selectedChart == _GroupChartKind.categories) ...[
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _global
-                            ? tr(context, es: 'Distribución global por categoría', en: 'Overall distribution by category', gl: 'Distribucion global por categoria', fr: 'Distribution globale par categorie', it: 'Distribuzione globale per categoria', pt: 'Distribuicao global por categoria')
-                            : tr(context, es: 'Reparto de tu parte por categoría', en: 'Your share by category', gl: 'Reparto da tua parte por categoria', fr: 'Votre part par categorie', it: 'La tua quota per categoria', pt: 'A tua parte por categoria'),
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _showCategoryChartInfo(context),
-                      icon: const Icon(Icons.help_outline_rounded),
-                      tooltip: tr(context, es: 'Cómo leer este gráfico', en: 'How to read this chart', gl: 'Como ler este grafico', fr: 'Comment lire ce graphique', it: 'Come leggere questo grafico', pt: 'Como ler este grafico'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 240,
-                  child: categoryEntries.isEmpty
-                      ? Center(child: Text(emptyChartText))
-                      : PieChart(
-                          PieChartData(
-                            sectionsSpace: 4,
-                            centerSpaceRadius: 42,
-                            sections: categoryEntries.take(5).mapIndexed((index, entry) {
-                              final category = categoryMap[entry.key];
-                              return PieChartSectionData(
-                                value: entry.value,
-                                title: '',
-                                color: colorFromHex(category?.colorHex ?? '0xFFE4572E'),
-                                radius: 92,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                ),
-                if (categoryEntries.isNotEmpty) ...[
-                  const SizedBox(height: 22),
-                  _readableChipWrap(
-                    context,
-                    children: categoryEntries.take(5).mapIndexed((index, entry) {
-                      final category = categoryMap[entry.key];
-                      return Chip(
-                        avatar: CircleAvatar(radius: 7, backgroundColor: colorFromHex(category?.colorHex ?? '0xFFE4572E')),
-                        label: Text('${category?.name ?? entry.key} · ${money(entry.value, widget.group.currency)}'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr(context, es: 'Insights', en: 'Insights', gl: 'Insights', fr: 'Insights', it: 'Insights', pt: 'Insights'),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 640;
+                      final tileWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: insights
+                            .map(
+                              (insight) => SizedBox(
+                                width: tileWidth,
+                                child: _InsightCard(data: insight),
+                              ),
+                            )
+                            .toList(),
                       );
-                    }).toList(),
+                    },
                   ),
                 ],
-              ],
+              ),
             ),
           ),
-        ),
+        if (_selectedChart == _GroupChartKind.categories) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _global
+                              ? tr(
+                                  context,
+                                  es: 'Distribución global por categoría',
+                                  en: 'Overall distribution by category',
+                                  gl: 'Distribucion global por categoria',
+                                  fr: 'Distribution globale par categorie',
+                                  it: 'Distribuzione globale per categoria',
+                                  pt: 'Distribuicao global por categoria',
+                                )
+                              : tr(
+                                  context,
+                                  es: 'Reparto de tu parte por categoría',
+                                  en: 'Your share by category',
+                                  gl: 'Reparto da tua parte por categoria',
+                                  fr: 'Votre part par categorie',
+                                  it: 'La tua quota per categoria',
+                                  pt: 'A tua parte por categoria',
+                                ),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _showCategoryChartInfo(context),
+                        icon: const Icon(Icons.help_outline_rounded),
+                        tooltip: tr(
+                          context,
+                          es: 'Cómo leer este gráfico',
+                          en: 'How to read this chart',
+                          gl: 'Como ler este grafico',
+                          fr: 'Comment lire ce graphique',
+                          it: 'Come leggere questo grafico',
+                          pt: 'Como ler este grafico',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 240,
+                    child: categoryEntries.isEmpty
+                        ? Center(child: Text(emptyChartText))
+                        : PieChart(
+                            PieChartData(
+                              sectionsSpace: 4,
+                              centerSpaceRadius: 42,
+                              sections: categoryEntries.take(5).mapIndexed((index, entry) {
+                                final category = categoryMap[entry.key];
+                                return PieChartSectionData(
+                                  value: entry.value,
+                                  title: '',
+                                  color: colorFromHex(category?.colorHex ?? '0xFFE4572E'),
+                                  radius: 92,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                  ),
+                  if (categoryEntries.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    _readableChipWrap(
+                      context,
+                      children: categoryEntries.take(5).mapIndexed((index, entry) {
+                        final category = categoryMap[entry.key];
+                        return Chip(
+                          avatar: CircleAvatar(radius: 7, backgroundColor: colorFromHex(category?.colorHex ?? '0xFFE4572E')),
+                          label: Text(
+                            '${categoryDisplayName(category, tr(context, es: 'Otros', en: 'Other', gl: 'Outros', ca: 'Altres', eu: 'Bestelakoak', fr: 'Autres', it: 'Altro', pt: 'Outros', de: 'Sonstiges', el: 'Άλλα', ru: 'Прочее', ar: 'أخرى', zh: '其他', ja: 'その他'))} · ${money(entry.value, widget.group.currency)}',
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
         if (_selectedChart == _GroupChartKind.monthly) ...[
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr(context, es: 'Evolución mensual', en: 'Monthly trend', gl: 'Evolucion mensual', fr: 'Evolution mensuelle', it: 'Andamento mensile', pt: 'Evolucao mensal'), style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 220,
-                  child: monthlyEntries.length < 2
-                      ? Center(child: Text(emptyChartText))
-                      : LineChart(
-                          LineChartData(
-                            minY: 0,
-                            gridData: FlGridData(show: true, drawVerticalLine: false),
-                            borderData: FlBorderData(show: false),
-                            titlesData: FlTitlesData(
-                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 44,
-                                  getTitlesWidget: (value, meta) => Text(_compactAxisAmount(context, value), style: Theme.of(context).textTheme.labelSmall),
-                                ),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  getTitlesWidget: (value, meta) {
-                                    final index = value.toInt();
-                                    if (index < 0 || index >= monthlyEntries.length) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(DateFormat('MMM', localeTag(context)).format(monthlyEntries[index].key)),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            lineBarsData: [
-                              LineChartBarData(
-                                isCurved: true,
-                                color: const Color(0xFFE4572E),
-                                barWidth: 4,
-                                dotData: const FlDotData(show: true),
-                                belowBarData: BarAreaData(show: true, color: const Color(0xFFE4572E).withValues(alpha: 0.12)),
-                                spots: monthlyEntries.mapIndexed((index, entry) => FlSpot(index.toDouble(), entry.value)).toList(),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        ],
-        if (_selectedChart == _GroupChartKind.payers) ...[
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr(context, es: 'Quién paga más', en: 'Who pays the most', gl: 'Quen paga máis', fr: 'Qui paie le plus', it: 'Chi paga di piu', pt: 'Quem paga mais'), style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 220,
-                  child: payerEntries.isEmpty
-                      ? Center(child: Text(emptyChartText))
-                      : PieChart(
-                          PieChartData(
-                            sectionsSpace: 4,
-                            centerSpaceRadius: 42,
-                            sections: payerEntries.take(5).mapIndexed((index, entry) {
-                              return PieChartSectionData(
-                                value: entry.value,
-                                title: '',
-                                color: _chartPalette[index % _chartPalette.length],
-                                radius: 90,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                ),
-                if (payerEntries.isNotEmpty) ...[
-                  const SizedBox(height: 22),
-                  _readableChipWrap(
-                    context,
-                    children: payerEntries.take(5).mapIndexed((index, entry) {
-                      return Chip(
-                        avatar: CircleAvatar(radius: 7, backgroundColor: _chartPalette[index % _chartPalette.length]),
-                        label: Text('${_groupParticipantName(context, widget.group, entry.key)} · ${money(entry.value, widget.group.currency)}'),
-                      );
-                    }).toList(),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr(
+                      context,
+                      es: 'Evolución mensual',
+                      en: 'Monthly trend',
+                      gl: 'Evolucion mensual',
+                      fr: 'Evolution mensuelle',
+                      it: 'Andamento mensile',
+                      pt: 'Evolucao mensal',
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        ],
-        if (_selectedChart == _GroupChartKind.balances) ...[
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _global
-                            ? tr(context, es: 'Balance neto por persona', en: 'Net balance by person', gl: 'Balance neto por persoa', fr: 'Solde net par personne', it: 'Saldo netto per persona', pt: 'Saldo liquido por pessoa')
-                            : tr(context, es: 'Quién está cubriendo tu parte', en: 'Who is covering your share', gl: 'Quen esta cubrindo a tua parte', fr: 'Qui couvre votre part', it: 'Chi sta coprendo la tua quota', pt: 'Quem esta a cobrir a tua parte'),
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _showBalanceChartInfo(context),
-                      icon: const Icon(Icons.help_outline_rounded),
-                      tooltip: tr(context, es: 'Cómo leer este gráfico', en: 'How to read this chart', gl: 'Como ler este grafico', fr: 'Comment lire ce graphique', it: 'Come leggere questo grafico', pt: 'Como ler este grafico'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 240,
-                  child: memberEntries.isEmpty
-                      ? Center(child: Text(emptyChartText))
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: math.max(MediaQuery.sizeOf(context).width - 88, memberEntries.length * 72),
-                            child: BarChart(
-                              BarChartData(
-                                minY: _global ? -maxBarValue : 0,
-                                maxY: maxBarValue,
-                                alignment: BarChartAlignment.spaceAround,
-                                baselineY: 0,
-                                gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxBarValue / 4),
-                                borderData: FlBorderData(show: false),
-                                barTouchData: BarTouchData(
-                                  enabled: true,
-                                  touchTooltipData: BarTouchTooltipData(
-                                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                      final label = _groupParticipantName(context, widget.group, memberEntries[group.x.toInt()].key);
-                                      return BarTooltipItem('$label\n${money(rod.toY.abs(), widget.group.currency)}', const TextStyle(color: Colors.white, fontWeight: FontWeight.w700));
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 220,
+                    child: monthlyEntries.length < 2
+                        ? Center(child: Text(emptyChartText))
+                        : LineChart(
+                            LineChartData(
+                              minY: 0,
+                              gridData: const FlGridData(show: true, drawVerticalLine: false),
+                              borderData: FlBorderData(show: false),
+                              titlesData: FlTitlesData(
+                                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                leftTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    reservedSize: 44,
+                                    getTitlesWidget: (value, meta) =>
+                                        Text(_compactAxisAmount(context, value), style: Theme.of(context).textTheme.labelSmall),
+                                  ),
+                                ),
+                                bottomTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    getTitlesWidget: (value, meta) {
+                                      final index = value.toInt();
+                                      if (index < 0 || index >= monthlyEntries.length) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(DateFormat('MMM', localeTag(context)).format(monthlyEntries[index].key)),
+                                      );
                                     },
                                   ),
                                 ),
-                                titlesData: FlTitlesData(
-                                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                  leftTitles: AxisTitles(
-                                    sideTitles: SideTitles(
-                                      showTitles: true,
-                                      reservedSize: 44,
-                                      getTitlesWidget: (value, meta) {
-                                        return Text(_compactAxisAmount(context, value), style: Theme.of(context).textTheme.labelSmall);
-                                      },
-                                    ),
-                                  ),
-                                  bottomTitles: AxisTitles(
-                                    sideTitles: SideTitles(
-                                      showTitles: true,
-                                      reservedSize: 40,
-                                      getTitlesWidget: (value, meta) {
-                                        final index = value.toInt();
-                                        if (index < 0 || index >= memberEntries.length) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        final label = _groupParticipantName(context, widget.group, memberEntries[index].key);
-                                        return Padding(
-                                          padding: const EdgeInsets.only(top: 8),
-                                          child: SizedBox(
-                                            width: 56,
-                                            child: Text(
-                                              label.split(' ').first,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
+                              ),
+                              lineBarsData: [
+                                LineChartBarData(
+                                  isCurved: true,
+                                  color: const Color(0xFFE4572E),
+                                  barWidth: 4,
+                                  dotData: const FlDotData(show: true),
+                                  belowBarData: BarAreaData(show: true, color: const Color(0xFFE4572E).withValues(alpha: 0.12)),
+                                  spots: monthlyEntries.mapIndexed((index, entry) => FlSpot(index.toDouble(), entry.value)).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (_selectedChart == _GroupChartKind.payers) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr(
+                      context,
+                      es: 'Quién paga más',
+                      en: 'Who pays the most',
+                      gl: 'Quen paga máis',
+                      fr: 'Qui paie le plus',
+                      it: 'Chi paga di piu',
+                      pt: 'Quem paga mais',
+                    ),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 220,
+                    child: payerEntries.isEmpty
+                        ? Center(child: Text(emptyChartText))
+                        : PieChart(
+                            PieChartData(
+                              sectionsSpace: 4,
+                              centerSpaceRadius: 42,
+                              sections: payerEntries.take(5).mapIndexed((index, entry) {
+                                return PieChartSectionData(
+                                  value: entry.value,
+                                  title: '',
+                                  color: _chartPalette[index % _chartPalette.length],
+                                  radius: 90,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                  ),
+                  if (payerEntries.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    _readableChipWrap(
+                      context,
+                      children: payerEntries.take(5).mapIndexed((index, entry) {
+                        return Chip(
+                          avatar: CircleAvatar(radius: 7, backgroundColor: _chartPalette[index % _chartPalette.length]),
+                          label: Text(
+                            '${_groupParticipantName(context, widget.group, entry.key)} · ${money(entry.value, widget.group.currency)}',
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (_selectedChart == _GroupChartKind.balances) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _global
+                              ? tr(
+                                  context,
+                                  es: 'Balance neto por persona',
+                                  en: 'Net balance by person',
+                                  gl: 'Balance neto por persoa',
+                                  fr: 'Solde net par personne',
+                                  it: 'Saldo netto per persona',
+                                  pt: 'Saldo liquido por pessoa',
+                                )
+                              : tr(
+                                  context,
+                                  es: 'Quién está cubriendo tu parte',
+                                  en: 'Who is covering your share',
+                                  gl: 'Quen esta cubrindo a tua parte',
+                                  fr: 'Qui couvre votre part',
+                                  it: 'Chi sta coprendo la tua quota',
+                                  pt: 'Quem esta a cobrir a tua parte',
+                                ),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _showBalanceChartInfo(context),
+                        icon: const Icon(Icons.help_outline_rounded),
+                        tooltip: tr(
+                          context,
+                          es: 'Cómo leer este gráfico',
+                          en: 'How to read this chart',
+                          gl: 'Como ler este grafico',
+                          fr: 'Comment lire ce graphique',
+                          it: 'Come leggere questo grafico',
+                          pt: 'Como ler este grafico',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 240,
+                    child: memberEntries.isEmpty
+                        ? Center(child: Text(emptyChartText))
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: math.max(MediaQuery.sizeOf(context).width - 88, memberEntries.length * 72),
+                              child: BarChart(
+                                BarChartData(
+                                  minY: _global ? -maxBarValue : 0,
+                                  maxY: maxBarValue,
+                                  alignment: BarChartAlignment.spaceAround,
+                                  baselineY: 0,
+                                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxBarValue / 4),
+                                  borderData: FlBorderData(show: false),
+                                  barTouchData: BarTouchData(
+                                    enabled: true,
+                                    touchTooltipData: BarTouchTooltipData(
+                                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                        final label = _groupParticipantName(context, widget.group, memberEntries[group.x].key);
+                                        return BarTooltipItem(
+                                          '$label\n${money(rod.toY.abs(), widget.group.currency)}',
+                                          const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                         );
                                       },
                                     ),
                                   ),
-                                ),
-                                barGroups: memberEntries.mapIndexed((index, entry) {
-                                  return BarChartGroupData(
-                                    x: index,
-                                    barRods: [
-                                      BarChartRodData(
-                                        toY: entry.value,
-                                        color: _global ? (entry.value >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC62828)) : const Color(0xFFE4572E),
-                                        width: 28,
-                                        borderRadius: BorderRadius.circular(12),
+                                  titlesData: FlTitlesData(
+                                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                    leftTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 44,
+                                        getTitlesWidget: (value, meta) {
+                                          return Text(_compactAxisAmount(context, value), style: Theme.of(context).textTheme.labelSmall);
+                                        },
                                       ),
-                                    ],
-                                  );
-                                }).toList(),
+                                    ),
+                                    bottomTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 40,
+                                        getTitlesWidget: (value, meta) {
+                                          final index = value.toInt();
+                                          if (index < 0 || index >= memberEntries.length) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          final label = _groupParticipantName(context, widget.group, memberEntries[index].key);
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 8),
+                                            child: SizedBox(
+                                              width: 56,
+                                              child: Text(
+                                                label.split(' ').first,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  barGroups: memberEntries.mapIndexed((index, entry) {
+                                    return BarChartGroupData(
+                                      x: index,
+                                      barRods: [
+                                        BarChartRodData(
+                                          toY: entry.value,
+                                          color: _global
+                                              ? (entry.value >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC62828))
+                                              : const Color(0xFFE4572E),
+                                          width: 28,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ],
+                                    );
+                                  }).toList(),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
         ],
       ],
     );
@@ -3403,13 +5385,45 @@ class _GroupChartsTabState extends State<_GroupChartsTab> {
       case _GroupChartKind.categories:
         return tr(context, es: 'Categorías', en: 'Categories', gl: 'Categorias', fr: 'Categories', it: 'Categorie', pt: 'Categorias');
       case _GroupChartKind.monthly:
-        return tr(context, es: 'Evolución mensual', en: 'Monthly trend', gl: 'Evolucion mensual', fr: 'Evolution mensuelle', it: 'Andamento mensile', pt: 'Evolucao mensal');
+        return tr(
+          context,
+          es: 'Evolución mensual',
+          en: 'Monthly trend',
+          gl: 'Evolucion mensual',
+          fr: 'Evolution mensuelle',
+          it: 'Andamento mensile',
+          pt: 'Evolucao mensal',
+        );
       case _GroupChartKind.payers:
-        return tr(context, es: 'Quién paga más', en: 'Who pays the most', gl: 'Quen paga máis', fr: 'Qui paie le plus', it: 'Chi paga di piu', pt: 'Quem paga mais');
+        return tr(
+          context,
+          es: 'Quién paga más',
+          en: 'Who pays the most',
+          gl: 'Quen paga máis',
+          fr: 'Qui paie le plus',
+          it: 'Chi paga di piu',
+          pt: 'Quem paga mais',
+        );
       case _GroupChartKind.balances:
         return _global
-            ? tr(context, es: 'Balance neto por persona', en: 'Net balance by person', gl: 'Balance neto por persoa', fr: 'Solde net par personne', it: 'Saldo netto per persona', pt: 'Saldo liquido por pessoa')
-            : tr(context, es: 'Quién está cubriendo tu parte', en: 'Who is covering your share', gl: 'Quen esta cubrindo a tua parte', fr: 'Qui couvre votre part', it: 'Chi sta coprendo la tua quota', pt: 'Quem esta a cobrir a tua parte');
+            ? tr(
+                context,
+                es: 'Balance neto por persona',
+                en: 'Net balance by person',
+                gl: 'Balance neto por persoa',
+                fr: 'Solde net par personne',
+                it: 'Saldo netto per persona',
+                pt: 'Saldo liquido por pessoa',
+              )
+            : tr(
+                context,
+                es: 'Quién está cubriendo tu parte',
+                en: 'Who is covering your share',
+                gl: 'Quen esta cubrindo a tua parte',
+                fr: 'Qui couvre votre part',
+                it: 'Chi sta coprendo la tua quota',
+                pt: 'Quem esta a cobrir a tua parte',
+              );
     }
   }
 }
@@ -3457,19 +5471,13 @@ class _InsightCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  data.label,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: subtitleColor),
-                ),
+                Text(data.label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: subtitleColor)),
                 const SizedBox(height: 4),
                 Text(
                   data.value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: titleColor,
-                  ),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: titleColor),
                 ),
               ],
             ),
@@ -3506,7 +5514,15 @@ class _ActionTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: enabled ? null : Theme.of(context).colorScheme.onSurfaceVariant),
-              Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: enabled ? null : Theme.of(context).colorScheme.onSurfaceVariant)),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: enabled ? null : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),
@@ -3527,7 +5543,9 @@ class _DateLine extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+          Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+          ),
           const SizedBox(width: 12),
           Flexible(child: Text(value, textAlign: TextAlign.right)),
         ],
@@ -3563,7 +5581,10 @@ class _DateLine extends StatelessWidget {
   );
 }
 
-({Color background, Color border, Color foreground, Color title, Color subtitle}) _balanceTilePalette(BuildContext context, double balance) {
+({Color background, Color border, Color foreground, Color title, Color subtitle}) _balanceTilePalette(
+  BuildContext context,
+  double balance,
+) {
   final colorScheme = Theme.of(context).colorScheme;
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -3626,7 +5647,10 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: resolvedLabelColor)),
           const SizedBox(height: 8),
-          Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor)),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor),
+          ),
         ],
       ),
     );

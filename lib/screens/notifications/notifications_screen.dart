@@ -18,7 +18,17 @@ class NotificationsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr(context, es: 'Notificaciones', en: 'Notifications', gl: 'Notificacions', fr: 'Notifications', it: 'Notifiche', pt: 'Notificacoes')),
+        title: Text(
+          tr(
+            context,
+            es: 'Notificaciones',
+            en: 'Notifications',
+            gl: 'Notificacions',
+            fr: 'Notifications',
+            it: 'Notifiche',
+            pt: 'Notificacoes',
+          ),
+        ),
       ),
       body: notificationsState.when(
         data: (notifications) {
@@ -39,7 +49,15 @@ class NotificationsScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  tr(context, es: 'No hay notificaciones con los filtros actuales.', en: 'There are no notifications with the current filters.', gl: 'Non hai notificacions cos filtros actuais.', fr: 'Aucune notification avec les filtres actuels.', it: 'Non ci sono notifiche con i filtri attuali.', pt: 'Nao ha notificacoes com os filtros atuais.'),
+                  tr(
+                    context,
+                    es: 'No hay notificaciones con los filtros actuales.',
+                    en: 'There are no notifications with the current filters.',
+                    gl: 'Non hai notificacions cos filtros actuais.',
+                    fr: 'Aucune notification avec les filtres actuels.',
+                    it: 'Non ci sono notifiche con i filtri attuali.',
+                    pt: 'Nao ha notificacoes com os filtros atuais.',
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -58,10 +76,14 @@ class NotificationsScreen extends ConsumerWidget {
                 child: Ink(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: notification.isRead ? Theme.of(context).colorScheme.surfaceContainerLow : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: notification.isRead
+                        ? Theme.of(context).colorScheme.surfaceContainerLow
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: notification.isRead ? Theme.of(context).colorScheme.outlineVariant : Theme.of(context).colorScheme.primary.withValues(alpha: 0.26),
+                      color: notification.isRead
+                          ? Theme.of(context).colorScheme.outlineVariant
+                          : Theme.of(context).colorScheme.primary.withValues(alpha: 0.26),
                     ),
                   ),
                   child: Row(
@@ -80,7 +102,10 @@ class NotificationsScreen extends ConsumerWidget {
                             const SizedBox(height: 4),
                             Text(notification.message, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35)),
                             const SizedBox(height: 8),
-                            Text(DateFormat('dd/MM/yyyy HH:mm', localeTag(context)).format(notification.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                            Text(
+                              DateFormat('dd/MM/yyyy HH:mm', localeTag(context)).format(notification.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),

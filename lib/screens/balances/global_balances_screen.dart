@@ -41,20 +41,25 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
-                _PendingToggleCard(
-                  value: _includePendingUsers,
-                  onChanged: (value) => setState(() => _includePendingUsers = value),
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    tr(context, es: 'No tienes deudas ni cobros pendientes ${_includePendingUsers ? 'incluyendo personas pendientes' : 'con cuentas reales'} en tus grupos.', en: 'You have no pending debts or claims ${_includePendingUsers ? 'including pending people' : 'with real accounts'} across your groups.', gl: 'Non tes debedas nin cobros pendentes ${_includePendingUsers ? 'incluindo persoas pendentes' : 'con contas reais'} nos teus grupos.', fr: 'Vous n avez ni dettes ni creances en attente ${_includePendingUsers ? 'y compris avec les personnes en attente' : 'avec des comptes reels'} dans vos groupes.', it: 'Non hai debiti o crediti pendenti ${_includePendingUsers ? 'inclusi gli utenti in attesa' : 'con account reali'} nei tuoi gruppi.', pt: 'Nao tens dividas nem cobrancas pendentes ${_includePendingUsers ? 'incluindo pessoas pendentes' : 'com contas reais'} nos teus grupos.'),
-                    textAlign: TextAlign.center,
+                  _PendingToggleCard(value: _includePendingUsers, onChanged: (value) => setState(() => _includePendingUsers = value)),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      tr(
+                        context,
+                        es: 'No tienes deudas ni cobros pendientes ${_includePendingUsers ? 'incluyendo personas pendientes' : 'con cuentas reales'} en tus grupos.',
+                        en: 'You have no pending debts or claims ${_includePendingUsers ? 'including pending people' : 'with real accounts'} across your groups.',
+                        gl: 'Non tes debedas nin cobros pendentes ${_includePendingUsers ? 'incluindo persoas pendentes' : 'con contas reais'} nos teus grupos.',
+                        fr: 'Vous n avez ni dettes ni creances en attente ${_includePendingUsers ? 'y compris avec les personnes en attente' : 'avec des comptes reels'} dans vos groupes.',
+                        it: 'Non hai debiti o crediti pendenti ${_includePendingUsers ? 'inclusi gli utenti in attesa' : 'con account reali'} nei tuoi gruppi.',
+                        pt: 'Nao tens dividas nem cobrancas pendentes ${_includePendingUsers ? 'incluindo pessoas pendentes' : 'com contas reais'} nos teus grupos.',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             );
           }
 
@@ -64,89 +69,116 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
-              _PendingToggleCard(
-                value: _includePendingUsers,
-                onChanged: (value) => setState(() => _includePendingUsers = value),
-              ),
-              const SizedBox(height: 16),
-              ...List.generate(entries.length, (index) {
-                final entry = entries[index];
-                final isTheyOweYou = entry.netAmount > 0;
-                final tone = isTheyOweYou ? const Color(0xFFE8F7EF) : const Color(0xFFFFF3E2);
-                final accent = isTheyOweYou ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
-                return Padding(
-                  padding: EdgeInsets.only(bottom: index == entries.length - 1 ? 0 : 12),
-                  child: Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(28),
-                      onTap: () => _showSettlementSheet(context, ref, entry, widget.user.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                _PendingToggleCard(value: _includePendingUsers, onChanged: (value) => setState(() => _includePendingUsers = value)),
+                const SizedBox(height: 16),
+                ...List.generate(entries.length, (index) {
+                  final entry = entries[index];
+                  final isTheyOweYou = entry.netAmount > 0;
+                  final tone = isTheyOweYou ? const Color(0xFFE8F7EF) : const Color(0xFFFFF3E2);
+                  final accent = isTheyOweYou ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: index == entries.length - 1 ? 0 : 12),
+                    child: Card(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: () => _showSettlementSheet(context, ref, entry, widget.user.id),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.counterparty.name,
+                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      entry.groupSubtitle ??
+                                          (isTheyOweYou
+                                              ? tr(
+                                                  context,
+                                                  es: 'Te debe dinero',
+                                                  en: 'Owes you money',
+                                                  gl: 'Debeche diñeiro',
+                                                  fr: 'Vous doit de l argent',
+                                                  it: 'Ti deve denaro',
+                                                  pt: 'Deve-te dinheiro',
+                                                )
+                                              : tr(
+                                                  context,
+                                                  es: 'Le debes dinero',
+                                                  en: 'You owe money',
+                                                  gl: 'Debeslle diñeiro',
+                                                  fr: 'Vous lui devez de l argent',
+                                                  it: 'Gli devi denaro',
+                                                  pt: 'Deves-lhe dinheiro',
+                                                )),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      entry.isScopedToGroup
+                                          ? tr(
+                                              context,
+                                              es: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
+                                              en: 'Gets ${money(entry.totalIncoming, entry.currency)} · Owes ${money(entry.totalOutgoing, entry.currency)}',
+                                              gl: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
+                                              fr: 'Recoit ${money(entry.totalIncoming, entry.currency)} · Doit ${money(entry.totalOutgoing, entry.currency)}',
+                                              it: 'Riceve ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
+                                              pt: 'Recebe ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
+                                            )
+                                          : tr(
+                                              context,
+                                              es: '${groupCountLabel(context, entry.groupBreakdown.length)} · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
+                                              en: '${groupCountLabel(context, entry.groupBreakdown.length)} · gets ${money(entry.totalIncoming, entry.currency)} · owes ${money(entry.totalOutgoing, entry.currency)}',
+                                              gl: '${groupCountLabel(context, entry.groupBreakdown.length)} · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
+                                              fr: '${groupCountLabel(context, entry.groupBreakdown.length)} · recoit ${money(entry.totalIncoming, entry.currency)} · doit ${money(entry.totalOutgoing, entry.currency)}',
+                                              it: '${groupCountLabel(context, entry.groupBreakdown.length)} · riceve ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
+                                              pt: '${groupCountLabel(context, entry.groupBreakdown.length)} · recebe ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
+                                            ),
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Text(entry.counterparty.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    entry.groupSubtitle ??
-                                        (isTheyOweYou
-                                            ? tr(context, es: 'Te debe dinero', en: 'Owes you money', gl: 'Debeche diñeiro', fr: 'Vous doit de l argent', it: 'Ti deve denaro', pt: 'Deve-te dinheiro')
-                                            : tr(context, es: 'Le debes dinero', en: 'You owe money', gl: 'Debeslle diñeiro', fr: 'Vous lui devez de l argent', it: 'Gli devi denaro', pt: 'Deves-lhe dinheiro')),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(999)),
+                                    child: Text(
+                                      '${isTheyOweYou ? '+' : '-'}${money(entry.netAmount.abs(), entry.currency)}',
+                                      style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+                                    ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 10),
                                   Text(
-                                    entry.isScopedToGroup
-                                        ? tr(
-                                            context,
-                                            es: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
-                                            en: 'Gets ${money(entry.totalIncoming, entry.currency)} · Owes ${money(entry.totalOutgoing, entry.currency)}',
-                                            gl: 'A favor ${money(entry.totalIncoming, entry.currency)} · Debe ${money(entry.totalOutgoing, entry.currency)}',
-                                            fr: 'Recoit ${money(entry.totalIncoming, entry.currency)} · Doit ${money(entry.totalOutgoing, entry.currency)}',
-                                            it: 'Riceve ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
-                                            pt: 'Recebe ${money(entry.totalIncoming, entry.currency)} · Deve ${money(entry.totalOutgoing, entry.currency)}',
-                                          )
-                                        : tr(
-                                            context,
-                                            es: '${entry.groupBreakdown.length} grupos · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
-                                            en: '${entry.groupBreakdown.length} groups · gets ${money(entry.totalIncoming, entry.currency)} · owes ${money(entry.totalOutgoing, entry.currency)}',
-                                            gl: '${entry.groupBreakdown.length} grupos · a favor ${money(entry.totalIncoming, entry.currency)} · debe ${money(entry.totalOutgoing, entry.currency)}',
-                                            fr: '${entry.groupBreakdown.length} groupes · recoit ${money(entry.totalIncoming, entry.currency)} · doit ${money(entry.totalOutgoing, entry.currency)}',
-                                            it: '${entry.groupBreakdown.length} gruppi · riceve ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
-                                            pt: '${entry.groupBreakdown.length} grupos · recebe ${money(entry.totalIncoming, entry.currency)} · deve ${money(entry.totalOutgoing, entry.currency)}',
-                                          ),
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    tr(
+                                      context,
+                                      es: 'Ver liquidación',
+                                      en: 'Open settlement',
+                                      gl: 'Ver liquidacion',
+                                      fr: 'Voir liquidation',
+                                      it: 'Vedi liquidazione',
+                                      pt: 'Ver liquidacao',
+                                    ),
+                                    style: Theme.of(context).textTheme.labelLarge?.copyWith(color: accent, fontWeight: FontWeight.w700),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(999)),
-                                  child: Text('${isTheyOweYou ? '+' : '-'}${money(entry.netAmount.abs(), entry.currency)}', style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  tr(context, es: 'Ver liquidación', en: 'Open settlement', gl: 'Ver liquidacion', fr: 'Voir liquidation', it: 'Vedi liquidazione', pt: 'Ver liquidacao'),
-                                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: accent, fontWeight: FontWeight.w700),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }),
-            ],
-          ),
+                  );
+                }),
+              ],
+            ),
           );
         },
         error: (error, _) => Center(child: Text(error.toString())),
@@ -169,10 +201,15 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(entry.counterparty.name, style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    entry.counterparty.name,
+                    style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 6),
                   Text(
-                    entry.netAmount >= 0 ? '+${money(entry.netAmount.abs(), entry.currency)}' : '-${money(entry.netAmount.abs(), entry.currency)}',
+                    entry.netAmount >= 0
+                        ? '+${money(entry.netAmount.abs(), entry.currency)}'
+                        : '-${money(entry.netAmount.abs(), entry.currency)}',
                     style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
@@ -181,7 +218,17 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _showBalanceHistorySheet(sheetContext, entry, currentUserId),
                       icon: const Icon(Icons.history_rounded),
-                      label: Text(tr(sheetContext, es: 'Ver historial', en: 'View history', gl: 'Ver historial', fr: 'Voir historique', it: 'Vedi storico', pt: 'Ver historico')),
+                      label: Text(
+                        tr(
+                          sheetContext,
+                          es: 'Ver historial',
+                          en: 'View history',
+                          gl: 'Ver historial',
+                          fr: 'Voir historique',
+                          it: 'Vedi storico',
+                          pt: 'Ver historico',
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -193,7 +240,15 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                         if (index == entry.groupBreakdown.length) {
                           final totalAccent = entry.netAmount >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
                           return _SettlementCard(
-                            title: tr(sheetContext, es: 'Total entre ambos', en: 'Total between both', gl: 'Total entre ambos', fr: 'Total entre les deux', it: 'Totale tra voi', pt: 'Total entre ambos'),
+                            title: tr(
+                              sheetContext,
+                              es: 'Total entre ambos',
+                              en: 'Total between both',
+                              gl: 'Total entre ambos',
+                              fr: 'Total entre les deux',
+                              it: 'Totale tra voi',
+                              pt: 'Total entre ambos',
+                            ),
                             subtitle: tr(
                               sheetContext,
                               es: 'Ingresos ${money(entry.totalIncoming, entry.currency)} · Gastos ${money(entry.totalOutgoing, entry.currency)}',
@@ -207,9 +262,29 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                             currency: entry.currency,
                             accent: totalAccent,
                             requestEnabled: entry.canRequestAll,
-                            payEnabled: entry.canPayAll && entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount.abs() > 0.009).every((groupDebt) => !groupDebt.group.isClosed),
-                            requestLabel: tr(sheetContext, es: 'Solicitar todo', en: 'Request all', gl: 'Solicitar todo', fr: 'Demander tout', it: 'Richiedi tutto', pt: 'Solicitar tudo'),
-                            payLabel: tr(sheetContext, es: 'Saldar todo', en: 'Settle all', gl: 'Saldar todo', fr: 'Regler tout', it: 'Saldare tutto', pt: 'Liquidar tudo'),
+                            payEnabled:
+                                entry.canPayAll &&
+                                entry.groupBreakdown
+                                    .where((groupDebt) => groupDebt.netAmount.abs() > 0.009)
+                                    .every((groupDebt) => !groupDebt.group.isClosed),
+                            requestLabel: tr(
+                              sheetContext,
+                              es: 'Solicitar todo',
+                              en: 'Request all',
+                              gl: 'Solicitar todo',
+                              fr: 'Demander tout',
+                              it: 'Richiedi tutto',
+                              pt: 'Solicitar tudo',
+                            ),
+                            payLabel: tr(
+                              sheetContext,
+                              es: 'Saldar todo',
+                              en: 'Settle all',
+                              gl: 'Saldar todo',
+                              fr: 'Regler tout',
+                              it: 'Saldare tutto',
+                              pt: 'Liquidar tudo',
+                            ),
                             leading: const Icon(Icons.summarize_rounded),
                             onRequest: () async {
                               Navigator.of(sheetContext).pop();
@@ -226,7 +301,15 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                         final accent = currentUserIsCreditor ? const Color(0xFF1E8E5A) : const Color(0xFFC77600);
                         return _SettlementCard(
                           title: groupDebt.group.name,
-                          subtitle: tr(sheetContext, es: 'Liquidación del grupo', en: 'Group settlement', gl: 'Liquidacion do grupo', fr: 'Liquidation du groupe', it: 'Liquidazione del gruppo', pt: 'Liquidacao do grupo'),
+                          subtitle: tr(
+                            sheetContext,
+                            es: 'Liquidación del grupo',
+                            en: 'Group settlement',
+                            gl: 'Liquidacion do grupo',
+                            fr: 'Liquidation du groupe',
+                            it: 'Liquidazione del gruppo',
+                            pt: 'Liquidacao do grupo',
+                          ),
                           amount: groupDebt.netAmount.abs(),
                           currency: groupDebt.group.currency,
                           accent: accent,
@@ -269,12 +352,33 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tr(sheetContext, es: 'Historial con ${entry.counterparty.name}', en: 'History with ${entry.counterparty.name}', gl: 'Historial con ${entry.counterparty.name}', fr: 'Historique avec ${entry.counterparty.name}', it: 'Storico con ${entry.counterparty.name}', pt: 'Historico com ${entry.counterparty.name}'), style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    tr(
+                      sheetContext,
+                      es: 'Historial con ${entry.counterparty.name}',
+                      en: 'History with ${entry.counterparty.name}',
+                      gl: 'Historial con ${entry.counterparty.name}',
+                      fr: 'Historique avec ${entry.counterparty.name}',
+                      it: 'Storico con ${entry.counterparty.name}',
+                      pt: 'Historico com ${entry.counterparty.name}',
+                    ),
+                    style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
                   Expanded(
                     child: historyEntries.isEmpty
                         ? Center(
-                            child: Text(tr(sheetContext, es: 'Todavía no hay movimientos entre ambas personas.', en: 'There are no movements between both people yet.', gl: 'Ainda non hai movementos entre ambas persoas.', fr: 'Il n y a pas encore de mouvements entre ces deux personnes.', it: 'Non ci sono ancora movimenti tra le due persone.', pt: 'Ainda nao ha movimentos entre ambas as pessoas.')),
+                            child: Text(
+                              tr(
+                                sheetContext,
+                                es: 'Todavía no hay movimientos entre ambas personas.',
+                                en: 'There are no movements between both people yet.',
+                                gl: 'Ainda non hai movementos entre ambas persoas.',
+                                fr: 'Il n y a pas encore de mouvements entre ces deux personnes.',
+                                it: 'Non ci sono ancora movimenti tra le due persone.',
+                                pt: 'Ainda nao ha movimentos entre ambas as pessoas.',
+                              ),
+                            ),
                           )
                         : ListView.separated(
                             itemCount: historyEntries.length,
@@ -293,7 +397,10 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: Text(item.title, style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                          child: Text(
+                                            item.title,
+                                            style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                          ),
                                         ),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -303,17 +410,19 @@ class _GlobalBalancesScreenState extends ConsumerState<GlobalBalancesScreen> {
                                           ),
                                           child: Text(
                                             '${item.amount >= 0 ? '+' : '-'}${money(item.amount.abs(), item.currency)}',
-                                            style: TextStyle(color: item.amount >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600), fontWeight: FontWeight.w800),
+                                            style: TextStyle(
+                                              color: item.amount >= 0 ? const Color(0xFF1E8E5A) : const Color(0xFFC77600),
+                                              fontWeight: FontWeight.w800,
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
-                                    Text('${item.groupName} · ${DateFormat('dd/MM/yyyy HH:mm', localeTag(sheetContext)).format(item.createdAt)}'),
-                                    if (item.note != null && item.note!.trim().isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Text(item.note!),
-                                    ],
+                                    Text(
+                                      '${item.groupName} · ${DateFormat('dd/MM/yyyy HH:mm', localeTag(sheetContext)).format(item.createdAt)}',
+                                    ),
+                                    if (item.note != null && item.note!.trim().isNotEmpty) ...[const SizedBox(height: 6), Text(item.note!)],
                                   ],
                                 ),
                               );
@@ -349,7 +458,8 @@ class _CounterpartyEntry {
 
   double get totalIncoming => groupBreakdown.where((entry) => entry.netAmount > 0).fold<double>(0, (sum, entry) => sum + entry.netAmount);
 
-  double get totalOutgoing => groupBreakdown.where((entry) => entry.netAmount < 0).fold<double>(0, (sum, entry) => sum + entry.netAmount.abs());
+  double get totalOutgoing =>
+      groupBreakdown.where((entry) => entry.netAmount < 0).fold<double>(0, (sum, entry) => sum + entry.netAmount.abs());
 
   bool get canRequestAll => totalIncoming > 0.009;
 
@@ -387,13 +497,17 @@ List<_BalanceHistoryEntry> _buildHistoryEntries(_CounterpartyEntry entry, String
 
   for (final groupDebt in entry.groupBreakdown) {
     for (final expense in groupDebt.group.expenses) {
-      final counterpartAllocations = expense.items.expand((item) => item.allocations).where((allocation) => allocation.userId == entry.counterparty.userId && allocation.percentage > 0);
-      final currentAllocations = expense.items.expand((item) => item.allocations).where((allocation) => allocation.userId == currentUserId && allocation.percentage > 0);
+      final counterpartAllocations = expense.items
+          .expand((item) => item.allocations)
+          .where((allocation) => allocation.userId == entry.counterparty.userId && allocation.percentage > 0);
+      final currentAllocations = expense.items
+          .expand((item) => item.allocations)
+          .where((allocation) => allocation.userId == currentUserId && allocation.percentage > 0);
       final involvesBoth = expense.payerId == currentUserId
           ? counterpartAllocations.isNotEmpty
           : expense.payerId == entry.counterparty.userId
-              ? currentAllocations.isNotEmpty
-              : counterpartAllocations.isNotEmpty && currentAllocations.isNotEmpty;
+          ? currentAllocations.isNotEmpty
+          : counterpartAllocations.isNotEmpty && currentAllocations.isNotEmpty;
       if (!involvesBoth) {
         continue;
       }
@@ -403,7 +517,11 @@ List<_BalanceHistoryEntry> _buildHistoryEntries(_CounterpartyEntry entry, String
         final paidToCounterparty = expense.payerId == currentUserId && counterpartAllocations.isNotEmpty;
         final receivedFromCounterparty = expense.payerId == entry.counterparty.userId && currentAllocations.isNotEmpty;
         final settlementAmount = totalExpense(expense);
-        signedAmount = receivedFromCounterparty ? settlementAmount : paidToCounterparty ? -settlementAmount : 0;
+        signedAmount = receivedFromCounterparty
+            ? settlementAmount
+            : paidToCounterparty
+            ? -settlementAmount
+            : 0;
       } else {
         final paidByCurrent = expense.payerId == currentUserId;
         final paidByCounterparty = expense.payerId == entry.counterparty.userId;
@@ -485,15 +603,33 @@ Future<void> _requestGroupSettlement(BuildContext context, WidgetRef ref, _Group
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: Text(tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+        title: Text(
+          tr(
+            context,
+            es: 'Solicitar dinero',
+            en: 'Request money',
+            gl: 'Solicitar diñeiro',
+            fr: 'Demander argent',
+            it: 'Richiedi denaro',
+            pt: 'Solicitar dinheiro',
+          ),
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
+          decoration: InputDecoration(
+            labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia'),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar'))),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))),
+            child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar')),
+          ),
         ],
       );
     },
@@ -501,12 +637,9 @@ Future<void> _requestGroupSettlement(BuildContext context, WidgetRef ref, _Group
   if (amount == null || amount <= 0) {
     return;
   }
-  await ref.read(repositoryProvider).requestReimbursement(
-        groupId: entry.group.id,
-        requesterId: currentUserId,
-        targetUserId: entry.counterparty.userId,
-        amount: amount,
-      );
+  await ref
+      .read(repositoryProvider)
+      .requestReimbursement(groupId: entry.group.id, requesterId: currentUserId, targetUserId: entry.counterparty.userId, amount: amount);
 }
 
 Future<void> _recordGroupSettlement(BuildContext context, WidgetRef ref, _GroupDebtEntry entry, String currentUserId) async {
@@ -516,15 +649,33 @@ Future<void> _recordGroupSettlement(BuildContext context, WidgetRef ref, _GroupD
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: Text(tr(context, es: 'Registrar pago', en: 'Record payment', gl: 'Rexistrar pago', fr: 'Enregistrer paiement', it: 'Registra pagamento', pt: 'Registar pagamento')),
+        title: Text(
+          tr(
+            context,
+            es: 'Registrar pago',
+            en: 'Record payment',
+            gl: 'Rexistrar pago',
+            fr: 'Enregistrer paiement',
+            it: 'Registra pagamento',
+            pt: 'Registar pagamento',
+          ),
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia')),
+          decoration: InputDecoration(
+            labelText: tr(context, es: 'Cantidad', en: 'Amount', gl: 'Cantidade', fr: 'Montant', it: 'Importo', pt: 'Quantia'),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))), child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar'))),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(double.tryParse(controller.text.replaceAll(',', '.'))),
+            child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
+          ),
         ],
       );
     },
@@ -549,15 +700,42 @@ Future<void> _recordGroupSettlement(BuildContext context, WidgetRef ref, _GroupD
 }
 
 Future<void> _requestAllSettlements(BuildContext context, WidgetRef ref, _CounterpartyEntry entry, String currentUserId) async {
-  final approved = await showDialog<bool>(
+  final approved =
+      await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(tr(context, es: 'Solicitar todo', en: 'Request all', gl: 'Solicitar todo', fr: 'Demander tout', it: 'Richiedi tutto', pt: 'Solicitar tudo')),
-            content: Text(tr(context, es: 'Se enviará una solicitud por cada grupo pendiente con ${entry.counterparty.name}.', en: 'A request will be sent for each pending group with ${entry.counterparty.name}.', gl: 'Enviarase unha solicitude por cada grupo pendente con ${entry.counterparty.name}.', fr: 'Une demande sera envoyee pour chaque groupe en attente avec ${entry.counterparty.name}.', it: 'Sarà inviata una richiesta per ogni gruppo pendente con ${entry.counterparty.name}.', pt: 'Será enviado um pedido por cada grupo pendente com ${entry.counterparty.name}.')),
+            title: Text(
+              tr(
+                context,
+                es: 'Solicitar todo',
+                en: 'Request all',
+                gl: 'Solicitar todo',
+                fr: 'Demander tout',
+                it: 'Richiedi tutto',
+                pt: 'Solicitar tudo',
+              ),
+            ),
+            content: Text(
+              tr(
+                context,
+                es: 'Se enviará una solicitud por cada grupo pendiente con ${entry.counterparty.name}.',
+                en: 'A request will be sent for each pending group with ${entry.counterparty.name}.',
+                gl: 'Enviarase unha solicitude por cada grupo pendente con ${entry.counterparty.name}.',
+                fr: 'Une demande sera envoyee pour chaque groupe en attente avec ${entry.counterparty.name}.',
+                it: 'Sarà inviata una richiesta per ogni gruppo pendente con ${entry.counterparty.name}.',
+                pt: 'Será enviado um pedido por cada grupo pendente com ${entry.counterparty.name}.',
+              ),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar'))),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(tr(context, es: 'Enviar', en: 'Send', gl: 'Enviar', fr: 'Envoyer', it: 'Invia', pt: 'Enviar')),
+              ),
             ],
           );
         },
@@ -567,7 +745,9 @@ Future<void> _requestAllSettlements(BuildContext context, WidgetRef ref, _Counte
     return;
   }
   for (final groupDebt in entry.groupBreakdown.where((groupDebt) => groupDebt.netAmount > 0)) {
-    await ref.read(repositoryProvider).requestReimbursement(
+    await ref
+        .read(repositoryProvider)
+        .requestReimbursement(
           groupId: groupDebt.group.id,
           requesterId: currentUserId,
           targetUserId: groupDebt.counterparty.userId,
@@ -578,15 +758,42 @@ Future<void> _requestAllSettlements(BuildContext context, WidgetRef ref, _Counte
 
 Future<void> _recordAllSettlements(BuildContext context, WidgetRef ref, _CounterpartyEntry entry, String currentUserId) async {
   final youLabel = tr(context, es: 'Tú', en: 'You', gl: 'Ti', fr: 'Vous', it: 'Tu', pt: 'Tu');
-  final approved = await showDialog<bool>(
+  final approved =
+      await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(tr(context, es: 'Marcar todo pagado', en: 'Mark all as paid', gl: 'Marcar todo pagado', fr: 'Tout marquer comme paye', it: 'Segna tutto come pagato', pt: 'Marcar tudo como pago')),
-            content: Text(tr(context, es: 'Se registrará una liquidación en cada grupo pendiente con ${entry.counterparty.name}.', en: 'A settlement will be recorded in each pending group with ${entry.counterparty.name}.', gl: 'Rexistrarase unha liquidacion en cada grupo pendente con ${entry.counterparty.name}.', fr: 'Une liquidation sera enregistree dans chaque groupe en attente avec ${entry.counterparty.name}.', it: 'Verrà registrata una liquidazione in ogni gruppo pendente con ${entry.counterparty.name}.', pt: 'Será registada uma liquidacao em cada grupo pendente com ${entry.counterparty.name}.')),
+            title: Text(
+              tr(
+                context,
+                es: 'Marcar todo pagado',
+                en: 'Mark all as paid',
+                gl: 'Marcar todo pagado',
+                fr: 'Tout marquer comme paye',
+                it: 'Segna tutto come pagato',
+                pt: 'Marcar tudo como pago',
+              ),
+            ),
+            content: Text(
+              tr(
+                context,
+                es: 'Se registrará una liquidación en cada grupo pendiente con ${entry.counterparty.name}.',
+                en: 'A settlement will be recorded in each pending group with ${entry.counterparty.name}.',
+                gl: 'Rexistrarase unha liquidacion en cada grupo pendente con ${entry.counterparty.name}.',
+                fr: 'Une liquidation sera enregistree dans chaque groupe en attente avec ${entry.counterparty.name}.',
+                it: 'Verrà registrata una liquidazione in ogni gruppo pendente con ${entry.counterparty.name}.',
+                pt: 'Será registada uma liquidacao em cada grupo pendente com ${entry.counterparty.name}.',
+              ),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar'))),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(tr(context, es: 'Guardar', en: 'Save', gl: 'Gardar', fr: 'Enregistrer', it: 'Salva', pt: 'Guardar')),
+              ),
             ],
           );
         },
@@ -626,23 +833,57 @@ Future<void> _createSettlementExpense(
   if (group.isClosed) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(tr(context, es: 'Reabre el grupo antes de registrar una liquidación.', en: 'Reopen the group before recording a settlement.', gl: 'Reabre o grupo antes de rexistrar unha liquidacion.', fr: 'Rouvrez le groupe avant d enregistrer une liquidation.', it: 'Riapri il gruppo prima di registrare una liquidazione.', pt: 'Reabre o grupo antes de registar uma liquidacao.')),
+        content: Text(
+          tr(
+            context,
+            es: 'Reabre el grupo antes de registrar una liquidación.',
+            en: 'Reopen the group before recording a settlement.',
+            gl: 'Reabre o grupo antes de rexistrar unha liquidacion.',
+            fr: 'Rouvrez le groupe avant d enregistrer une liquidation.',
+            it: 'Riapri il gruppo prima di registrare una liquidazione.',
+            pt: 'Reabre o grupo antes de registar uma liquidacao.',
+          ),
+        ),
       ),
     );
     return;
   }
-  final uuid = const Uuid();
+  const uuid = Uuid();
   final expense = ExpenseRecord(
     id: uuid.v4(),
-    title: tr(context, es: 'Liquidación de grupo', en: 'Group settlement', gl: 'Liquidacion de grupo', fr: 'Liquidation de groupe', it: 'Liquidazione di gruppo', pt: 'Liquidacao de grupo'),
+    title: tr(
+      context,
+      es: 'Liquidación de grupo',
+      en: 'Group settlement',
+      gl: 'Liquidacion de grupo',
+      fr: 'Liquidation de groupe',
+      it: 'Liquidazione di gruppo',
+      pt: 'Liquidacao de grupo',
+    ),
     payerId: debtorId,
     createdAt: DateTime.now(),
     kind: ExpenseRecordKind.settlement,
-    note: tr(context, es: 'Pago entre $debtorName y $creditorName.', en: 'Payment between $debtorName and $creditorName.', gl: 'Pago entre $debtorName e $creditorName.', fr: 'Paiement entre $debtorName et $creditorName.', it: 'Pagamento tra $debtorName e $creditorName.', pt: 'Pagamento entre $debtorName e $creditorName.'),
+    note: tr(
+      context,
+      es: 'Pago entre $debtorName y $creditorName.',
+      en: 'Payment between $debtorName and $creditorName.',
+      gl: 'Pago entre $debtorName e $creditorName.',
+      fr: 'Paiement entre $debtorName et $creditorName.',
+      it: 'Pagamento tra $debtorName e $creditorName.',
+      pt: 'Pagamento entre $debtorName e $creditorName.',
+    ),
     items: [
       ExpenseItem(
         id: uuid.v4(),
-        name: tr(context, es: 'Pago registrado', en: 'Recorded payment', gl: 'Pago rexistrado', fr: 'Paiement enregistre', it: 'Pagamento registrato', pt: 'Pagamento registado'),
+        name: tr(
+          context,
+          es: 'Pago registrado',
+          en: 'Recorded payment',
+          gl: 'Pago rexistrado',
+          fr: 'Paiement enregistre',
+          it: 'Pagamento registrato',
+          pt: 'Pagamento registado',
+        ),
         amount: amount,
         categoryId: 'work',
         allocations: [
@@ -653,6 +894,7 @@ Future<void> _createSettlementExpense(
     ],
   );
   await ref.read(repositoryProvider).addExpense(groupId: group.id, expense: expense);
+  ref.read(appPreferencesProvider.notifier).registerRealUse();
 }
 
 class _SettlementCard extends StatelessWidget {
@@ -688,19 +930,13 @@ class _SettlementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(24),
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(24)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              if (leading != null) ...[
-                leading!,
-                const SizedBox(width: 10),
-              ],
+              if (leading != null) ...[leading!, const SizedBox(width: 10)],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -715,7 +951,10 @@ class _SettlementCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
-                child: Text(money(amount, currency), style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
+                child: Text(
+                  money(amount, currency),
+                  style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+                ),
               ),
             ],
           ),
@@ -726,7 +965,18 @@ class _SettlementCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: requestEnabled ? onRequest : null,
                   icon: const Icon(Icons.notifications_active_rounded),
-                  label: Text(requestLabel ?? tr(context, es: 'Solicitar dinero', en: 'Request money', gl: 'Solicitar diñeiro', fr: 'Demander argent', it: 'Richiedi denaro', pt: 'Solicitar dinheiro')),
+                  label: Text(
+                    requestLabel ??
+                        tr(
+                          context,
+                          es: 'Solicitar dinero',
+                          en: 'Request money',
+                          gl: 'Solicitar diñeiro',
+                          fr: 'Demander argent',
+                          it: 'Richiedi denaro',
+                          pt: 'Solicitar dinheiro',
+                        ),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -734,7 +984,18 @@ class _SettlementCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: payEnabled ? onPay : null,
                   icon: const Icon(Icons.check_circle_rounded),
-                  label: Text(payLabel ?? tr(context, es: 'Ya está pagado', en: 'Already paid', gl: 'Xa esta pagado', fr: 'Deja paye', it: 'Gia pagato', pt: 'Ja esta pago')),
+                  label: Text(
+                    payLabel ??
+                        tr(
+                          context,
+                          es: 'Ya está pagado',
+                          en: 'Already paid',
+                          gl: 'Xa esta pagado',
+                          fr: 'Deja paye',
+                          it: 'Gia pagato',
+                          pt: 'Ja esta pago',
+                        ),
+                  ),
                 ),
               ),
             ],
@@ -758,8 +1019,28 @@ class _PendingToggleCard extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
         value: value,
         onChanged: onChanged,
-        title: Text(tr(context, es: 'Incluir usuarios pendientes', en: 'Include pending users', gl: 'Incluír usuarios pendentes', fr: 'Inclure les utilisateurs en attente', it: 'Includi utenti in attesa', pt: 'Incluir utilizadores pendentes')),
-        subtitle: Text(tr(context, es: 'Muestra deudas y cobros también con personas que todavía no han vinculado su cuenta.', en: 'Also show debts and claims with people who have not linked their account yet.', gl: 'Mostra tamén débedas e cobros con persoas que aínda non vincularon a conta.', fr: 'Affiche aussi les dettes et créances des personnes qui n ont pas encore lié leur compte.', it: 'Mostra anche debiti e crediti delle persone che non hanno ancora collegato il loro account.', pt: 'Mostra também dívidas e cobranças com pessoas que ainda não ligaram a conta.')),
+        title: Text(
+          tr(
+            context,
+            es: 'Incluir usuarios pendientes',
+            en: 'Include pending users',
+            gl: 'Incluír usuarios pendentes',
+            fr: 'Inclure les utilisateurs en attente',
+            it: 'Includi utenti in attesa',
+            pt: 'Incluir utilizadores pendentes',
+          ),
+        ),
+        subtitle: Text(
+          tr(
+            context,
+            es: 'Muestra deudas y cobros también con personas que todavía no han vinculado su cuenta.',
+            en: 'Also show debts and claims with people who have not linked their account yet.',
+            gl: 'Mostra tamén débedas e cobros con persoas que aínda non vincularon a conta.',
+            fr: 'Affiche aussi les dettes et créances des personnes qui n ont pas encore lié leur compte.',
+            it: 'Mostra anche debiti e crediti delle persone che non hanno ancora collegato il loro account.',
+            pt: 'Mostra também dívidas e cobranças com pessoas que ainda não ligaram a conta.',
+          ),
+        ),
       ),
     );
   }

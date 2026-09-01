@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Idiomas que ShardPay declara soportar.
+
+  A partir de Android 13, esto es lo que hace que la app aparezca en
+  Ajustes > Aplicaciones > ShardPay > Idioma, con su propia preferencia de
+  idioma independiente de la del sistema. El primero de la lista es el de
+  respaldo cuando ninguno coincide.
+
+  Tiene que coincidir con `appLanguageOptions` en lib/app/preferences.dart.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+    <locale android:name="gl" />
+    <locale android:name="ca" />
+    <locale android:name="eu" />
+    <locale android:name="fr" />
+    <locale android:name="it" />
+    <locale android:name="pt" />
+    <locale android:name="de" />
+    <locale android:name="el" />
+    <locale android:name="ru" />
+    <locale android:name="ar" />
+    <locale android:name="zh" />
+    <locale android:name="ja" />
+</locale-config>

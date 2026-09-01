@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:extended_image/extended_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:extended_image/extended_image.dart';
 import 'package:image/image.dart' as img;
 
 import '../../app/app_text.dart';
@@ -45,7 +45,15 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
         return;
       }
       _showEditorError(
-        tr(context, es: 'No se pudo preparar la vista previa del ticket.', en: 'The receipt preview could not be prepared.', gl: 'Non se puido preparar a vista previa do ticket.', fr: 'Impossible de preparer l apercu du ticket.', it: 'Impossibile preparare l anteprima dello scontrino.', pt: 'Nao foi possivel preparar a pre-visualizacao da fatura.'),
+        tr(
+          context,
+          es: 'No se pudo preparar la vista previa del ticket.',
+          en: 'The receipt preview could not be prepared.',
+          gl: 'Non se puido preparar a vista previa do ticket.',
+          fr: 'Impossible de preparer l apercu du ticket.',
+          it: 'Impossibile preparare l anteprima dello scontrino.',
+          pt: 'Nao foi possivel preparar a pre-visualizacao da fatura.',
+        ),
       );
     }
   }
@@ -57,10 +65,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   Future<void> _rotateImage(bool clockwise) async {
     await _runBusyTask(() async {
       final rawBytes = await File(_workingPath).readAsBytes();
-      final rotatedBytes = await compute(_rotateReceiptBytes, {
-        'bytes': rawBytes,
-        'clockwise': clockwise,
-      });
+      final rotatedBytes = await compute(_rotateReceiptBytes, {'bytes': rawBytes, 'clockwise': clockwise});
       _workingPath = await _writeTempImage(rotatedBytes);
       await _refreshPreview();
     });
@@ -76,9 +81,9 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
         return;
       }
 
-      final croppedPath = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => _ReceiptCropScreen(imagePath: _workingPath)),
-      );
+      final croppedPath = await Navigator.of(
+        context,
+      ).push<String>(MaterialPageRoute(builder: (_) => _ReceiptCropScreen(imagePath: _workingPath)));
 
       if (croppedPath == null || !mounted) {
         return;
@@ -94,7 +99,15 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
         return;
       }
       _showEditorError(
-        tr(context, es: 'No se pudo recortar la foto del ticket.', en: 'The receipt photo could not be cropped.', gl: 'Non se puido recortar a foto do ticket.', fr: 'Impossible de recadrer la photo du ticket.', it: 'Impossibile ritagliare la foto dello scontrino.', pt: 'Nao foi possivel recortar a foto da fatura.'),
+        tr(
+          context,
+          es: 'No se pudo recortar la foto del ticket.',
+          en: 'The receipt photo could not be cropped.',
+          gl: 'Non se puido recortar a foto do ticket.',
+          fr: 'Impossible de recadrer la photo du ticket.',
+          it: 'Impossibile ritagliare la foto dello scontrino.',
+          pt: 'Nao foi possivel recortar a foto da fatura.',
+        ),
       );
     }
   }
@@ -102,10 +115,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
   Future<void> _confirmImage() async {
     await _runBusyTask(() async {
       final rawBytes = await File(_workingPath).readAsBytes();
-      final outputBytes = await compute(_buildReceiptExportBytes, {
-        'bytes': rawBytes,
-        'filterIndex': _selectedFilter.index,
-      });
+      final outputBytes = await compute(_buildReceiptExportBytes, {'bytes': rawBytes, 'filterIndex': _selectedFilter.index});
       final outputPath = _selectedFilter == ReceiptImageFilter.none ? _workingPath : await _writeTempImage(outputBytes);
       if (!mounted) {
         return;
@@ -156,29 +166,43 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
       image = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: image);
     }
 
-    return InteractiveViewer(
-      minScale: 0.8,
-      maxScale: 5,
-      child: image,
-    );
+    return InteractiveViewer(minScale: 0.8, maxScale: 5, child: image);
   }
 
   @override
   Widget build(BuildContext context) {
     final filterOptions = [
-      (ReceiptImageFilter.none, tr(context, es: 'Original', en: 'Original', gl: 'Orixinal', fr: 'Original', it: 'Originale', pt: 'Original')),
+      (
+        ReceiptImageFilter.none,
+        tr(context, es: 'Original', en: 'Original', gl: 'Orixinal', fr: 'Original', it: 'Originale', pt: 'Original'),
+      ),
       (ReceiptImageFilter.grayscale, tr(context, es: 'Gris', en: 'Gray', gl: 'Gris', fr: 'Gris', it: 'Grigio', pt: 'Cinzento')),
-      (ReceiptImageFilter.document, tr(context, es: 'Documento', en: 'Document', gl: 'Documento', fr: 'Document', it: 'Documento', pt: 'Documento')),
+      (
+        ReceiptImageFilter.document,
+        tr(context, es: 'Documento', en: 'Document', gl: 'Documento', fr: 'Document', it: 'Documento', pt: 'Documento'),
+      ),
       (ReceiptImageFilter.warm, tr(context, es: 'Cálido', en: 'Warm', gl: 'Calido', fr: 'Chaud', it: 'Caldo', pt: 'Quente')),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr(context, es: 'Preparar ticket', en: 'Prepare receipt', gl: 'Preparar ticket', fr: 'Preparer ticket', it: 'Prepara scontrino', pt: 'Preparar fatura')),
+        title: Text(
+          tr(
+            context,
+            es: 'Preparar ticket',
+            en: 'Prepare receipt',
+            gl: 'Preparar ticket',
+            fr: 'Preparer ticket',
+            it: 'Prepara scontrino',
+            pt: 'Preparar fatura',
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: _isBusy ? null : _confirmImage,
-            child: Text(tr(context, es: 'Usar foto', en: 'Use photo', gl: 'Usar foto', fr: 'Utiliser photo', it: 'Usa foto', pt: 'Usar foto')),
+            child: Text(
+              tr(context, es: 'Usar foto', en: 'Use photo', gl: 'Usar foto', fr: 'Utiliser photo', it: 'Usa foto', pt: 'Usar foto'),
+            ),
           ),
         ],
       ),
@@ -194,10 +218,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                     color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: _buildPreviewImage(),
-                  ),
+                  child: ClipRRect(borderRadius: BorderRadius.circular(24), child: _buildPreviewImage()),
                 ),
               ),
             ),
@@ -217,7 +238,17 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                     child: FilledButton.tonalIcon(
                       onPressed: _isBusy ? null : () => _rotateImage(false),
                       icon: const Icon(Icons.rotate_90_degrees_ccw_rounded),
-                      label: Text(tr(context, es: 'Girar izq.', en: 'Rotate left', gl: 'Xirar esq.', fr: 'Tourner g.', it: 'Ruota sx', pt: 'Rodar esq.')),
+                      label: Text(
+                        tr(
+                          context,
+                          es: 'Girar izq.',
+                          en: 'Rotate left',
+                          gl: 'Xirar esq.',
+                          fr: 'Tourner g.',
+                          it: 'Ruota sx',
+                          pt: 'Rodar esq.',
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -225,7 +256,17 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                     child: FilledButton.tonalIcon(
                       onPressed: _isBusy ? null : () => _rotateImage(true),
                       icon: const Icon(Icons.rotate_90_degrees_cw_rounded),
-                      label: Text(tr(context, es: 'Girar der.', en: 'Rotate right', gl: 'Xirar der.', fr: 'Tourner d.', it: 'Ruota dx', pt: 'Rodar dir.')),
+                      label: Text(
+                        tr(
+                          context,
+                          es: 'Girar der.',
+                          en: 'Rotate right',
+                          gl: 'Xirar der.',
+                          fr: 'Tourner d.',
+                          it: 'Ruota dx',
+                          pt: 'Rodar dir.',
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -242,9 +283,7 @@ class _ReceiptImageEditorScreenState extends State<ReceiptImageEditorScreen> {
                   return ChoiceChip(
                     label: Text(label),
                     selected: filter == _selectedFilter,
-                    onSelected: _isBusy
-                        ? null
-                        : (_) => setState(() => _selectedFilter = filter),
+                    onSelected: _isBusy ? null : (_) => setState(() => _selectedFilter = filter),
                   );
                 },
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -361,26 +400,11 @@ List<double>? _previewMatrixFor(ReceiptImageFilter filter) {
     case ReceiptImageFilter.none:
       return null;
     case ReceiptImageFilter.grayscale:
-      return const [
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0, 0, 0, 1, 0,
-      ];
+      return const [0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0.2126, 0.7152, 0.0722, 0, 0, 0, 0, 0, 1, 0];
     case ReceiptImageFilter.document:
-      return const [
-        1.5, 1.5, 1.5, 0, -180,
-        1.5, 1.5, 1.5, 0, -180,
-        1.5, 1.5, 1.5, 0, -180,
-        0, 0, 0, 1, 0,
-      ];
+      return const [1.5, 1.5, 1.5, 0, -180, 1.5, 1.5, 1.5, 0, -180, 1.5, 1.5, 1.5, 0, -180, 0, 0, 0, 1, 0];
     case ReceiptImageFilter.warm:
-      return const [
-        1.08, 0, 0, 0, 12,
-        0, 1.01, 0, 0, 4,
-        0, 0, 0.92, 0, -6,
-        0, 0, 0, 1, 0,
-      ];
+      return const [1.08, 0, 0, 0, 12, 0, 1.01, 0, 0, 4, 0, 0, 0.92, 0, -6, 0, 0, 0, 1, 0];
   }
 }
 
@@ -417,7 +441,9 @@ class _ReceiptCropScreenState extends State<_ReceiptCropScreen> {
         'width': cropRect.width,
         'height': cropRect.height,
       });
-      final file = File('${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_receipt_crop_${DateTime.now().microsecondsSinceEpoch}.jpg');
+      final file = File(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}shardpay_receipt_crop_${DateTime.now().microsecondsSinceEpoch}.jpg',
+      );
       await file.writeAsBytes(croppedBytes, flush: true);
       if (!mounted) {
         return;
@@ -431,7 +457,17 @@ class _ReceiptCropScreenState extends State<_ReceiptCropScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(tr(context, es: 'No se pudo recortar la foto del ticket.', en: 'The receipt photo could not be cropped.', gl: 'Non se puido recortar a foto do ticket.', fr: 'Impossible de recadrer la photo du ticket.', it: 'Impossibile ritagliare la foto dello scontrino.', pt: 'Nao foi possivel recortar a foto da fatura.')),
+            content: Text(
+              tr(
+                context,
+                es: 'No se pudo recortar la foto del ticket.',
+                en: 'The receipt photo could not be cropped.',
+                gl: 'Non se puido recortar a foto do ticket.',
+                fr: 'Impossible de recadrer la photo du ticket.',
+                it: 'Impossibile ritagliare la foto dello scontrino.',
+                pt: 'Nao foi possivel recortar a foto da fatura.',
+              ),
+            ),
           ),
         );
     } finally {
@@ -446,7 +482,17 @@ class _ReceiptCropScreenState extends State<_ReceiptCropScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr(context, es: 'Recortar ticket', en: 'Crop receipt', gl: 'Recortar ticket', fr: 'Recadrer ticket', it: 'Ritaglia scontrino', pt: 'Recortar fatura')),
+        title: Text(
+          tr(
+            context,
+            es: 'Recortar ticket',
+            en: 'Crop receipt',
+            gl: 'Recortar ticket',
+            fr: 'Recadrer ticket',
+            it: 'Ritaglia scontrino',
+            pt: 'Recortar fatura',
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _applyCrop,
@@ -477,7 +523,15 @@ class _ReceiptCropScreenState extends State<_ReceiptCropScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
             child: Text(
-              tr(context, es: 'Mueve las esquinas y haz zoom sobre la imagen para ajustar el recorte.', en: 'Drag the corners and zoom the image to adjust the crop.', gl: 'Move as esquinas e fai zoom sobre a imaxe para axustar o recorte.', fr: 'Deplacez les coins et zoomez sur l image pour ajuster le recadrage.', it: 'Sposta gli angoli e fai zoom sull immagine per regolare il ritaglio.', pt: 'Move os cantos e faz zoom na imagem para ajustar o recorte.'),
+              tr(
+                context,
+                es: 'Mueve las esquinas y haz zoom sobre la imagen para ajustar el recorte.',
+                en: 'Drag the corners and zoom the image to adjust the crop.',
+                gl: 'Move as esquinas e fai zoom sobre a imaxe para axustar o recorte.',
+                fr: 'Deplacez les coins et zoomez sur l image pour ajuster le recadrage.',
+                it: 'Sposta gli angoli e fai zoom sull immagine per regolare il ritaglio.',
+                pt: 'Move os cantos e faz zoom na imagem para ajustar o recorte.',
+              ),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),

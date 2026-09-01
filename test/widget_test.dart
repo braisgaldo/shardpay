@@ -11,7 +11,7 @@ import 'package:shardpay/models/app_models.dart';
 
 void main() {
   test('equal allocations sum 100%', () {
-    final members = const [
+    const members = [
       GroupMember(userId: 'a', name: 'A', email: 'a@a.com'),
       GroupMember(userId: 'b', name: 'B', email: 'b@b.com'),
       GroupMember(userId: 'c', name: 'C', email: 'c@c.com'),

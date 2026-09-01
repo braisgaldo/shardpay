@@ -1,0 +1,209 @@
+name: CI
+
+# Análisis, pruebas y compilación en cada envío. Gratis en repositorios
+# públicos, así que no hay motivo para no ejecutarlo siempre.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.35.0'
+
+jobs:
+  nucleo:
+    name: Núcleo Dart puro
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      # El comprobador de formato se limita al nucleo por ahora. Extenderlo al
+      # arbol completo necesita antes un commit dedicado solo a formatear, o el
+      # diff de cualquier cambio queda enterrado bajo 48 ficheros de ruido.
+      # Anotado como deuda en docs/MANUAL-TECNICO.md.
+      - name: Formato del nucleo
+        run: dart format --line-length 140 --output none --set-exit-if-changed lib/core test/core
+
+      - name: Análisis estático
+        run: flutter analyze --no-fatal-infos
+
+      - name: Pruebas
+        run: flutter test --reporter expanded
+
+  sin-facturacion:
+    name: Sin bibliotecas de facturación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # La donación no puede convertirse en una compra integrada por accidente.
+      # Esto comprueba el árbol de dependencias real, no la memoria de nadie.
+      # Véase docs/adr/0008-donacion-y-politicas-de-tienda.md
+      - name: Comprobar que no hay facturación en el árbol de dependencias
+        run: |
+          cd android
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > /tmp/deps.txt || true
+          if grep -iE "billingclient|com\.android\.billing" /tmp/deps.txt; then
+            echo "::error::Se ha colado una biblioteca de facturación. Véase docs/adr/0008."
+            exit 1
+          fi
+          echo "Sin bibliotecas de facturación."
+
+      - name: Comprobar que no se usa vocabulario de compra en la app
+        run: |
+          # Palabras prohibidas en la interfaz por politica de tienda.
+          if grep -rniE "desbloquea(r|s)? (la |las |el )?(version|funcion|funcionalidad|tema)|version premium|version pro\b|suscripcion mensual" lib/; then
+            echo "::error::Vocabulario de compra en la interfaz. Véase docs/adr/0008."
+            exit 1
+          fi
+          echo "Vocabulario correcto."
+
+  android:
+    name: Compilar Android
+    runs-on: ubuntu-latest
+    needs: nucleo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Se compila sin credenciales a propósito: la app tiene que arrancar en
+      # modo de demostración local cuando faltan, y esto lo verifica.
+      - name: APK de depuración
+        run: flutter build apk --debug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+
+  ios:
+    name: Portabilidad iOS
+    runs-on: macos-latest
+    needs: nucleo
+    # No bloquea: comprueba que el código Dart sigue compilando para iOS, pero
+    # publicar en la App Store necesita cuenta de pago (véase ADR-0007).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Compilar sin firmar
+        run: flutter build ios --no-codesign --debug
+
+  documentacion:
+    name: Documentación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install --quiet markdown pygments pillow
+
+      # Once capturas llegaron a tener el marco verde que Android pinta cuando
+      # graba la pantalla. No se detectó hasta maquetarlas en el manual, donde
+      # quedaba como una raya de color al lado del texto. Y esas capturas son las
+      # que van a la ficha de la tienda.
+      - name: Comprobar que las capturas no tienen marco de grabación
+        run: python scripts/limpiar_capturas.py
+
+      # Solo HTML: el PDF necesita un navegador y ya se genera en la Release.
+      # Lo que interesa aquí es que el generador siga funcionando y que ningún
+      # documento se haya quedado sin su fuente, antes de descubrirlo el día que
+      # se publica una versión.
+      - name: Generar los documentos
+        run: python docs/build_docs.py --no-pdf
+
+      - name: Comprobar que salieron los cuatro
+        run: |
+          for doc in manual-usuario manual-tecnico guia-publicacion privacidad; do
+            test -s "docs/out/shardpay-$doc.html" || { echo "::error::falta docs/out/shardpay-$doc.html"; exit 1; }
+          done
+          ls -la docs/out
+
+      # Un manual de usuario sin capturas es una lista de instrucciones a ciegas.
+      # Si alguna ruta de imagen se rompe, el generador avisa por consola pero
+      # sigue: esto lo convierte en un fallo.
+      - name: Comprobar que el manual de usuario lleva sus capturas
+        run: |
+          FIGURAS=$(grep -o 'figure class="captura"' docs/out/shardpay-manual-usuario.html | wc -l)
+          ESPERADAS=$(grep -c '](store/capturas/' docs/MANUAL-USUARIO.md)
+          echo "figuras generadas: $FIGURAS de $ESPERADAS referencias"
+          test "$FIGURAS" -eq "$ESPERADAS" || { echo "::error::faltan capturas en el manual generado"; exit 1; }
+
+  reglas:
+    name: Reglas de Firestore
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # El emulador de Firestore es un .jar.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Dependencias
+        working-directory: firestore-tests
+        run: npm install --no-audit --no-fund
+
+      # Estas reglas son lo unico que separa los gastos de un grupo de quien no
+      # es miembro. El agujero de ADR-0009 no se veia leyendo el fichero: hay
+      # que ejecutarlo contra el emulador, y por eso esto bloquea la CI.
+      - name: Pruebas de seguridad
+        working-directory: firestore-tests
+        run: npm test

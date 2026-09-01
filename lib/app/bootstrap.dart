@@ -9,11 +9,7 @@ import '../repositories/firebase/firebase_app_repository.dart';
 import '../repositories/mock/mock_app_repository.dart';
 
 class AppBootstrap {
-  const AppBootstrap({
-    required this.repository,
-    required this.firebaseReady,
-    required this.backendLabel,
-  });
+  const AppBootstrap({required this.repository, required this.firebaseReady, required this.backendLabel});
 
   final AppRepository repository;
   final bool firebaseReady;
@@ -21,20 +17,13 @@ class AppBootstrap {
 
   static Future<AppBootstrap> initialize() async {
     if (!AppConfig.hasFirebaseConfiguration) {
-      return AppBootstrap(
-        repository: MockAppRepository(),
-        firebaseReady: false,
-        backendLabel: 'demo-local',
-      );
+      return AppBootstrap(repository: MockAppRepository(), firebaseReady: false, backendLabel: 'demo-local');
     }
 
     try {
       await Firebase.initializeApp(options: AppConfig.currentFirebaseOptions);
 
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true,
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-      );
+      FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
 
       return AppBootstrap(
         repository: FirebaseAppRepository(
@@ -50,11 +39,7 @@ class AppBootstrap {
         backendLabel: 'firebase',
       );
     } catch (_) {
-      return AppBootstrap(
-        repository: MockAppRepository(),
-        firebaseReady: false,
-        backendLabel: 'demo-fallback',
-      );
+      return AppBootstrap(repository: MockAppRepository(), firebaseReady: false, backendLabel: 'demo-fallback');
     }
   }
 }

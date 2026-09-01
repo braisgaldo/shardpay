@@ -49,12 +49,26 @@ ios/Runner/GeneratedPluginRegistrant.*
 **/*.xcworkspace/xcuserdata/
 **/*.xcodeproj/xcuserdata/
 
+# Node: dependencias de functions/ y de firestore-tests/. En la raiz y no en
+# cada subdirectorio para que cubra tambien los que se creen despues.
+node_modules/
+firebase-debug.log
+firestore-debug.log
+
 # Firebase and local secrets
 config/firebase.local.json
 config/*.local.json
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 .firebaserc.local
+
+# Documentacion generada: la fuente es el Markdown de docs/, que si se versiona.
+# Los binarios (PDF, DOCX, HTML empaquetado) se generan con docs/build-docs.sh y
+# se publican como assets de la GitHub Release.
+docs/out/
+
+# Sitio generado para GitHub Pages (el fuente esta en site/)
+_site/
 
 # Logs and reports
 *.log
@@ -70,3 +84,12 @@ app.*.map.json
 .buildlog/
 .swiftpm/
 migrate_working_dir/
+
+.claude/
+
+# Los binarios de la carpeta de Play NO se versionan, igual que los de docs/out.
+# La carpeta si va en commits: los textos, los graficos y la guia son la parte
+# que hay que revisar y que cuesta rehacer. El .aab y el .apk se regeneran con un
+# comando y pesan 200 MB.
+docs/google_play/app/*.aab
+docs/google_play/app/*.apk

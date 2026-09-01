@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nombre que el gestor de archivos ensena al abrir una copia. -->
+    <string name="backup_file_label">Copia de ShardPay</string>
+</resources>

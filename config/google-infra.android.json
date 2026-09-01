@@ -1,9 +1,9 @@
 {
-  "project_id": "shardpay-brais-20260313",
-  "project_number": "574075077030",
-  "android_app_id": "1:574075077030:android:b618041117e0f6e9fa4f67",
+  "project_id": "shardpay",
+  "project_number": "626260906991",
+  "android_app_id": "1:626260906991:android:8749331d8c852a841f5c1a",
   "android_package_name": "com.ghatostudio.shardpay",
-  "storage_bucket": "shardpay-brais-20260313.firebasestorage.app",
+  "storage_bucket": "shardpay.firebasestorage.app",
   "firestore_database": "(default)",
   "firestore_location": "europe-west1"
 }

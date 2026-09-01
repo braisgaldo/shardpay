@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'app_text.dart';
 import '../models/app_models.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/home/home_shell.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/donation/donation_sheet.dart';
+import 'app_text.dart';
+import 'preferences.dart';
 import 'providers.dart';
 import 'theme.dart';
 
@@ -18,12 +20,25 @@ class ShardPayApp extends ConsumerStatefulWidget {
   ConsumerState<ShardPayApp> createState() => _ShardPayAppState();
 }
 
-class _ShardPayAppState extends ConsumerState<ShardPayApp> {
+class _ShardPayAppState extends ConsumerState<ShardPayApp> with WidgetsBindingObserver {
   ProviderSubscription<AsyncValue<AppUser?>>? _authSubscription;
+
+  /// Navegador raiz, para poder abrir el panel de donacion sin depender de la
+  /// pantalla que este delante.
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  /// El panel de donacion queda pendiente cuando la sesion productiva termina.
+  ///
+  /// La regla dice que aparezca «al cerrar la sesion», pero un panel que se
+  /// abre mientras la app se va a segundo plano no lo ve nadie. Asi que se
+  /// marca al salir y se ensena al volver: sigue sin salir nunca en el arranque
+  /// en frio y sigue sin interrumpir ninguna tarea a medias.
+  bool _donationPromptPending = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authSubscription = ref.listenManual<AsyncValue<AppUser?>>(authStateProvider, (previous, next) async {
       final fcmService = ref.read(fcmServiceProvider);
       final user = next.valueOrNull;
@@ -42,41 +57,67 @@ class _ShardPayAppState extends ConsumerState<ShardPayApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final preferences = ref.read(appPreferencesProvider.notifier);
+
+    if (state == AppLifecycleState.paused) {
+      _donationPromptPending = preferences.shouldShowDonationPrompt();
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _donationPromptPending) {
+      _donationPromptPending = false;
+      // Un fotograma de margen para que la pantalla este montada y el panel no
+      // aparezca sobre una transicion a medias.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _navigatorKey.currentContext;
+        if (context == null || !preferences.shouldShowDonationPrompt()) {
+          return;
+        }
+        if (ref.read(authStateProvider).valueOrNull == null) {
+          return;
+        }
+        showDonationSheet(context, ref);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final preferences = ref.watch(appPreferencesProvider);
-    final activeTheme = buildShardPayTheme(preferences.theme);
     Intl.defaultLocale = preferences.language.locale.toLanguageTag();
 
+    // Se entregan siempre las dos paletas hermanas y se deja que Flutter elija
+    // segun el ajuste del sistema. Antes se pasaba la misma paleta a `theme` y
+    // a `darkTheme` con `themeMode: light` fijo, asi que la opcion de seguir al
+    // sistema era imposible.
     return MaterialApp(
       title: 'ShardPay',
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
-      theme: activeTheme,
-      darkTheme: activeTheme,
-      themeMode: ThemeMode.light,
+      theme: buildShardPayTheme(preferences.lightTheme),
+      darkTheme: buildShardPayTheme(preferences.darkTheme),
+      themeMode: switch (preferences.themeMode) {
+        AppThemeMode.system => ThemeMode.system,
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+      },
       locale: preferences.language.locale,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es'),
-        Locale('en'),
-        Locale('gl'),
-        Locale('fr'),
-        Locale('it'),
-        Locale('pt'),
-        Locale('de'),
-        Locale('ru'),
-        Locale('zh'),
-        Locale('ja'),
-      ],
+      // La direccion del texto la deriva Flutter de la locale a traves de
+      // GlobalWidgetsLocalizations: el arabe entra en RTL sin codigo extra.
+      supportedLocales: supportedAppLocales,
       home: authState.when(
         data: (user) => user == null ? const AuthScreen() : HomeShell(user: user),
         error: (error, _) => _BootstrapErrorView(error: error),
@@ -126,9 +167,21 @@ class _SplashViewState extends State<_SplashView> with SingleTickerProviderState
             final drift = (_controller.value - 0.5) * 24;
             return Stack(
               children: [
-                Positioned(left: -38 + drift, top: -12, child: const _SplashOrb(size: 220, color: Color(0x66FFA15A))),
-                Positioned(right: -22, top: 92 - drift * 0.4, child: const _SplashOrb(size: 180, color: Color(0x55FFD394))),
-                Positioned(left: 22, bottom: 84 - drift * 0.5, child: const _SplashOrb(size: 150, color: Color(0x44FFB178))),
+                Positioned(
+                  left: -38 + drift,
+                  top: -12,
+                  child: const _SplashOrb(size: 220, color: Color(0x66FFA15A)),
+                ),
+                Positioned(
+                  right: -22,
+                  top: 92 - drift * 0.4,
+                  child: const _SplashOrb(size: 180, color: Color(0x55FFD394)),
+                ),
+                Positioned(
+                  left: 22,
+                  bottom: 84 - drift * 0.5,
+                  child: const _SplashOrb(size: 150, color: Color(0x44FFB178)),
+                ),
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -171,7 +224,9 @@ class _SplashViewState extends State<_SplashView> with SingleTickerProviderState
                       const SizedBox(height: 28),
                       Text(
                         'ShardPay',
-                        style: Theme.of(context).textTheme.displaySmall?.copyWith(color: const Color(0xFF7C2D06), fontWeight: FontWeight.w800),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.displaySmall?.copyWith(color: const Color(0xFF7C2D06), fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -217,7 +272,11 @@ class _SplashOrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(width: size, height: size, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+    );
   }
 }
 

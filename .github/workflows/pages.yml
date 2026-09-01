@@ -1,0 +1,62 @@
+name: Pages
+
+# Publica la página del proyecto y la política de privacidad en GitHub Pages.
+#
+# Google Play exige una URL pública para la política de privacidad, y GitHub
+# Pages es gratis en repositorios públicos. La fuente es docs/PRIVACIDAD.md, así
+# que la política que se publica y la que está en el repositorio no se pueden
+# desincronizar.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/PRIVACIDAD.md'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar la generación de documentación
+        run: python3 -m pip install --quiet markdown pygments pillow
+
+      # El mismo generador que produce los PDF de la Release produce estas
+      # páginas, así que el manual que se lee en la web y el que se descarga en
+      # PDF salen de la misma fuente y no se pueden desincronizar.
+      - name: Generar el sitio
+        run: |
+          mkdir -p _site
+          cp -r site/* _site/
+          python3 docs/build_docs.py --no-pdf
+          cp docs/out/shardpay-privacidad.html _site/privacidad.html
+          cp docs/out/shardpay-manual-usuario.html _site/manual-usuario.html
+          cp docs/out/shardpay-manual-tecnico.html _site/manual-tecnico.html
+          ls -la _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

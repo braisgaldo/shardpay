@@ -4,11 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 
 class CurrencyOption {
-  const CurrencyOption({
-    required this.code,
-    required this.label,
-    required this.symbol,
-  });
+  const CurrencyOption({required this.code, required this.label, required this.symbol});
 
   final String code;
   final String label;
@@ -148,4 +144,19 @@ List<GroupMember> sortedMembersByName(Iterable<GroupMember> members) {
   final sorted = members.toList();
   sorted.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   return sorted;
+}
+
+/// Nombre visible de una categoría de gasto.
+///
+/// El identificador de una categoría es un dato interno: `food`, `groceries`,
+/// `transport`. Cuando no se encuentra —porque el gasto apunta a una categoría
+/// personalizada que se borró, o porque llegó de una copia de otro grupo— hay
+/// que enseñar algo, y hasta ahora se enseñaba **el identificador crudo**. En
+/// una interfaz en español eso saca etiquetas como «coffee» entre «Comida» y
+/// «Transporte», y en una captura de la ficha de la tienda queda como un fallo.
+///
+/// Ante la duda, «Otros»: es lo que significa, y está traducido.
+String categoryDisplayName(ExpenseCategory? category, String fallback) {
+  final name = category?.name.trim();
+  return (name == null || name.isEmpty) ? fallback : name;
 }

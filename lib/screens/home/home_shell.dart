@@ -17,7 +17,7 @@ import '../../core/defaults.dart';
 import '../../core/expense_math.dart';
 import '../../models/app_models.dart';
 import '../../widgets/brand_mark.dart';
-import '../../widgets/manual/user_manual_sheet.dart';
+import '../../widgets/tour/shardpay_tour.dart';
 import '../balances/global_balances_screen.dart';
 import '../groups/group_detail_screen.dart';
 import '../settings/settings_screen.dart';
@@ -34,8 +34,12 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   final AppLinks _appLinks = AppLinks();
+
+  /// Anclas del tour guiado: apuntan a los botones de verdad de esta pantalla.
+  final ShardPayTourAnchors _tourAnchors = ShardPayTourAnchors();
+
   int _index = 0;
-  bool _manualQueued = false;
+  bool _tourQueued = false;
   StreamSubscription<Uri>? _inviteSubscription;
   String? _pendingInvite;
 
@@ -54,14 +58,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final preferences = ref.watch(appPreferencesProvider);
-    _queueManualIfNeeded(preferences);
+    _queueTourIfNeeded(preferences);
+
+    // Relanzar el tour desde Ajustes: se lleva al usuario a la pantalla de
+    // grupos y se abre alli, porque el tour ilumina botones de esa pantalla.
+    ref.listen<int>(replayTourProvider, (previous, next) {
+      if (previous == null || next <= previous) {
+        return;
+      }
+      setState(() => _index = 0);
+      // Un respiro para que la pantalla de grupos termine de montarse: el tour
+      // mide widgets reales y necesita que existan.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        if (!mounted) {
+          return;
+        }
+        await showShardPayTour(this.context, _tourAnchors, onSelectTab: _irAPestana);
+      });
+    });
 
     final pages = [
-      _GroupsView(
-        user: widget.user,
-        pendingInvite: _pendingInvite,
-        onInviteHandled: _clearPendingInvite,
-      ),
+      _GroupsView(user: widget.user, pendingInvite: _pendingInvite, onInviteHandled: _clearPendingInvite, tourAnchors: _tourAnchors),
       GlobalBalancesScreen(user: widget.user),
       StatsScreen(user: widget.user),
       SettingsScreen(user: widget.user),
@@ -70,29 +88,73 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
+        key: _tourAnchors.navegacion,
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.grid_view_rounded), label: tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos')),
-          NavigationDestination(icon: const Icon(Icons.account_balance_wallet_rounded), label: tr(context, es: 'Balance global', en: 'Global balance', gl: 'Balance global', fr: 'Solde global', it: 'Bilancio globale', pt: 'Saldo global')),
-          NavigationDestination(icon: const Icon(Icons.query_stats_rounded), label: tr(context, es: 'Estadísticas', en: 'Stats', gl: 'Estatisticas', fr: 'Stats', it: 'Statistiche', pt: 'Estatisticas')),
-          NavigationDestination(icon: const Icon(Icons.tune_rounded), label: tr(context, es: 'Ajustes', en: 'Settings', gl: 'Axustes', fr: 'Reglages', it: 'Impostazioni', pt: 'Ajustes')),
+          NavigationDestination(
+            icon: const Icon(Icons.grid_view_rounded),
+            label: tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.account_balance_wallet_rounded),
+            label: tr(
+              context,
+              es: 'Balance global',
+              en: 'Global balance',
+              gl: 'Balance global',
+              fr: 'Solde global',
+              it: 'Bilancio globale',
+              pt: 'Saldo global',
+            ),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.query_stats_rounded),
+            label: tr(context, es: 'Estadísticas', en: 'Stats', gl: 'Estatisticas', fr: 'Stats', it: 'Statistiche', pt: 'Estatisticas'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.tune_rounded),
+            label: tr(context, es: 'Ajustes', en: 'Settings', gl: 'Axustes', fr: 'Reglages', it: 'Impostazioni', pt: 'Ajustes'),
+          ),
         ],
       ),
     );
   }
 
-  void _queueManualIfNeeded(AppPreferences preferences) {
-    if (preferences.hasSeenManual || _manualQueued) {
+  /// Cambia de pestaña a peticion del tour.
+  ///
+  /// Devuelve un `Future` para que el tour pueda esperar a que la pantalla nueva
+  /// este montada antes de medir el elemento que va a iluminar.
+  Future<void> _irAPestana(int indice) async {
+    if (!mounted || _index == indice) {
       return;
     }
-    _manualQueued = true;
+    setState(() => _index = indice);
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  /// Lanza el tour de bienvenida la primera vez.
+  ///
+  /// Se espera al final del fotograma y un poco mas: el tour ilumina widgets
+  /// reales, asi que necesita que esten montados y medidos para saber donde
+  /// recortar el velo.
+  void _queueTourIfNeeded(AppPreferences preferences) {
+    if (preferences.hasSeenManual || _tourQueued) {
+      return;
+    }
+    _tourQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
         return;
       }
-      await showUserManualSheet(context);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (!mounted) {
+        return;
+      }
+      await showShardPayTour(context, _tourAnchors, onSelectTab: _irAPestana);
       if (mounted) {
+        // Se marca como visto tanto si se completa como si se salta: quien lo
+        // salta no quiere verlo otra vez en el siguiente arranque.
         ref.read(appPreferencesProvider.notifier).markManualSeen();
       }
     });
@@ -104,10 +166,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _queueInvite(initialUri);
     }
 
-    _inviteSubscription = _appLinks.uriLinkStream.listen(
-      _queueInvite,
-      onError: (_) {},
-    );
+    _inviteSubscription = _appLinks.uriLinkStream.listen(_queueInvite, onError: (_) {});
   }
 
   void _queueInvite(Uri uri) {
@@ -146,11 +205,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 }
 
 class _GroupsView extends ConsumerStatefulWidget {
-  const _GroupsView({required this.user, this.pendingInvite, required this.onInviteHandled});
+  const _GroupsView({required this.user, required this.onInviteHandled, required this.tourAnchors, this.pendingInvite});
 
   final AppUser user;
   final String? pendingInvite;
   final ValueChanged<String> onInviteHandled;
+  final ShardPayTourAnchors tourAnchors;
 
   @override
   ConsumerState<_GroupsView> createState() => _GroupsViewState();
@@ -219,17 +279,43 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text(tr(context, es: 'PIN del grupo', en: 'Group PIN', gl: 'PIN do grupo', fr: 'PIN du groupe', it: 'PIN del gruppo', pt: 'PIN do grupo')),
+          title: Text(
+            tr(
+              context,
+              es: 'PIN del grupo',
+              en: 'Group PIN',
+              gl: 'PIN do grupo',
+              fr: 'PIN du groupe',
+              it: 'PIN del gruppo',
+              pt: 'PIN do grupo',
+            ),
+          ),
           content: TextField(
             controller: controller,
             autofocus: true,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-            decoration: InputDecoration(labelText: tr(context, es: 'Introduce el PIN de 4 dígitos', en: 'Enter the 4-digit PIN', gl: 'Introduce o PIN de 4 dixitos', fr: 'Saisissez le PIN a 4 chiffres', it: 'Inserisci il PIN a 4 cifre', pt: 'Introduz o PIN de 4 digitos')),
+            decoration: InputDecoration(
+              labelText: tr(
+                context,
+                es: 'Introduce el PIN de 4 dígitos',
+                en: 'Enter the 4-digit PIN',
+                gl: 'Introduce o PIN de 4 dixitos',
+                fr: 'Saisissez le PIN a 4 chiffres',
+                it: 'Inserisci il PIN a 4 cifre',
+                pt: 'Introduz o PIN de 4 digitos',
+              ),
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()), child: Text(tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar'))),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: Text(tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar')),
+            ),
           ],
         );
       },
@@ -258,242 +344,372 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Colors.white,
-                      child: const ShardPayBrandMark(size: 32),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ShardPay', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                          Text(
-                            tr(
-                              context,
-                              es: 'Hola, ${widget.user.displayName.split(' ').first}',
-                              en: 'Hi, ${widget.user.displayName.split(' ').first}',
-                              gl: 'Ola, ${widget.user.displayName.split(' ').first}',
-                              fr: 'Salut, ${widget.user.displayName.split(' ').first}',
-                              it: 'Ciao, ${widget.user.displayName.split(' ').first}',
-                              pt: 'Ola, ${widget.user.displayName.split(' ').first}',
-                            ),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                        ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(24)),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        child: const ShardPayBrandMark(size: 32),
                       ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () => _showCreateGroupDialog(context),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(tr(context, es: 'Grupo', en: 'Group', gl: 'Grupo', fr: 'Groupe', it: 'Gruppo', pt: 'Grupo')),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _query = value.trim()),
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  hintText: _searchScope == _SearchScope.groups
-                      ? tr(context, es: 'Buscar grupos', en: 'Search groups', gl: 'Buscar grupos', fr: 'Rechercher groupes', it: 'Cerca gruppi', pt: 'Procurar grupos')
-                      : tr(context, es: 'Buscar personas', en: 'Search people', gl: 'Buscar persoas', fr: 'Rechercher personnes', it: 'Cerca persone', pt: 'Procurar pessoas'),
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _query = '');
-                          },
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SegmentedButton<_SearchScope>(
-                segments: [
-                  ButtonSegment(value: _SearchScope.groups, icon: const Icon(Icons.grid_view_rounded), label: Text(tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos'))),
-                  ButtonSegment(value: _SearchScope.people, icon: const Icon(Icons.people_alt_rounded), label: Text(tr(context, es: 'Personas', en: 'People', gl: 'Persoas', fr: 'Personnes', it: 'Persone', pt: 'Pessoas'))),
-                ],
-                selected: {_searchScope},
-                onSelectionChanged: (selection) => setState(() => _searchScope = selection.first),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () => _showJoinGroupDialog(context),
-                icon: const Icon(Icons.qr_code_scanner_rounded),
-                label: Text(tr(context, es: 'Entrar por enlace o QR', en: 'Join with link or QR', gl: 'Entrar por ligazon ou QR', fr: 'Entrer via lien ou QR', it: 'Entra con link o QR', pt: 'Entrar por link ou QR')),
-              ),
-              const SizedBox(height: 16),
-              if (visibleGroups.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      _query.isEmpty
-                          ? tr(context, es: 'Todavía no tienes grupos. Crea uno nuevo o entra con una invitación.', en: 'You do not have groups yet. Create one or join with an invite.', gl: 'Ainda non tes grupos. Crea un novo ou entra cun convite.', fr: 'Vous n avez pas encore de groupes. Creez-en un ou rejoignez-en un.', it: 'Non hai ancora gruppi. Creane uno o entra con un invito.', pt: 'Ainda nao tens grupos. Cria um novo ou entra com um convite.')
-                          : tr(context, es: 'No hay grupos que coincidan con tu búsqueda.', en: 'No groups match your search.', gl: 'Non hai grupos que coincidan coa busca.', fr: 'Aucun groupe ne correspond a votre recherche.', it: 'Nessun gruppo corrisponde alla ricerca.', pt: 'Nenhum grupo corresponde a pesquisa.'),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ),
-              ...visibleGroups.map((group) {
-                final balances = memberBalances(group);
-                final myBalance = balances[widget.user.id] ?? 0;
-                final expanded = _expandedGroupIds.contains(group.id);
-                final balanceTone = _balanceTone(myBalance);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Card(
-                    color: group.isClosed ? Theme.of(context).colorScheme.surfaceContainerHigh : null,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(28),
-                      onTap: () {
-                        setState(() {
-                          if (expanded) {
-                            _expandedGroupIds.remove(group.id);
-                          } else {
-                            _expandedGroupIds.add(group.id);
-                          }
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
+                      const SizedBox(width: 14),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Icon(groupIconForKey(group.iconKey), color: Theme.of(context).colorScheme.primary),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        group.name,
-                                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                                      ),
-                                      if (group.isClosed)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08),
-                                              borderRadius: BorderRadius.circular(999),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(Icons.lock_clock_rounded, size: 14),
-                                                const SizedBox(width: 6),
-                                                Text(tr(context, es: 'Grupo cerrado', en: 'Closed group', gl: 'Grupo pechado', fr: 'Groupe ferme', it: 'Gruppo chiuso', pt: 'Grupo fechado')),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      if ((group.description ?? '').trim().isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 2),
-                                          child: Text(
-                                            group.description!,
-                                            maxLines: expanded ? 2 : 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton.filledTonal(
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => GroupDetailScreen(user: widget.user, groupId: group.id),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.arrow_outward_rounded),
-                                  tooltip: tr(context, es: 'Ir al grupo', en: 'Open group', gl: 'Ir ao grupo', fr: 'Ouvrir le groupe', it: 'Apri gruppo', pt: 'Abrir grupo'),
-                                ),
-                              ],
+                            Text('ShardPay', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                            Text(
+                              tr(
+                                context,
+                                es: 'Hola, ${widget.user.displayName.split(' ').first}',
+                                en: 'Hi, ${widget.user.displayName.split(' ').first}',
+                                gl: 'Ola, ${widget.user.displayName.split(' ').first}',
+                                fr: 'Salut, ${widget.user.displayName.split(' ').first}',
+                                it: 'Ciao, ${widget.user.displayName.split(' ').first}',
+                                pt: 'Ola, ${widget.user.displayName.split(' ').first}',
+                              ),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                             ),
-                            if (expanded) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                tr(
-                                  context,
-                                  es: '${group.totalDisplayedMembers} miembros · invite ${group.inviteCode} · actualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                  en: '${group.totalDisplayedMembers} members · invite ${group.inviteCode} · updated ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                  gl: '${group.totalDisplayedMembers} membros · invite ${group.inviteCode} · actualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                  fr: '${group.totalDisplayedMembers} membres · invite ${group.inviteCode} · maj ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                  it: '${group.totalDisplayedMembers} membri · invite ${group.inviteCode} · aggiornato ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                  pt: '${group.totalDisplayedMembers} membros · invite ${group.inviteCode} · atualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  Expanded(child: _MetricCard(label: tr(context, es: 'Gastado', en: 'Spent', gl: 'Gastado', fr: 'Depense', it: 'Speso', pt: 'Gasto'), value: money(totalGroupSpend(group), group.currency))),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _MetricCard(
-                                      label: tr(context, es: 'Tu balance', en: 'Your balance', gl: 'O teu balance', fr: 'Votre solde', it: 'Il tuo saldo', pt: 'O teu saldo'),
-                                      value: '${myBalance >= 0 ? '+' : ''}${money(myBalance, group.currency)}',
-                                      valueColor: balanceTone.$1,
-                                      backgroundColor: balanceTone.$2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  ...group.visibleMembers.take(5).map((member) => Chip(label: Text(member.isPending ? '${member.name} · ${tr(context, es: 'pendiente', en: 'pending', gl: 'pendente', fr: 'en attente', it: 'in attesa', pt: 'pendente')}' : member.name))),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: TextButton.icon(
-                                  onPressed: () {
-                                    final link = _inviteLink(group);
-                                    SharePlus.instance.share(ShareParams(text: link, subject: tr(context, es: 'Únete a ${group.name} en ShardPay', en: 'Join ${group.name} on ShardPay', gl: 'Unete a ${group.name} en ShardPay', fr: 'Rejoignez ${group.name} sur ShardPay', it: 'Unisciti a ${group.name} su ShardPay', pt: 'Junta-te a ${group.name} no ShardPay')));
-                                  },
-                                  icon: const Icon(Icons.share_rounded),
-                                  label: Text(tr(context, es: 'Compartir invitación', en: 'Share invite', gl: 'Compartir convite', fr: 'Partager l invitation', it: 'Condividi invito', pt: 'Partilhar convite')),
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                       ),
+                      FilledButton.icon(
+                        key: widget.tourAnchors.crearGrupo,
+                        onPressed: () => _showCreateGroupDialog(context),
+                        icon: const Icon(Icons.add_rounded),
+                        label: Text(tr(context, es: 'Grupo', en: 'Group', gl: 'Grupo', fr: 'Groupe', it: 'Gruppo', pt: 'Grupo')),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: widget.tourAnchors.buscar,
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value.trim()),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: _searchScope == _SearchScope.groups
+                        ? tr(
+                            context,
+                            es: 'Buscar grupos',
+                            en: 'Search groups',
+                            gl: 'Buscar grupos',
+                            fr: 'Rechercher groupes',
+                            it: 'Cerca gruppi',
+                            pt: 'Procurar grupos',
+                          )
+                        : tr(
+                            context,
+                            es: 'Buscar personas',
+                            en: 'Search people',
+                            gl: 'Buscar persoas',
+                            fr: 'Rechercher personnes',
+                            it: 'Cerca persone',
+                            pt: 'Procurar pessoas',
+                          ),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<_SearchScope>(
+                  segments: [
+                    ButtonSegment(
+                      value: _SearchScope.groups,
+                      icon: const Icon(Icons.grid_view_rounded),
+                      label: Text(tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos')),
+                    ),
+                    ButtonSegment(
+                      value: _SearchScope.people,
+                      icon: const Icon(Icons.people_alt_rounded),
+                      label: Text(tr(context, es: 'Personas', en: 'People', gl: 'Persoas', fr: 'Personnes', it: 'Persone', pt: 'Pessoas')),
+                    ),
+                  ],
+                  selected: {_searchScope},
+                  onSelectionChanged: (selection) => setState(() => _searchScope = selection.first),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  key: widget.tourAnchors.entrarPorEnlace,
+                  onPressed: () => _showJoinGroupDialog(context),
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: Text(
+                    tr(
+                      context,
+                      es: 'Entrar por enlace o QR',
+                      en: 'Join with link or QR',
+                      gl: 'Entrar por ligazon ou QR',
+                      fr: 'Entrer via lien ou QR',
+                      it: 'Entra con link o QR',
+                      pt: 'Entrar por link ou QR',
                     ),
                   ),
-                );
-              }),
-            ],
-          ),
+                ),
+                const SizedBox(height: 16),
+                if (visibleGroups.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _query.isEmpty
+                            ? tr(
+                                context,
+                                es: 'Todavía no tienes grupos. Crea uno nuevo o entra con una invitación.',
+                                en: 'You do not have groups yet. Create one or join with an invite.',
+                                gl: 'Ainda non tes grupos. Crea un novo ou entra cun convite.',
+                                fr: 'Vous n avez pas encore de groupes. Creez-en un ou rejoignez-en un.',
+                                it: 'Non hai ancora gruppi. Creane uno o entra con un invito.',
+                                pt: 'Ainda nao tens grupos. Cria um novo ou entra com um convite.',
+                              )
+                            : tr(
+                                context,
+                                es: 'No hay grupos que coincidan con tu búsqueda.',
+                                en: 'No groups match your search.',
+                                gl: 'Non hai grupos que coincidan coa busca.',
+                                fr: 'Aucun groupe ne correspond a votre recherche.',
+                                it: 'Nessun gruppo corrisponde alla ricerca.',
+                                pt: 'Nenhum grupo corresponde a pesquisa.',
+                              ),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ),
+                ...visibleGroups.asMap().entries.map((entrada) {
+                  final group = entrada.value;
+                  final balances = memberBalances(group);
+                  final myBalance = balances[widget.user.id] ?? 0;
+                  final expanded = _expandedGroupIds.contains(group.id);
+                  final balanceTone = _balanceTone(myBalance);
+                  return Padding(
+                    // El tour ilumina la primera tarjeta para explicar que el
+                    // lector de tickets vive dentro de un grupo.
+                    key: entrada.key == 0 ? widget.tourAnchors.listaGrupos : null,
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      color: group.isClosed ? Theme.of(context).colorScheme.surfaceContainerHigh : null,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: () {
+                          setState(() {
+                            if (expanded) {
+                              _expandedGroupIds.remove(group.id);
+                            } else {
+                              _expandedGroupIds.add(group.id);
+                            }
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Icon(groupIconForKey(group.iconKey), color: Theme.of(context).colorScheme.primary),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          group.name,
+                                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                                        ),
+                                        if (group.isClosed)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08),
+                                                borderRadius: BorderRadius.circular(999),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.lock_clock_rounded, size: 14),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    tr(
+                                                      context,
+                                                      es: 'Grupo cerrado',
+                                                      en: 'Closed group',
+                                                      gl: 'Grupo pechado',
+                                                      fr: 'Groupe ferme',
+                                                      it: 'Gruppo chiuso',
+                                                      pt: 'Grupo fechado',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        if ((group.description ?? '').trim().isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              group.description!,
+                                              maxLines: expanded ? 2 : 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton.filledTonal(
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => GroupDetailScreen(user: widget.user, groupId: group.id),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.arrow_outward_rounded),
+                                    tooltip: tr(
+                                      context,
+                                      es: 'Ir al grupo',
+                                      en: 'Open group',
+                                      gl: 'Ir ao grupo',
+                                      fr: 'Ouvrir le groupe',
+                                      it: 'Apri gruppo',
+                                      pt: 'Abrir grupo',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (expanded) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  tr(
+                                    context,
+                                    es: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · actualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                    en: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · updated ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                    gl: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · actualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                    fr: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · maj ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                    it: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · aggiornato ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                    pt: '${memberCountLabel(context, group.totalDisplayedMembers)} · invite ${group.inviteCode} · atualizado ${DateFormat('dd/MM HH:mm', localeTag(context)).format(group.updatedAt)}',
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _MetricCard(
+                                        label: tr(
+                                          context,
+                                          es: 'Gastado',
+                                          en: 'Spent',
+                                          gl: 'Gastado',
+                                          fr: 'Depense',
+                                          it: 'Speso',
+                                          pt: 'Gasto',
+                                        ),
+                                        value: money(totalGroupSpend(group), group.currency),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _MetricCard(
+                                        label: tr(
+                                          context,
+                                          es: 'Tu balance',
+                                          en: 'Your balance',
+                                          gl: 'O teu balance',
+                                          fr: 'Votre solde',
+                                          it: 'Il tuo saldo',
+                                          pt: 'O teu saldo',
+                                        ),
+                                        value: '${myBalance >= 0 ? '+' : ''}${money(myBalance, group.currency)}',
+                                        valueColor: balanceTone.$1,
+                                        backgroundColor: balanceTone.$2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ...group.visibleMembers
+                                        .take(5)
+                                        .map(
+                                          (member) => Chip(
+                                            label: Text(
+                                              member.isPending
+                                                  ? '${member.name} · ${tr(context, es: 'pendiente', en: 'pending', gl: 'pendente', fr: 'en attente', it: 'in attesa', pt: 'pendente')}'
+                                                  : member.name,
+                                            ),
+                                          ),
+                                        ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      final link = _inviteLink(group);
+                                      SharePlus.instance.share(
+                                        ShareParams(
+                                          text: link,
+                                          subject: tr(
+                                            context,
+                                            es: 'Únete a ${group.name} en ShardPay',
+                                            en: 'Join ${group.name} on ShardPay',
+                                            gl: 'Unete a ${group.name} en ShardPay',
+                                            fr: 'Rejoignez ${group.name} sur ShardPay',
+                                            it: 'Unisciti a ${group.name} su ShardPay',
+                                            pt: 'Junta-te a ${group.name} no ShardPay',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.share_rounded),
+                                    label: Text(
+                                      tr(
+                                        context,
+                                        es: 'Compartir invitación',
+                                        en: 'Share invite',
+                                        gl: 'Compartir convite',
+                                        fr: 'Partager l invitation',
+                                        it: 'Condividi invito',
+                                        pt: 'Partilhar convite',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
           );
         },
         error: (error, _) => Center(child: Text(error.toString())),
@@ -506,7 +722,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     final controller = TextEditingController();
     final pendingController = TextEditingController();
     final pendingMembers = <PendingGroupMember>[];
-    final uuid = const Uuid();
+    const uuid = Uuid();
     var currency = 'EUR';
     var iconKey = 'groups';
     final created = await showDialog<bool>(
@@ -515,7 +731,17 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
-              title: Text(tr(context, es: 'Crear grupo', en: 'Create group', gl: 'Crear grupo', fr: 'Creer un groupe', it: 'Crea gruppo', pt: 'Criar grupo')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Crear grupo',
+                  en: 'Create group',
+                  gl: 'Crear grupo',
+                  fr: 'Creer un groupe',
+                  it: 'Crea gruppo',
+                  pt: 'Criar grupo',
+                ),
+              ),
               content: SizedBox(
                 width: 520,
                 child: SingleChildScrollView(
@@ -526,14 +752,32 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                       TextField(
                         controller: controller,
                         decoration: InputDecoration(
-                          labelText: tr(context, es: 'Nombre del grupo', en: 'Group name', gl: 'Nome do grupo', fr: 'Nom du groupe', it: 'Nome del gruppo', pt: 'Nome do grupo'),
+                          labelText: tr(
+                            context,
+                            es: 'Nombre del grupo',
+                            en: 'Group name',
+                            gl: 'Nome do grupo',
+                            fr: 'Nom du groupe',
+                            it: 'Nome del gruppo',
+                            pt: 'Nome do grupo',
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: iconKey,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Icono del grupo', en: 'Group icon', gl: 'Icona do grupo', fr: 'Icone du groupe', it: 'Icona del gruppo', pt: 'Icone do grupo')),
+                        decoration: InputDecoration(
+                          labelText: tr(
+                            context,
+                            es: 'Icono del grupo',
+                            en: 'Group icon',
+                            gl: 'Icona do grupo',
+                            fr: 'Icone du groupe',
+                            it: 'Icona del gruppo',
+                            pt: 'Icone do grupo',
+                          ),
+                        ),
                         items: groupIcons.entries.map((entry) {
                           return DropdownMenuItem<String>(
                             value: entry.key,
@@ -552,14 +796,39 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: currency,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Divisa', en: 'Currency', gl: 'Divisa', fr: 'Devise', it: 'Valuta', pt: 'Moeda')),
-                        items: currencyOptions.map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}'))).toList(),
+                        decoration: InputDecoration(
+                          labelText: tr(context, es: 'Divisa', en: 'Currency', gl: 'Divisa', fr: 'Devise', it: 'Valuta', pt: 'Moeda'),
+                        ),
+                        items: currencyOptions
+                            .map((entry) => DropdownMenuItem(value: entry.code, child: Text('${entry.code} · ${entry.label}')))
+                            .toList(),
                         onChanged: (value) => setDialogState(() => currency = value ?? currency),
                       ),
                       const SizedBox(height: 16),
-                      Text(tr(context, es: 'Personas pendientes', en: 'Pending people', gl: 'Persoas pendentes', fr: 'Personnes en attente', it: 'Persone in attesa', pt: 'Pessoas pendentes'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(
+                        tr(
+                          context,
+                          es: 'Personas pendientes',
+                          en: 'Pending people',
+                          gl: 'Persoas pendentes',
+                          fr: 'Personnes en attente',
+                          it: 'Persone in attesa',
+                          pt: 'Pessoas pendentes',
+                        ),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                       const SizedBox(height: 8),
-                      Text(tr(context, es: 'Añade a gente aunque todavía no tenga cuenta. Luego podrá vincularse desde el enlace.', en: 'Add people even if they do not have an account yet. They can link themselves from the invite later.', gl: 'Engade xente ainda que non teña conta. Logo podera vincularse desde a ligazon.', fr: 'Ajoutez des personnes meme sans compte. Elles pourront se lier plus tard via l invitation.', it: 'Aggiungi persone anche senza account. Potranno collegarsi dall invito in seguito.', pt: 'Adiciona pessoas mesmo sem conta. Poderao associar-se mais tarde pelo convite.')),
+                      Text(
+                        tr(
+                          context,
+                          es: 'Añade a gente aunque todavía no tenga cuenta. Luego podrá vincularse desde el enlace.',
+                          en: 'Add people even if they do not have an account yet. They can link themselves from the invite later.',
+                          gl: 'Engade xente ainda que non teña conta. Logo podera vincularse desde a ligazon.',
+                          fr: 'Ajoutez des personnes meme sans compte. Elles pourront se lier plus tard via l invitation.',
+                          it: 'Aggiungi persone anche senza account. Potranno collegarsi dall invito in seguito.',
+                          pt: 'Adiciona pessoas mesmo sem conta. Poderao associar-se mais tarde pelo convite.',
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -567,7 +836,15 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                             child: TextField(
                               controller: pendingController,
                               decoration: InputDecoration(
-                                labelText: tr(context, es: 'Añadir participante', en: 'Add participant', gl: 'Engadir participante', fr: 'Ajouter un participant', it: 'Aggiungi partecipante', pt: 'Adicionar participante'),
+                                labelText: tr(
+                                  context,
+                                  es: 'Añadir participante',
+                                  en: 'Add participant',
+                                  gl: 'Engadir participante',
+                                  fr: 'Ajouter un participant',
+                                  it: 'Aggiungi partecipante',
+                                  pt: 'Adicionar participante',
+                                ),
                                 floatingLabelBehavior: FloatingLabelBehavior.always,
                               ),
                               onSubmitted: (_) {
@@ -594,7 +871,9 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                                 pendingController.clear();
                               });
                             },
-                            child: Text(tr(context, es: 'Añadir', en: 'Add', gl: 'Engadir', fr: 'Ajouter', it: 'Aggiungi', pt: 'Adicionar')),
+                            child: Text(
+                              tr(context, es: 'Añadir', en: 'Add', gl: 'Engadir', fr: 'Ajouter', it: 'Aggiungi', pt: 'Adicionar'),
+                            ),
                           ),
                         ],
                       ),
@@ -603,12 +882,15 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: sortedMembersByName(pendingMembers.map((entry) => GroupMember(userId: entry.id, name: entry.name, email: '', isPending: true))).map((entry) {
-                            return InputChip(
-                              label: Text(entry.name),
-                              onDeleted: () => setDialogState(() => pendingMembers.removeWhere((item) => item.name == entry.name)),
-                            );
-                          }).toList(),
+                          children:
+                              sortedMembersByName(
+                                pendingMembers.map((entry) => GroupMember(userId: entry.id, name: entry.name, email: '', isPending: true)),
+                              ).map((entry) {
+                                return InputChip(
+                                  label: Text(entry.name),
+                                  onDeleted: () => setDialogState(() => pendingMembers.removeWhere((item) => item.name == entry.name)),
+                                );
+                              }).toList(),
                         ),
                       ],
                     ],
@@ -616,13 +898,18 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
                 FilledButton(
                   onPressed: () async {
-                    await ref.read(repositoryProvider).createGroup(
+                    await ref
+                        .read(repositoryProvider)
+                        .createGroup(
                           owner: widget.user,
                           name: controller.text.trim(),
-                        iconKey: iconKey,
+                          iconKey: iconKey,
                           currency: currency,
                           pendingMembers: pendingMembers,
                         );
@@ -640,7 +927,21 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     );
 
     if (created == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(context, es: 'Grupo creado.', en: 'Group created.', gl: 'Grupo creado.', fr: 'Groupe cree.', it: 'Gruppo creato.', pt: 'Grupo criado.'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              context,
+              es: 'Grupo creado.',
+              en: 'Group created.',
+              gl: 'Grupo creado.',
+              fr: 'Groupe cree.',
+              it: 'Gruppo creato.',
+              pt: 'Grupo criado.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -652,25 +953,40 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       isScrollControlled: true,
       builder: (sheetContext) {
         return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-          ),
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: controller,
-                decoration: InputDecoration(labelText: tr(context, es: 'Pega enlace o código del grupo', en: 'Paste group link or code', gl: 'Pega a ligazon ou o codigo do grupo', fr: 'Collez le lien ou code du groupe', it: 'Incolla link o codice del gruppo', pt: 'Cola o link ou codigo do grupo')),
+                decoration: InputDecoration(
+                  labelText: tr(
+                    context,
+                    es: 'Pega enlace o código del grupo',
+                    en: 'Paste group link or code',
+                    gl: 'Pega a ligazon ou o codigo do grupo',
+                    fr: 'Collez le lien ou code du groupe',
+                    it: 'Incolla link o codice del gruppo',
+                    pt: 'Cola o link ou codigo do grupo',
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: pinController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                decoration: InputDecoration(labelText: tr(context, es: 'PIN del grupo (4 dígitos)', en: 'Group PIN (4 digits)', gl: 'PIN do grupo (4 dixitos)', fr: 'PIN du groupe (4 chiffres)', it: 'PIN del gruppo (4 cifre)', pt: 'PIN do grupo (4 digitos)')),
+                decoration: InputDecoration(
+                  labelText: tr(
+                    context,
+                    es: 'PIN del grupo (4 dígitos)',
+                    en: 'Group PIN (4 digits)',
+                    gl: 'PIN do grupo (4 dixitos)',
+                    fr: 'PIN du groupe (4 chiffres)',
+                    it: 'PIN del gruppo (4 cifre)',
+                    pt: 'PIN do grupo (4 digitos)',
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -678,22 +994,34 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final scanned = await Navigator.of(sheetContext).push<String>(
-                          MaterialPageRoute(builder: (_) => const _QrScannerScreen()),
-                        );
+                        final scanned = await Navigator.of(
+                          sheetContext,
+                        ).push<String>(MaterialPageRoute(builder: (_) => const _QrScannerScreen()));
                         if (scanned != null) {
                           controller.text = scanned;
                         }
                       },
                       icon: const Icon(Icons.qr_code_scanner_rounded),
-                      label: Text(tr(context, es: 'Escanear QR', en: 'Scan QR', gl: 'Escanear QR', fr: 'Scanner QR', it: 'Scansiona QR', pt: 'Ler QR')),
+                      label: Text(
+                        tr(
+                          context,
+                          es: 'Escanear QR',
+                          en: 'Scan QR',
+                          gl: 'Escanear QR',
+                          fr: 'Scanner QR',
+                          it: 'Scansiona QR',
+                          pt: 'Ler QR',
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
                       onPressed: () async => _resolveJoinFlow(sheetContext, controller.text.trim(), pinController.text.trim()),
-                      child: Text(tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar')),
+                      child: Text(
+                        tr(context, es: 'Continuar', en: 'Continue', gl: 'Continuar', fr: 'Continuer', it: 'Continua', pt: 'Continuar'),
+                      ),
                     ),
                   ),
                 ],
@@ -711,14 +1039,30 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       if (rawInvite.trim().isEmpty) {
         _showJoinToast(
           context,
-          tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+          tr(
+            context,
+            es: 'El enlace o código para unirte no es correcto.',
+            en: 'The join link or code is not valid.',
+            gl: 'A ligazon ou o codigo para entrar non e correcto.',
+            fr: 'Le lien ou code d invitation n est pas valide.',
+            it: 'Il link o codice di invito non e valido.',
+            pt: 'O link ou codigo para entrar nao e valido.',
+          ),
         );
         return;
       }
       if (joinPin.length != 4) {
         _showJoinToast(
           context,
-          tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
+          tr(
+            context,
+            es: 'El PIN para unirte no es correcto.',
+            en: 'The join PIN is not valid.',
+            gl: 'O PIN para entrar non e correcto.',
+            fr: 'Le PIN d invitation n est pas valide.',
+            it: 'Il PIN per entrare non e valido.',
+            pt: 'O PIN para entrar nao e valido.',
+          ),
         );
         return;
       }
@@ -730,20 +1074,24 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
       if (group == null) {
         _showJoinToast(
           context,
-          tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+          tr(
+            context,
+            es: 'El enlace o código para unirte no es correcto.',
+            en: 'The join link or code is not valid.',
+            gl: 'A ligazon ou o codigo para entrar non e correcto.',
+            fr: 'Le lien ou code d invitation n est pas valide.',
+            it: 'Il link o codice di invito non e valido.',
+            pt: 'O link ou codigo para entrar nao e valido.',
+          ),
         );
         return;
       }
-      if (group.joinPin != joinPin.trim()) {
-        _showJoinToast(
-          context,
-          tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
-        );
-        return;
-      }
+      // El PIN ya no se comprueba aqui: el movil no puede leer el del grupo
+      // (ADR-0009). Lo verifican las reglas de Firestore contra el valor real, y
+      // si no cuadra la escritura se rechaza y se avisa mas abajo.
 
       String? selectedPendingMemberId;
-      if (group.pendingMembers.isNotEmpty || !group.allowAnonymousJoin) {
+      if (group.openSlots.isNotEmpty || !group.allowAnonymousJoin) {
         if (!mounted) {
           return;
         }
@@ -763,7 +1111,15 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
         navigator.pop();
         _showJoinToast(
           context,
-          tr(context, es: 'Has entrado en ${group.name}.', en: 'You joined ${group.name}.', gl: 'Entraches en ${group.name}.', fr: 'Vous avez rejoint ${group.name}.', it: 'Sei entrato in ${group.name}.', pt: 'Entraste em ${group.name}.'),
+          tr(
+            context,
+            es: 'Has entrado en ${group.groupName}.',
+            en: 'You joined ${group.groupName}.',
+            gl: 'Entraches en ${group.groupName}.',
+            fr: 'Vous avez rejoint ${group.groupName}.',
+            it: 'Sei entrato in ${group.groupName}.',
+            pt: 'Entraste em ${group.groupName}.',
+          ),
           isError: false,
         );
       }
@@ -773,12 +1129,28 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
         if (message.contains('PIN del grupo no es correcto')) {
           _showJoinToast(
             context,
-            tr(context, es: 'El PIN para unirte no es correcto.', en: 'The join PIN is not valid.', gl: 'O PIN para entrar non e correcto.', fr: 'Le PIN d invitation n est pas valide.', it: 'Il PIN per entrare non e valido.', pt: 'O PIN para entrar nao e valido.'),
+            tr(
+              context,
+              es: 'El PIN para unirte no es correcto.',
+              en: 'The join PIN is not valid.',
+              gl: 'O PIN para entrar non e correcto.',
+              fr: 'Le PIN d invitation n est pas valide.',
+              it: 'Il PIN per entrare non e valido.',
+              pt: 'O PIN para entrar nao e valido.',
+            ),
           );
         } else if (message.contains('No se encontró ningún grupo') || message.contains('Invitación no encontrada')) {
           _showJoinToast(
             context,
-            tr(context, es: 'El enlace o código para unirte no es correcto.', en: 'The join link or code is not valid.', gl: 'A ligazon ou o codigo para entrar non e correcto.', fr: 'Le lien ou code d invitation n est pas valide.', it: 'Il link o codice di invito non e valido.', pt: 'O link ou codigo para entrar nao e valido.'),
+            tr(
+              context,
+              es: 'El enlace o código para unirte no es correcto.',
+              en: 'The join link or code is not valid.',
+              gl: 'A ligazon ou o codigo para entrar non e correcto.',
+              fr: 'Le lien ou code d invitation n est pas valide.',
+              it: 'Il link o codice di invito non e valido.',
+              pt: 'O link ou codigo para entrar nao e valido.',
+            ),
           );
         } else {
           _showJoinToast(context, message);
@@ -813,10 +1185,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 520),
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: backgroundColor,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(18)),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         child: Row(
@@ -827,10 +1196,9 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
                             Expanded(
                               child: Text(
                                 message,
-                                style: Theme.of(overlayContext).textTheme.bodyMedium?.copyWith(
-                                  color: foregroundColor,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                style: Theme.of(
+                                  overlayContext,
+                                ).textTheme.bodyMedium?.copyWith(color: foregroundColor, fontWeight: FontWeight.w700),
                               ),
                             ),
                           ],
@@ -854,7 +1222,7 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
     _joinToastEntry = null;
   }
 
-  Future<String?> _pickInviteIdentity(ExpenseGroup group) {
+  Future<String?> _pickInviteIdentity(GroupInvitePreview group) {
     return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -865,25 +1233,72 @@ class _GroupsViewState extends ConsumerState<_GroupsView> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(tr(sheetContext, es: '¿Quién eres en ${group.name}?', en: 'Who are you in ${group.name}?', gl: 'Quen es en ${group.name}?', fr: 'Qui etes-vous dans ${group.name} ?', it: 'Chi sei in ${group.name}?', pt: 'Quem es em ${group.name}?'), style: Theme.of(sheetContext).textTheme.headlineSmall),
+              Text(
+                tr(
+                  sheetContext,
+                  es: '¿Quién eres en ${group.groupName}?',
+                  en: 'Who are you in ${group.groupName}?',
+                  gl: 'Quen es en ${group.groupName}?',
+                  fr: 'Qui etes-vous dans ${group.groupName} ?',
+                  it: 'Chi sei in ${group.groupName}?',
+                  pt: 'Quem es em ${group.groupName}?',
+                ),
+                style: Theme.of(sheetContext).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               Text(
                 group.allowAnonymousJoin
-                    ? tr(sheetContext, es: 'Toca una opción y entrarás directamente al grupo.', en: 'Tap an option and you will join the group immediately.', gl: 'Toca unha opcion e entraras directamente no grupo.', fr: 'Touchez une option et vous rejoindrez directement le groupe.', it: 'Tocca un opzione ed entrerai subito nel gruppo.', pt: 'Toca numa opcao e entraras diretamente no grupo.')
-                    : tr(sheetContext, es: 'Toca el nombre que preparó el administrador para vincular tu acceso.', en: 'Tap the name prepared by the admin to link your access.', gl: 'Toca o nome que preparou a persoa administradora para vincular o acceso.', fr: 'Touchez le nom prepare par l administrateur pour lier votre acces.', it: 'Tocca il nome preparato dall amministratore per collegare il tuo accesso.', pt: 'Toca no nome preparado pela administracao para associar o acesso.'),
+                    ? tr(
+                        sheetContext,
+                        es: 'Toca una opción y entrarás directamente al grupo.',
+                        en: 'Tap an option and you will join the group immediately.',
+                        gl: 'Toca unha opcion e entraras directamente no grupo.',
+                        fr: 'Touchez une option et vous rejoindrez directement le groupe.',
+                        it: 'Tocca un opzione ed entrerai subito nel gruppo.',
+                        pt: 'Toca numa opcao e entraras diretamente no grupo.',
+                      )
+                    : tr(
+                        sheetContext,
+                        es: 'Toca el nombre que preparó el administrador para vincular tu acceso.',
+                        en: 'Tap the name prepared by the admin to link your access.',
+                        gl: 'Toca o nome que preparou a persoa administradora para vincular o acceso.',
+                        fr: 'Touchez le nom prepare par l administrateur pour lier votre acces.',
+                        it: 'Tocca il nome preparato dall amministratore per collegare il tuo accesso.',
+                        pt: 'Toca no nome preparado pela administracao para associar o acesso.',
+                      ),
               ),
               const SizedBox(height: 16),
               if (group.allowAnonymousJoin)
                 _IdentityTile(
                   selected: false,
-                  title: Text(tr(sheetContext, es: 'Entrar como ${widget.user.displayName}', en: 'Join as ${widget.user.displayName}', gl: 'Entrar como ${widget.user.displayName}', fr: 'Entrer comme ${widget.user.displayName}', it: 'Entra come ${widget.user.displayName}', pt: 'Entrar como ${widget.user.displayName}')),
+                  title: Text(
+                    tr(
+                      sheetContext,
+                      es: 'Entrar como ${widget.user.displayName}',
+                      en: 'Join as ${widget.user.displayName}',
+                      gl: 'Entrar como ${widget.user.displayName}',
+                      fr: 'Entrer comme ${widget.user.displayName}',
+                      it: 'Entra come ${widget.user.displayName}',
+                      pt: 'Entrar como ${widget.user.displayName}',
+                    ),
+                  ),
                   onTap: () => Navigator.of(sheetContext).pop(null),
                 ),
-              ...group.pendingMembers.map((member) {
+              ...group.openSlots.map((member) {
                 return _IdentityTile(
                   selected: false,
                   title: Text(member.name),
-                  subtitle: Text(tr(sheetContext, es: 'Nombre preparado por el administrador', en: 'Prepared by the admin', gl: 'Nome preparado pola administracion', fr: 'Nom prepare par l administrateur', it: 'Nome preparato dall amministratore', pt: 'Nome preparado pela administracao')),
+                  subtitle: Text(
+                    tr(
+                      sheetContext,
+                      es: 'Nombre preparado por el administrador',
+                      en: 'Prepared by the admin',
+                      gl: 'Nome preparado pola administracion',
+                      fr: 'Nom prepare par l administrateur',
+                      it: 'Nome preparato dall amministratore',
+                      pt: 'Nome preparado pela administracao',
+                    ),
+                  ),
                   onTap: () => Navigator.of(sheetContext).pop(member.id),
                 );
               }),
@@ -914,16 +1329,16 @@ class _MetricCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(24),
-      ),
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(24)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: labelColor)),
           const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor)),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: resolvedValueColor),
+          ),
         ],
       ),
     );
@@ -943,12 +1358,7 @@ enum _SearchScope { groups, people }
 }
 
 class _IdentityTile extends StatelessWidget {
-  const _IdentityTile({
-    required this.selected,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-  });
+  const _IdentityTile({required this.selected, required this.title, required this.onTap, this.subtitle});
 
   final bool selected;
   final Widget title;

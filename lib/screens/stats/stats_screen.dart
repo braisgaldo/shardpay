@@ -49,9 +49,20 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
 
   String _groupFilterSummary(BuildContext context, List<ExpenseGroup> sortedGroups) {
     if (_selectedGroupIds.isEmpty) {
-      return tr(context, es: 'Todos los grupos', en: 'All groups', gl: 'Todos os grupos', fr: 'Tous les groupes', it: 'Tutti i gruppi', pt: 'Todos os grupos');
+      return tr(
+        context,
+        es: 'Todos los grupos',
+        en: 'All groups',
+        gl: 'Todos os grupos',
+        fr: 'Tous les groupes',
+        it: 'Tutti i gruppi',
+        pt: 'Todos os grupos',
+      );
     }
-    final selectedNames = sortedGroups.where((group) => _selectedGroupIds.contains(group.id)).map((group) => group.name).toList(growable: false);
+    final selectedNames = sortedGroups
+        .where((group) => _selectedGroupIds.contains(group.id))
+        .map((group) => group.name)
+        .toList(growable: false);
     return selectedNames.join(', ');
   }
 
@@ -64,9 +75,21 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final filteredGroups = sortedGroups.where((group) => group.name.toLowerCase().contains(search.toLowerCase())).toList(growable: false);
+            final filteredGroups = sortedGroups
+                .where((group) => group.name.toLowerCase().contains(search.toLowerCase()))
+                .toList(growable: false);
             return AlertDialog(
-              title: Text(tr(context, es: 'Filtrar grupos', en: 'Filter groups', gl: 'Filtrar grupos', fr: 'Filtrer groupes', it: 'Filtra gruppi', pt: 'Filtrar grupos')),
+              title: Text(
+                tr(
+                  context,
+                  es: 'Filtrar grupos',
+                  en: 'Filter groups',
+                  gl: 'Filtrar grupos',
+                  fr: 'Filtrer groupes',
+                  it: 'Filtra gruppi',
+                  pt: 'Filtrar grupos',
+                ),
+              ),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -75,7 +98,15 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     TextField(
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.search_rounded),
-                        labelText: tr(context, es: 'Buscar grupo', en: 'Search group', gl: 'Buscar grupo', fr: 'Rechercher un groupe', it: 'Cerca gruppo', pt: 'Pesquisar grupo'),
+                        labelText: tr(
+                          context,
+                          es: 'Buscar grupo',
+                          en: 'Search group',
+                          gl: 'Buscar grupo',
+                          fr: 'Rechercher un groupe',
+                          it: 'Cerca gruppo',
+                          pt: 'Pesquisar grupo',
+                        ),
                       ),
                       onChanged: (value) => setDialogState(() => search = value.trim()),
                     ),
@@ -90,10 +121,22 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                             child: Text(tr(context, es: 'Todos', en: 'All', gl: 'Todos', fr: 'Tous', it: 'Tutti', pt: 'Todos')),
                           ),
                           TextButton(
-                            onPressed: () => setDialogState(() => selectedIds
-                              ..clear()
-                              ..addAll(sortedGroups.map((group) => group.id))),
-                            child: Text(tr(context, es: 'Seleccionar visibles', en: 'Select visible', gl: 'Seleccionar visibles', fr: 'Selectionner visibles', it: 'Seleziona visibili', pt: 'Selecionar visiveis')),
+                            onPressed: () => setDialogState(
+                              () => selectedIds
+                                ..clear()
+                                ..addAll(sortedGroups.map((group) => group.id)),
+                            ),
+                            child: Text(
+                              tr(
+                                context,
+                                es: 'Seleccionar visibles',
+                                en: 'Select visible',
+                                gl: 'Seleccionar visibles',
+                                fr: 'Selectionner visibles',
+                                it: 'Seleziona visibili',
+                                pt: 'Selecionar visiveis',
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -102,7 +145,17 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     Flexible(
                       child: filteredGroups.isEmpty
                           ? Center(
-                              child: Text(tr(context, es: 'No hay grupos con ese nombre.', en: 'No groups match that name.', gl: 'Non hai grupos con ese nome.', fr: 'Aucun groupe ne correspond.', it: 'Nessun gruppo corrisponde.', pt: 'Nao ha grupos com esse nome.')),
+                              child: Text(
+                                tr(
+                                  context,
+                                  es: 'No hay grupos con ese nombre.',
+                                  en: 'No groups match that name.',
+                                  gl: 'Non hai grupos con ese nome.',
+                                  fr: 'Aucun groupe ne correspond.',
+                                  it: 'Nessun gruppo corrisponde.',
+                                  pt: 'Nao ha grupos com esse nome.',
+                                ),
+                              ),
                             )
                           : ListView(
                               shrinkWrap: true,
@@ -130,8 +183,14 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar'))),
-                FilledButton(onPressed: () => Navigator.of(dialogContext).pop(selectedIds), child: Text(tr(context, es: 'Aplicar', en: 'Apply', gl: 'Aplicar', fr: 'Appliquer', it: 'Applica', pt: 'Aplicar'))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(selectedIds),
+                  child: Text(tr(context, es: 'Aplicar', en: 'Apply', gl: 'Aplicar', fr: 'Appliquer', it: 'Applica', pt: 'Aplicar')),
+                ),
               ],
             );
           },
@@ -147,164 +206,227 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     return Scaffold(
       body: SafeArea(
         child: groupsState.when(
-        data: (groups) {
-          final sortedGroups = [...groups]..sort((left, right) => left.name.toLowerCase().compareTo(right.name.toLowerCase()));
-          final selectedGroups = _selectedGroupIds.isEmpty
-              ? sortedGroups
-              : sortedGroups.where((group) => _selectedGroupIds.contains(group.id)).toList(growable: false);
-          final categories = [...buildDefaultCategories(), ...selectedGroups.expand((group) => group.customCategories)]
-              .groupListsBy((entry) => entry.id)
-              .values
-              .map((entries) => entries.first)
-              .toList();
-          final categoryMap = {for (final category in categories) category.id: category};
-          final categoryData = categoryTotals(selectedGroups).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-          final monthly = monthlySpend(selectedGroups).entries.toList();
-          final groupSpend = {for (final group in selectedGroups) group.name: totalGroupSpend(group)}.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-          final ticketCounts = {for (final group in selectedGroups) group.name: group.expenses.where((expense) => expense.kind == ExpenseRecordKind.expense).length}.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-          final memberSpend = <String, double>{};
-          final weekdaySpend = <int, double>{};
-          final memberNames = {
-            for (final group in selectedGroups)
-              for (final member in group.visibleMembers) member.userId: member.name,
-          };
+          data: (groups) {
+            final sortedGroups = [...groups]..sort((left, right) => left.name.toLowerCase().compareTo(right.name.toLowerCase()));
+            final selectedGroups = _selectedGroupIds.isEmpty
+                ? sortedGroups
+                : sortedGroups.where((group) => _selectedGroupIds.contains(group.id)).toList(growable: false);
+            final categories = [
+              ...buildDefaultCategories(),
+              ...selectedGroups.expand((group) => group.customCategories),
+            ].groupListsBy((entry) => entry.id).values.map((entries) => entries.first).toList();
+            final categoryMap = {for (final category in categories) category.id: category};
+            final categoryData = categoryTotals(selectedGroups).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+            final monthly = monthlySpend(selectedGroups).entries.toList();
+            final groupSpend = {for (final group in selectedGroups) group.name: totalGroupSpend(group)}.entries.toList()
+              ..sort((a, b) => b.value.compareTo(a.value));
+            final ticketCounts = {
+              for (final group in selectedGroups)
+                group.name: group.expenses.where((expense) => expense.kind == ExpenseRecordKind.expense).length,
+            }.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+            final memberSpend = <String, double>{};
+            final weekdaySpend = <int, double>{};
+            final memberNames = {
+              for (final group in selectedGroups)
+                for (final member in group.visibleMembers) member.userId: member.name,
+            };
 
-          for (final group in selectedGroups) {
-            for (final expense in group.expenses) {
-              if (expense.kind != ExpenseRecordKind.expense) {
-                continue;
+            for (final group in selectedGroups) {
+              for (final expense in group.expenses) {
+                if (expense.kind != ExpenseRecordKind.expense) {
+                  continue;
+                }
+                memberSpend.update(expense.payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
+                weekdaySpend.update(
+                  expense.createdAt.weekday,
+                  (value) => value + totalExpense(expense),
+                  ifAbsent: () => totalExpense(expense),
+                );
               }
-              memberSpend.update(expense.payerId, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
-              weekdaySpend.update(expense.createdAt.weekday, (value) => value + totalExpense(expense), ifAbsent: () => totalExpense(expense));
             }
-          }
 
-          final memberEntries = memberSpend.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-          final weekdayEntries = weekdaySpend.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-          final totalSpend = selectedGroups.fold<double>(0, (accumulatedSpend, group) => accumulatedSpend + totalGroupSpend(group));
-          final expensesCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.expenses.length);
-          final peopleCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.totalDisplayedMembers);
-          final headlineCurrency = selectedGroups.isEmpty ? (groups.isEmpty ? 'EUR' : groups.first.currency) : selectedGroups.first.currency;
-          final averageExpense = expensesCount == 0 ? 0.0 : totalSpend / expensesCount;
-          final topCategory = categoryData.firstOrNull;
-          final topGroup = groupSpend.firstOrNull;
-          final topPerson = memberEntries.firstOrNull;
-          final busiestWeekday = weekdayEntries.isEmpty ? null : weekdayEntries.reduce((left, right) => left.value >= right.value ? left : right);
-          final topMonth = monthly.isEmpty ? null : monthly.reduce((left, right) => left.value >= right.value ? left : right);
-          final selectedGroupsLabel = selectedGroups.length == sortedGroups.length ? tr(context, es: 'Todos los grupos', en: 'All groups', gl: 'Todos os grupos', fr: 'Tous les groupes', it: 'Tutti i gruppi', pt: 'Todos os grupos') : '${selectedGroups.length}';
+            final memberEntries = memberSpend.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+            final weekdayEntries = weekdaySpend.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+            final totalSpend = selectedGroups.fold<double>(0, (accumulatedSpend, group) => accumulatedSpend + totalGroupSpend(group));
+            final expensesCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.expenses.length);
+            final peopleCount = selectedGroups.fold<int>(0, (sum, group) => sum + group.totalDisplayedMembers);
+            final headlineCurrency = selectedGroups.isEmpty
+                ? (groups.isEmpty ? 'EUR' : groups.first.currency)
+                : selectedGroups.first.currency;
+            final averageExpense = expensesCount == 0 ? 0.0 : totalSpend / expensesCount;
+            final topCategory = categoryData.firstOrNull;
+            final topGroup = groupSpend.firstOrNull;
+            final topPerson = memberEntries.firstOrNull;
+            final busiestWeekday = weekdayEntries.isEmpty
+                ? null
+                : weekdayEntries.reduce((left, right) => left.value >= right.value ? left : right);
+            final topMonth = monthly.isEmpty ? null : monthly.reduce((left, right) => left.value >= right.value ? left : right);
+            final selectedGroupsLabel = selectedGroups.length == sortedGroups.length
+                ? tr(
+                    context,
+                    es: 'Todos los grupos',
+                    en: 'All groups',
+                    gl: 'Todos os grupos',
+                    fr: 'Tous les groupes',
+                    it: 'Tutti i gruppi',
+                    pt: 'Todos os grupos',
+                  )
+                : '${selectedGroups.length}';
 
-          return RefreshIndicator(
-            onRefresh: _refreshGroups,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr(context, es: 'Gráfico activo', en: 'Active chart', gl: 'Grafico activo', fr: 'Graphique actif', it: 'Grafico attivo', pt: 'Grafico ativo'), style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<_StatsChartKind>(
-                        initialValue: _selectedChart,
-                        decoration: InputDecoration(labelText: tr(context, es: 'Selecciona una vista', en: 'Select a view', gl: 'Selecciona unha vista', fr: 'Selectionnez une vue', it: 'Seleziona una vista', pt: 'Seleciona uma vista')),
-                        items: _chartOptions.map((option) {
-                          return DropdownMenuItem<_StatsChartKind>(
-                            value: option.kind,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(option.icon),
-                                const SizedBox(width: 10),
-                                SizedBox(width: 170, child: Text(_chartTitle(context, option.kind), overflow: TextOverflow.ellipsis)),
-                              ],
+            return RefreshIndicator(
+              onRefresh: _refreshGroups,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tr(
+                              context,
+                              es: 'Gráfico activo',
+                              en: 'Active chart',
+                              gl: 'Grafico activo',
+                              fr: 'Graphique actif',
+                              it: 'Grafico attivo',
+                              pt: 'Grafico ativo',
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedChart = value);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr(context, es: 'Filtrar grupos', en: 'Filter groups', gl: 'Filtrar grupos', fr: 'Filtrer groupes', it: 'Filtra gruppi', pt: 'Filtrar grupos'), style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 6),
-                      Text(
-                        tr(context, es: 'Puedes ver todos, uno o varios grupos a la vez.', en: 'You can view all, one, or several groups at once.', gl: 'Podes ver todos, un ou varios grupos a vez.', fr: 'Vous pouvez voir tous, un ou plusieurs groupes a la fois.', it: 'Puoi vedere tutti, uno o piu gruppi alla volta.', pt: 'Podes ver todos, um ou varios grupos ao mesmo tempo.'),
-                      ),
-                      const SizedBox(height: 14),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () async {
-                          final selectedIds = await _showGroupFilterDialog(context, sortedGroups);
-                          if (selectedIds == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedGroupIds
-                              ..clear()
-                              ..addAll(selectedIds);
-                          });
-                        },
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: tr(context, es: 'Grupos seleccionados', en: 'Selected groups', gl: 'Grupos seleccionados', fr: 'Groupes selectionnes', it: 'Gruppi selezionati', pt: 'Grupos selecionados'),
-                            suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
+                            style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          child: Text(
-                            _groupFilterSummary(context, sortedGroups),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<_StatsChartKind>(
+                            initialValue: _selectedChart,
+                            decoration: InputDecoration(
+                              labelText: tr(
+                                context,
+                                es: 'Selecciona una vista',
+                                en: 'Select a view',
+                                gl: 'Selecciona unha vista',
+                                fr: 'Selectionnez une vue',
+                                it: 'Seleziona una vista',
+                                pt: 'Seleciona uma vista',
+                              ),
+                            ),
+                            items: _chartOptions.map((option) {
+                              return DropdownMenuItem<_StatsChartKind>(
+                                value: option.kind,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(option.icon),
+                                    const SizedBox(width: 10),
+                                    SizedBox(width: 170, child: Text(_chartTitle(context, option.kind), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedChart = value);
+                              }
+                            },
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tr(
+                              context,
+                              es: 'Filtrar grupos',
+                              en: 'Filter groups',
+                              gl: 'Filtrar grupos',
+                              fr: 'Filtrer groupes',
+                              it: 'Filtra gruppi',
+                              pt: 'Filtrar grupos',
+                            ),
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            tr(
+                              context,
+                              es: 'Puedes ver todos, uno o varios grupos a la vez.',
+                              en: 'You can view all, one, or several groups at once.',
+                              gl: 'Podes ver todos, un ou varios grupos a vez.',
+                              fr: 'Vous pouvez voir tous, un ou plusieurs groupes a la fois.',
+                              it: 'Puoi vedere tutti, uno o piu gruppi alla volta.',
+                              pt: 'Podes ver todos, um ou varios grupos ao mesmo tempo.',
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () async {
+                              final selectedIds = await _showGroupFilterDialog(context, sortedGroups);
+                              if (selectedIds == null) {
+                                return;
+                              }
+                              setState(() {
+                                _selectedGroupIds
+                                  ..clear()
+                                  ..addAll(selectedIds);
+                              });
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: tr(
+                                  context,
+                                  es: 'Grupos seleccionados',
+                                  en: 'Selected groups',
+                                  gl: 'Grupos seleccionados',
+                                  fr: 'Groupes selectionnes',
+                                  it: 'Gruppi selezionati',
+                                  pt: 'Grupos selecionados',
+                                ),
+                                suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
+                              ),
+                              child: Text(_groupFilterSummary(context, sortedGroups), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSelectedChart(
+                    context,
+                    totalSpend: totalSpend,
+                    expensesCount: expensesCount,
+                    peopleCount: peopleCount,
+                    groupsCount: selectedGroups.length,
+                    selectedGroupsLabel: selectedGroupsLabel,
+                    headlineCurrency: headlineCurrency,
+                    averageExpense: averageExpense,
+                    categoryData: categoryData,
+                    categoryMap: categoryMap,
+                    topCategory: topCategory,
+                    groupSpend: groupSpend,
+                    topGroup: topGroup,
+                    monthly: monthly,
+                    topMonth: topMonth,
+                    memberEntries: memberEntries,
+                    memberNames: memberNames,
+                    topPerson: topPerson,
+                    ticketCounts: ticketCounts,
+                    weekdayEntries: weekdayEntries,
+                    busiestWeekday: busiestWeekday,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildSelectedChart(
-                context,
-                totalSpend: totalSpend,
-                expensesCount: expensesCount,
-                peopleCount: peopleCount,
-                groupsCount: selectedGroups.length,
-                selectedGroupsLabel: selectedGroupsLabel,
-                headlineCurrency: headlineCurrency,
-                averageExpense: averageExpense,
-                categoryData: categoryData,
-                categoryMap: categoryMap,
-                topCategory: topCategory,
-                groupSpend: groupSpend,
-                topGroup: topGroup,
-                monthly: monthly,
-                topMonth: topMonth,
-                memberEntries: memberEntries,
-                memberNames: memberNames,
-                topPerson: topPerson,
-                ticketCounts: ticketCounts,
-                weekdayEntries: weekdayEntries,
-                busiestWeekday: busiestWeekday,
-              ),
-            ],
-          ),
-          );
-        },
+            );
+          },
           error: (error, _) => Center(child: Text(error.toString())),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
@@ -359,11 +481,58 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _StatPill(label: tr(context, es: 'Gasto total', en: 'Total spend', gl: 'Gasto total', fr: 'Depense totale', it: 'Spesa totale', pt: 'Despesa total'), value: money(totalSpend, headlineCurrency)),
-                  _StatPill(label: tr(context, es: 'Ticket medio', en: 'Average receipt', gl: 'Ticket medio', fr: 'Ticket moyen', it: 'Scontrino medio', pt: 'Ticket medio'), value: money(averageExpense, headlineCurrency)),
-                  _StatPill(label: tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos'), value: '$groupsCount'),
-                  _StatPill(label: tr(context, es: 'Movimientos', en: 'Entries', gl: 'Movementos', fr: 'Mouvements', it: 'Movimenti', pt: 'Movimentos'), value: '$expensesCount'),
-                  _StatPill(label: tr(context, es: 'Personas visibles', en: 'Visible people', gl: 'Persoas visibles', fr: 'Personnes visibles', it: 'Persone visibili', pt: 'Pessoas visiveis'), value: '$peopleCount'),
+                  _StatPill(
+                    label: tr(
+                      context,
+                      es: 'Gasto total',
+                      en: 'Total spend',
+                      gl: 'Gasto total',
+                      fr: 'Depense totale',
+                      it: 'Spesa totale',
+                      pt: 'Despesa total',
+                    ),
+                    value: money(totalSpend, headlineCurrency),
+                  ),
+                  _StatPill(
+                    label: tr(
+                      context,
+                      es: 'Ticket medio',
+                      en: 'Average receipt',
+                      gl: 'Ticket medio',
+                      fr: 'Ticket moyen',
+                      it: 'Scontrino medio',
+                      pt: 'Ticket medio',
+                    ),
+                    value: money(averageExpense, headlineCurrency),
+                  ),
+                  _StatPill(
+                    label: tr(context, es: 'Grupos', en: 'Groups', gl: 'Grupos', fr: 'Groupes', it: 'Gruppi', pt: 'Grupos'),
+                    value: '$groupsCount',
+                  ),
+                  _StatPill(
+                    label: tr(
+                      context,
+                      es: 'Movimientos',
+                      en: 'Entries',
+                      gl: 'Movementos',
+                      fr: 'Mouvements',
+                      it: 'Movimenti',
+                      pt: 'Movimentos',
+                    ),
+                    value: '$expensesCount',
+                  ),
+                  _StatPill(
+                    label: tr(
+                      context,
+                      es: 'Personas visibles',
+                      en: 'Visible people',
+                      gl: 'Persoas visibles',
+                      fr: 'Personnes visibles',
+                      it: 'Persone visibili',
+                      pt: 'Pessoas visiveis',
+                    ),
+                    value: '$peopleCount',
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -378,33 +547,103 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                       SizedBox(
                         width: cardWidth,
                         child: _InsightPanel(
-                          title: tr(context, es: 'Mayor categoría', en: 'Top category', gl: 'Maior categoria', fr: 'Categorie principale', it: 'Categoria principale', pt: 'Categoria principal'),
-                          value: topCategory == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${categoryMap[topCategory.key]?.name ?? topCategory.key} · ${money(topCategory.value, headlineCurrency)}',
+                          title: tr(
+                            context,
+                            es: 'Mayor categoría',
+                            en: 'Top category',
+                            gl: 'Maior categoria',
+                            fr: 'Categorie principale',
+                            it: 'Categoria principale',
+                            pt: 'Categoria principal',
+                          ),
+                          value: topCategory == null
+                              ? tr(
+                                  context,
+                                  es: 'Sin datos',
+                                  en: 'No data',
+                                  gl: 'Sen datos',
+                                  fr: 'Pas de donnees',
+                                  it: 'Nessun dato',
+                                  pt: 'Sem dados',
+                                )
+                              : '${categoryDisplayName(categoryMap[topCategory.key], tr(context, es: 'Otros', en: 'Other', gl: 'Outros', ca: 'Altres', eu: 'Bestelakoak', fr: 'Autres', it: 'Altro', pt: 'Outros', de: 'Sonstiges', el: 'Άλλα', ru: 'Прочее', ar: 'أخرى', zh: '其他', ja: 'その他'))} · ${money(topCategory.value, headlineCurrency)}',
                           icon: categoryIconForKey(categoryMap[topCategory?.key]?.iconKey ?? 'receipt'),
                         ),
                       ),
                       SizedBox(
                         width: cardWidth,
                         child: _InsightPanel(
-                          title: tr(context, es: 'Grupo más activo', en: 'Most active group', gl: 'Grupo máis activo', fr: 'Groupe le plus actif', it: 'Gruppo piu attivo', pt: 'Grupo mais ativo'),
-                          value: topGroup == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${topGroup.key} · ${money(topGroup.value, headlineCurrency)}',
+                          title: tr(
+                            context,
+                            es: 'Grupo más activo',
+                            en: 'Most active group',
+                            gl: 'Grupo máis activo',
+                            fr: 'Groupe le plus actif',
+                            it: 'Gruppo piu attivo',
+                            pt: 'Grupo mais ativo',
+                          ),
+                          value: topGroup == null
+                              ? tr(
+                                  context,
+                                  es: 'Sin datos',
+                                  en: 'No data',
+                                  gl: 'Sen datos',
+                                  fr: 'Pas de donnees',
+                                  it: 'Nessun dato',
+                                  pt: 'Sem dados',
+                                )
+                              : '${topGroup.key} · ${money(topGroup.value, headlineCurrency)}',
                           icon: Icons.local_fire_department_rounded,
                         ),
                       ),
                       SizedBox(
                         width: cardWidth,
                         child: _InsightPanel(
-                          title: tr(context, es: 'Quién adelanta más', en: 'Who advances the most', gl: 'Quen adianta máis', fr: 'Qui avance le plus', it: 'Chi anticipa di piu', pt: 'Quem adianta mais'),
-                          value: topPerson == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${memberNames[topPerson.key] ?? topPerson.key} · ${money(topPerson.value, headlineCurrency)}',
+                          title: tr(
+                            context,
+                            es: 'Quién adelanta más',
+                            en: 'Who advances the most',
+                            gl: 'Quen adianta máis',
+                            fr: 'Qui avance le plus',
+                            it: 'Chi anticipa di piu',
+                            pt: 'Quem adianta mais',
+                          ),
+                          value: topPerson == null
+                              ? tr(
+                                  context,
+                                  es: 'Sin datos',
+                                  en: 'No data',
+                                  gl: 'Sen datos',
+                                  fr: 'Pas de donnees',
+                                  it: 'Nessun dato',
+                                  pt: 'Sem dados',
+                                )
+                              : '${memberNames[topPerson.key] ?? topPerson.key} · ${money(topPerson.value, headlineCurrency)}',
                           icon: Icons.emoji_events_rounded,
                         ),
                       ),
                       SizedBox(
                         width: cardWidth,
                         child: _InsightPanel(
-                          title: tr(context, es: 'Pico temporal', en: 'Peak period', gl: 'Pico temporal', fr: 'Pic temporel', it: 'Picco temporale', pt: 'Pico temporal'),
+                          title: tr(
+                            context,
+                            es: 'Pico temporal',
+                            en: 'Peak period',
+                            gl: 'Pico temporal',
+                            fr: 'Pic temporel',
+                            it: 'Picco temporale',
+                            pt: 'Pico temporal',
+                          ),
                           value: topMonth == null
-                              ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados')
+                              ? tr(
+                                  context,
+                                  es: 'Sin datos',
+                                  en: 'No data',
+                                  gl: 'Sen datos',
+                                  fr: 'Pas de donnees',
+                                  it: 'Nessun dato',
+                                  pt: 'Sem dados',
+                                )
                               : '${DateFormat.MMMM(localeTag(context)).format(topMonth.key)} · ${money(topMonth.value, headlineCurrency)}',
                           icon: Icons.timeline_rounded,
                         ),
@@ -412,8 +651,26 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                       SizedBox(
                         width: cardWidth,
                         child: _InsightPanel(
-                          title: tr(context, es: 'Día más cargado', en: 'Busiest weekday', gl: 'Dia máis cargado', fr: 'Jour le plus charge', it: 'Giorno piu intenso', pt: 'Dia mais carregado'),
-                          value: busiestWeekday == null ? tr(context, es: 'Sin datos', en: 'No data', gl: 'Sen datos', fr: 'Pas de donnees', it: 'Nessun dato', pt: 'Sem dados') : '${_weekdayLabel(context, busiestWeekday.key)} · ${money(busiestWeekday.value, headlineCurrency)}',
+                          title: tr(
+                            context,
+                            es: 'Día más cargado',
+                            en: 'Busiest weekday',
+                            gl: 'Dia máis cargado',
+                            fr: 'Jour le plus charge',
+                            it: 'Giorno piu intenso',
+                            pt: 'Dia mais carregado',
+                          ),
+                          value: busiestWeekday == null
+                              ? tr(
+                                  context,
+                                  es: 'Sin datos',
+                                  en: 'No data',
+                                  gl: 'Sen datos',
+                                  fr: 'Pas de donnees',
+                                  it: 'Nessun dato',
+                                  pt: 'Sem dados',
+                                )
+                              : '${_weekdayLabel(context, busiestWeekday.key)} · ${money(busiestWeekday.value, headlineCurrency)}',
                           icon: Icons.calendar_today_rounded,
                         ),
                       ),
@@ -432,7 +689,17 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
               SizedBox(
                 height: 300,
                 child: categoryData.isEmpty
-                    ? _ChartEmpty(message: tr(context, es: 'Todavía no hay datos suficientes.', en: 'Not enough data yet.', gl: 'Ainda non hai datos suficientes.', fr: 'Pas assez de donnees pour le moment.', it: 'Non ci sono ancora dati sufficienti.', pt: 'Ainda nao ha dados suficientes.'))
+                    ? _ChartEmpty(
+                        message: tr(
+                          context,
+                          es: 'Todavía no hay datos suficientes.',
+                          en: 'Not enough data yet.',
+                          gl: 'Ainda non hai datos suficientes.',
+                          fr: 'Pas assez de donnees pour le moment.',
+                          it: 'Non ci sono ancora dati sufficienti.',
+                          pt: 'Ainda nao ha dados suficientes.',
+                        ),
+                      )
                     : PieChart(
                         PieChartData(
                           sectionsSpace: 6,
@@ -459,7 +726,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     final category = categoryMap[entry.key];
                     return Chip(
                       avatar: CircleAvatar(radius: 7, backgroundColor: colorFromHex(category?.colorHex ?? '0xFFE4572E')),
-                      label: Text('${category?.name ?? entry.key} · ${entry.value.toStringAsFixed(0)}'),
+                      label: Text(
+                        '${categoryDisplayName(category, tr(context, es: 'Otros', en: 'Other', gl: 'Outros', ca: 'Altres', eu: 'Bestelakoak', fr: 'Autres', it: 'Altro', pt: 'Outros', de: 'Sonstiges', el: 'Άλλα', ru: 'Прочее', ar: 'أخرى', zh: '其他', ja: 'その他'))} · ${entry.value.toStringAsFixed(0)}',
+                      ),
                     );
                   }).toList(),
                 ),
@@ -473,14 +742,28 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           child: SizedBox(
             height: 280,
             child: groupSpend.isEmpty
-                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay grupos con gasto.', en: 'There are no groups with spend yet.', gl: 'Ainda non hai grupos con gasto.', fr: 'Il n y a pas encore de groupes avec depenses.', it: 'Non ci sono ancora gruppi con spese.', pt: 'Ainda nao ha grupos com despesa.'))
+                ? _ChartEmpty(
+                    message: tr(
+                      context,
+                      es: 'Todavía no hay grupos con gasto.',
+                      en: 'There are no groups with spend yet.',
+                      gl: 'Ainda non hai grupos con gasto.',
+                      fr: 'Il n y a pas encore de groupes avec depenses.',
+                      it: 'Non ci sono ancora gruppi con spese.',
+                      pt: 'Ainda nao ha grupos com despesa.',
+                    ),
+                  )
                 : BarChart(
                     BarChartData(
                       maxY: clampChartMax(groupSpend.map((entry) => entry.value)),
                       alignment: BarChartAlignment.spaceAround,
-                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(groupSpend.map((entry) => entry.value)) / 4),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: clampChartMax(groupSpend.map((entry) => entry.value)) / 4,
+                      ),
                       borderData: FlBorderData(show: false),
-                      barTouchData: BarTouchData(enabled: true),
+                      barTouchData: const BarTouchData(enabled: true),
                       titlesData: FlTitlesData(
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -528,14 +811,28 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           child: SizedBox(
             height: 280,
             child: monthly.isEmpty
-                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay meses con gasto.', en: 'There are no months with spend yet.', gl: 'Ainda non hai meses con gasto.', fr: 'Il n y a pas encore de mois avec depenses.', it: 'Non ci sono ancora mesi con spese.', pt: 'Ainda nao ha meses com despesa.'))
+                ? _ChartEmpty(
+                    message: tr(
+                      context,
+                      es: 'Todavía no hay meses con gasto.',
+                      en: 'There are no months with spend yet.',
+                      gl: 'Ainda non hai meses con gasto.',
+                      fr: 'Il n y a pas encore de mois avec depenses.',
+                      it: 'Non ci sono ancora mesi con spese.',
+                      pt: 'Ainda nao ha meses com despesa.',
+                    ),
+                  )
                 : LineChart(
                     LineChartData(
                       minY: 0,
                       maxY: clampChartMax(monthly.map((entry) => entry.value)),
-                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(monthly.map((entry) => entry.value)) / 4),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: clampChartMax(monthly.map((entry) => entry.value)) / 4,
+                      ),
                       borderData: FlBorderData(show: false),
-                      lineTouchData: LineTouchData(enabled: true),
+                      lineTouchData: const LineTouchData(enabled: true),
                       titlesData: FlTitlesData(
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -580,14 +877,28 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           child: SizedBox(
             height: 300,
             child: memberEntries.isEmpty
-                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay personas con gasto registrado.', en: 'There are no people with registered spend yet.', gl: 'Ainda non hai persoas con gasto rexistrado.', fr: 'Il n y a pas encore de personnes avec des depenses.', it: 'Non ci sono ancora persone con spesa registrata.', pt: 'Ainda nao ha pessoas com despesa registada.'))
+                ? _ChartEmpty(
+                    message: tr(
+                      context,
+                      es: 'Todavía no hay personas con gasto registrado.',
+                      en: 'There are no people with registered spend yet.',
+                      gl: 'Ainda non hai persoas con gasto rexistrado.',
+                      fr: 'Il n y a pas encore de personnes avec des depenses.',
+                      it: 'Non ci sono ancora persone con spesa registrata.',
+                      pt: 'Ainda nao ha pessoas com despesa registada.',
+                    ),
+                  )
                 : BarChart(
                     BarChartData(
                       maxY: clampChartMax(memberEntries.map((entry) => entry.value)),
                       alignment: BarChartAlignment.spaceAround,
-                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(memberEntries.map((entry) => entry.value)) / 4),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: clampChartMax(memberEntries.map((entry) => entry.value)) / 4,
+                      ),
                       borderData: FlBorderData(show: false),
-                      barTouchData: BarTouchData(enabled: true),
+                      barTouchData: const BarTouchData(enabled: true),
                       titlesData: FlTitlesData(
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -605,7 +916,11 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                                 padding: const EdgeInsets.only(top: 8),
                                 child: SizedBox(
                                   width: 52,
-                                  child: Text(memberNames[memberEntries[index].key]?.split(' ').first ?? 'User', overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                                  child: Text(
+                                    memberNames[memberEntries[index].key]?.split(' ').first ?? 'User',
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
                               );
                             },
@@ -635,12 +950,26 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           child: SizedBox(
             height: 300,
             child: ticketCounts.isEmpty
-                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay tickets registrados.', en: 'There are no receipts yet.', gl: 'Ainda non hai tickets rexistrados.', fr: 'Il n y a pas encore de tickets.', it: 'Non ci sono ancora scontrini registrati.', pt: 'Ainda nao ha faturas registadas.'))
+                ? _ChartEmpty(
+                    message: tr(
+                      context,
+                      es: 'Todavía no hay tickets registrados.',
+                      en: 'There are no receipts yet.',
+                      gl: 'Ainda non hai tickets rexistrados.',
+                      fr: 'Il n y a pas encore de tickets.',
+                      it: 'Non ci sono ancora scontrini registrati.',
+                      pt: 'Ainda nao ha faturas registadas.',
+                    ),
+                  )
                 : BarChart(
                     BarChartData(
                       maxY: clampChartMax(ticketCounts.map((entry) => entry.value.toDouble())),
                       alignment: BarChartAlignment.spaceAround,
-                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(ticketCounts.map((entry) => entry.value.toDouble())) / 4),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: clampChartMax(ticketCounts.map((entry) => entry.value.toDouble())) / 4,
+                      ),
                       borderData: FlBorderData(show: false),
                       titlesData: FlTitlesData(
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -689,12 +1018,26 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           child: SizedBox(
             height: 300,
             child: weekdayEntries.isEmpty
-                ? _ChartEmpty(message: tr(context, es: 'Todavía no hay gasto suficiente por día.', en: 'There is not enough weekday data yet.', gl: 'Ainda non hai gasto suficiente por dia.', fr: 'Pas assez de donnees par jour.', it: 'Non ci sono ancora dati sufficienti per giorno.', pt: 'Ainda nao ha dados suficientes por dia.'))
+                ? _ChartEmpty(
+                    message: tr(
+                      context,
+                      es: 'Todavía no hay gasto suficiente por día.',
+                      en: 'There is not enough weekday data yet.',
+                      gl: 'Ainda non hai gasto suficiente por dia.',
+                      fr: 'Pas assez de donnees par jour.',
+                      it: 'Non ci sono ancora dati sufficienti per giorno.',
+                      pt: 'Ainda nao ha dados suficientes por dia.',
+                    ),
+                  )
                 : BarChart(
                     BarChartData(
                       maxY: clampChartMax(weekdayEntries.map((entry) => entry.value)),
                       alignment: BarChartAlignment.spaceAround,
-                      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: clampChartMax(weekdayEntries.map((entry) => entry.value)) / 4),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: clampChartMax(weekdayEntries.map((entry) => entry.value)) / 4,
+                      ),
                       borderData: FlBorderData(show: false),
                       titlesData: FlTitlesData(
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -784,17 +1127,65 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
       case _StatsChartKind.insights:
         return 'Insights';
       case _StatsChartKind.categories:
-        return tr(context, es: 'Distribución por categoría', en: 'Distribution by category', gl: 'Distribucion por categoria', fr: 'Repartition par categorie', it: 'Distribuzione per categoria', pt: 'Distribuicao por categoria');
+        return tr(
+          context,
+          es: 'Distribución por categoría',
+          en: 'Distribution by category',
+          gl: 'Distribucion por categoria',
+          fr: 'Repartition par categorie',
+          it: 'Distribuzione per categoria',
+          pt: 'Distribuicao por categoria',
+        );
       case _StatsChartKind.groups:
-        return tr(context, es: 'Qué grupos están moviendo más gasto', en: 'Which groups move the most spend', gl: 'Que grupos moven mais gasto', fr: 'Quels groupes generent le plus de depenses', it: 'Quali gruppi muovono piu spesa', pt: 'Que grupos movem mais despesa');
+        return tr(
+          context,
+          es: 'Qué grupos están moviendo más gasto',
+          en: 'Which groups move the most spend',
+          gl: 'Que grupos moven mais gasto',
+          fr: 'Quels groupes generent le plus de depenses',
+          it: 'Quali gruppi muovono piu spesa',
+          pt: 'Que grupos movem mais despesa',
+        );
       case _StatsChartKind.monthly:
-        return tr(context, es: 'Gasto mensual', en: 'Monthly spend', gl: 'Gasto mensual', fr: 'Depense mensuelle', it: 'Spesa mensile', pt: 'Despesa mensal');
+        return tr(
+          context,
+          es: 'Gasto mensual',
+          en: 'Monthly spend',
+          gl: 'Gasto mensual',
+          fr: 'Depense mensuelle',
+          it: 'Spesa mensile',
+          pt: 'Despesa mensal',
+        );
       case _StatsChartKind.people:
-        return tr(context, es: 'Quién está adelantando más', en: 'Who is advancing the most', gl: 'Quen esta adiantando mais', fr: 'Qui avance le plus', it: 'Chi anticipa di piu', pt: 'Quem esta a adiantar mais');
+        return tr(
+          context,
+          es: 'Quién está adelantando más',
+          en: 'Who is advancing the most',
+          gl: 'Quen esta adiantando mais',
+          fr: 'Qui avance le plus',
+          it: 'Chi anticipa di piu',
+          pt: 'Quem esta a adiantar mais',
+        );
       case _StatsChartKind.tickets:
-        return tr(context, es: 'Tickets por grupo', en: 'Receipts per group', gl: 'Tickets por grupo', fr: 'Tickets par groupe', it: 'Scontrini per gruppo', pt: 'Faturas por grupo');
+        return tr(
+          context,
+          es: 'Tickets por grupo',
+          en: 'Receipts per group',
+          gl: 'Tickets por grupo',
+          fr: 'Tickets par groupe',
+          it: 'Scontrini per gruppo',
+          pt: 'Faturas por grupo',
+        );
       case _StatsChartKind.weekdays:
-        return tr(context, es: 'Gasto por día', en: 'Spend by weekday', gl: 'Gasto por dia', fr: 'Depense par jour', it: 'Spesa per giorno', pt: 'Despesa por dia');
+        return tr(
+          context,
+          es: 'Gasto por día',
+          en: 'Spend by weekday',
+          gl: 'Gasto por dia',
+          fr: 'Depense par jour',
+          it: 'Spesa per giorno',
+          pt: 'Despesa por dia',
+        );
     }
   }
 }
@@ -844,10 +1235,7 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -872,10 +1260,7 @@ class _InsightPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(18)),
       child: Row(
         children: [
           Container(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -57,7 +58,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               Expanded(
                 child: ListView(
                   children: [
-                    if (!bootstrap.firebaseReady)
+                    // Solo en compilaciones de depuracion. Es un diagnostico para
+                    // quien compila, no para quien usa la app: hablarle a un
+                    // usuario de «--dart-define» no le dice nada, y ademas se
+                    // colaba en las capturas de la ficha de la tienda. Si a una
+                    // version publicada le faltaran las credenciales, el aviso
+                    // llegaria tarde: eso lo tiene que cazar la lista de
+                    // GUIA-PUBLICACION.md antes de subir nada.
+                    if (kDebugMode && !bootstrap.firebaseReady)
                       Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(16),
@@ -66,7 +74,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          tr(context, es: 'Estás en modo demo local porque faltan credenciales Firebase en --dart-define. La app sigue siendo navegable y los flujos quedan listos.', en: 'You are in local demo mode because Firebase credentials are missing in --dart-define. The app remains fully navigable.', gl: 'Estas en modo demo local porque faltan credenciais Firebase en --dart-define. A app segue sendo navegable.', fr: 'Vous etes en mode demo local car les identifiants Firebase manquent dans --dart-define. L application reste navigable.', it: 'Sei in modalita demo locale perche mancano le credenziali Firebase in --dart-define. L app resta navigabile.', pt: 'Estas em modo demo local porque faltam credenciais Firebase em --dart-define. A app continua navegavel.'),
+                          tr(
+                            context,
+                            es: 'Estás en modo demo local porque faltan credenciales Firebase en --dart-define. La app sigue siendo navegable y los flujos quedan listos.',
+                            en: 'You are in local demo mode because Firebase credentials are missing in --dart-define. The app remains fully navigable.',
+                            gl: 'Estas en modo demo local porque faltan credenciais Firebase en --dart-define. A app segue sendo navegable.',
+                            fr: 'Vous etes en mode demo local car les identifiants Firebase manquent dans --dart-define. L application reste navigable.',
+                            it: 'Sei in modalita demo locale perche mancano le credenziali Firebase in --dart-define. L app resta navigabile.',
+                            pt: 'Estas em modo demo local porque faltam credenciais Firebase em --dart-define. A app continua navegavel.',
+                          ),
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ),
@@ -75,13 +91,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFFE4572E),
                         borderRadius: BorderRadius.circular(28),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x14000000),
-                            blurRadius: 24,
-                            offset: Offset(0, 12),
-                          ),
-                        ],
+                        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 12))],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,16 +100,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: const ShardPayBrandMark(size: 52),
-                                ),
+                                ClipRRect(borderRadius: BorderRadius.circular(16), child: const ShardPayBrandMark(size: 52)),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Text(
                                     'ShardPay',
                                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                      color: Colors.white,
+                                      // Va sobre la cabecera de color de acento: el
+                                      // token calcula el contraste correcto en las
+                                      // trece paletas.
+                                      color: colorScheme.onPrimary,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -111,33 +121,62 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              // Antes era blanco fijo: con el tema oscuro activo
+                              // quedaba una tarjeta blanca con el texto claro del
+                              // tema encima, ilegible.
+                              color: colorScheme.surface,
                               border: Border.all(color: colorScheme.outlineVariant),
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(24),
-                                topRight: Radius.circular(24),
-                              ),
+                              borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   _register
-                                      ? tr(context, es: 'Crea tu acceso en medio minuto', en: 'Create your account in under a minute', gl: 'Crea o teu acceso en medio minuto', fr: 'Creez votre acces en moins d une minute', it: 'Crea il tuo accesso in meno di un minuto', pt: 'Cria o teu acesso em meio minuto')
-                                      : tr(context, es: 'Vuelve a tus grupos y balances', en: 'Return to your groups and balances', gl: 'Volve aos teus grupos e balances', fr: 'Retrouvez vos groupes et soldes', it: 'Torna ai tuoi gruppi e saldi', pt: 'Volta aos teus grupos e saldos'),
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                      ? tr(
+                                          context,
+                                          es: 'Crea tu acceso en medio minuto',
+                                          en: 'Create your account in under a minute',
+                                          gl: 'Crea o teu acceso en medio minuto',
+                                          fr: 'Creez votre acces en moins d une minute',
+                                          it: 'Crea il tuo accesso in meno di un minuto',
+                                          pt: 'Cria o teu acesso em meio minuto',
+                                        )
+                                      : tr(
+                                          context,
+                                          es: 'Vuelve a tus grupos y balances',
+                                          en: 'Return to your groups and balances',
+                                          gl: 'Volve aos teus grupos e balances',
+                                          fr: 'Retrouvez vos groupes et soldes',
+                                          it: 'Torna ai tuoi gruppi e saldi',
+                                          pt: 'Volta aos teus grupos e saldos',
+                                        ),
+                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   _register
-                                      ? tr(context, es: 'Prepara tu cuenta para compartir gastos, tickets y repartos avanzados con tu grupo desde el primer minuto.', en: 'Prepare your account to share expenses, receipts and advanced splits from day one.', gl: 'Prepara a tua conta para compartir gastos, tickets e repartos avanzados desde o primeiro minuto.', fr: 'Preparez votre compte pour partager depenses, tickets et repartitions avancees des le premier jour.', it: 'Prepara il tuo account per condividere spese, scontrini e ripartizioni avanzate fin dal primo momento.', pt: 'Prepara a tua conta para partilhar despesas, faturas e reparticoes avancadas desde o primeiro minuto.')
-                                      : tr(context, es: 'Accede con tu email o con Google para recuperar grupos, invitaciones y movimientos pendientes.', en: 'Use email or Google to recover groups, invites and pending activity.', gl: 'Accede co teu email ou con Google para recuperar grupos, convites e movementos pendentes.', fr: 'Connectez-vous avec votre e-mail ou Google pour retrouver groupes, invitations et activites en attente.', it: 'Accedi con email o Google per recuperare gruppi, inviti e attivita in sospeso.', pt: 'Entra com email ou Google para recuperar grupos, convites e movimentos pendentes.'),
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        height: 1.35,
-                                      ),
+                                      ? tr(
+                                          context,
+                                          es: 'Prepara tu cuenta para compartir gastos, tickets y repartos avanzados con tu grupo desde el primer minuto.',
+                                          en: 'Prepare your account to share expenses, receipts and advanced splits from day one.',
+                                          gl: 'Prepara a tua conta para compartir gastos, tickets e repartos avanzados desde o primeiro minuto.',
+                                          fr: 'Preparez votre compte pour partager depenses, tickets et repartitions avancees des le premier jour.',
+                                          it: 'Prepara il tuo account per condividere spese, scontrini e ripartizioni avanzate fin dal primo momento.',
+                                          pt: 'Prepara a tua conta para partilhar despesas, faturas e reparticoes avancadas desde o primeiro minuto.',
+                                        )
+                                      : tr(
+                                          context,
+                                          es: 'Accede con tu email o con Google para recuperar grupos, invitaciones y movimientos pendientes.',
+                                          en: 'Use email or Google to recover groups, invites and pending activity.',
+                                          gl: 'Accede co teu email ou con Google para recuperar grupos, convites e movementos pendentes.',
+                                          fr: 'Connectez-vous avec votre e-mail ou Google pour retrouver groupes, invitations et activites en attente.',
+                                          it: 'Accedi con email o Google per recuperare gruppi, inviti e attivita in sospeso.',
+                                          pt: 'Entra com email ou Google para recuperar grupos, convites e movimentos pendentes.',
+                                        ),
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant, height: 1.35),
                                 ),
                                 const SizedBox(height: 20),
                                 Container(
@@ -150,14 +189,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                     children: [
                                       Expanded(
                                         child: _ModeButton(
-                                          label: tr(context, es: 'Ya tengo cuenta', en: 'I already have an account', gl: 'Xa teño conta', fr: 'J ai deja un compte', it: 'Ho gia un account', pt: 'Ja tenho conta'),
+                                          label: tr(
+                                            context,
+                                            es: 'Ya tengo cuenta',
+                                            en: 'I already have an account',
+                                            gl: 'Xa teño conta',
+                                            fr: 'J ai deja un compte',
+                                            it: 'Ho gia un account',
+                                            pt: 'Ja tenho conta',
+                                          ),
                                           selected: !_register,
                                           onTap: _loading ? null : () => setState(() => _register = false),
                                         ),
                                       ),
                                       Expanded(
                                         child: _ModeButton(
-                                          label: tr(context, es: 'Soy nuevo', en: 'I am new here', gl: 'Son novo', fr: 'Je suis nouveau', it: 'Sono nuovo', pt: 'Sou novo'),
+                                          label: tr(
+                                            context,
+                                            es: 'Soy nuevo',
+                                            en: 'I am new here',
+                                            gl: 'Son novo',
+                                            fr: 'Je suis nouveau',
+                                            it: 'Sono nuovo',
+                                            pt: 'Sou novo',
+                                          ),
                                           selected: _register,
                                           onTap: _loading ? null : () => setState(() => _register = true),
                                         ),
@@ -175,15 +230,39 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                           controller: _nameController,
                                           textCapitalization: TextCapitalization.words,
                                           decoration: InputDecoration(
-                                            labelText: tr(context, es: 'Cómo te llamamos', en: 'How should we call you', gl: 'Como te chamamos', fr: 'Comment vous appeler', it: 'Come vuoi essere chiamato', pt: 'Como te chamamos'),
-                                            hintText: tr(context, es: 'Nombre visible para tu grupo', en: 'Visible name for your group', gl: 'Nome visible para o teu grupo', fr: 'Nom visible pour votre groupe', it: 'Nome visibile per il gruppo', pt: 'Nome visivel para o teu grupo'),
+                                            labelText: tr(
+                                              context,
+                                              es: 'Cómo te llamamos',
+                                              en: 'How should we call you',
+                                              gl: 'Como te chamamos',
+                                              fr: 'Comment vous appeler',
+                                              it: 'Come vuoi essere chiamato',
+                                              pt: 'Como te chamamos',
+                                            ),
+                                            hintText: tr(
+                                              context,
+                                              es: 'Nombre visible para tu grupo',
+                                              en: 'Visible name for your group',
+                                              gl: 'Nome visible para o teu grupo',
+                                              fr: 'Nom visible pour votre groupe',
+                                              it: 'Nome visibile per il gruppo',
+                                              pt: 'Nome visivel para o teu grupo',
+                                            ),
                                           ),
                                           validator: (value) {
                                             if (!_register) {
                                               return null;
                                             }
                                             if (value == null || value.trim().isEmpty) {
-                                              return tr(context, es: 'Introduce el nombre que quieres mostrar.', en: 'Enter the name you want to show.', gl: 'Introduce o nome que queres mostrar.', fr: 'Saisissez le nom a afficher.', it: 'Inserisci il nome da mostrare.', pt: 'Introduz o nome que queres mostrar.');
+                                              return tr(
+                                                context,
+                                                es: 'Introduce el nombre que quieres mostrar.',
+                                                en: 'Enter the name you want to show.',
+                                                gl: 'Introduce o nome que queres mostrar.',
+                                                fr: 'Saisissez le nom a afficher.',
+                                                it: 'Inserisci il nome da mostrare.',
+                                                pt: 'Introduz o nome que queres mostrar.',
+                                              );
                                             }
                                             return null;
                                           },
@@ -193,7 +272,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                       TextFormField(
                                         controller: _emailController,
                                         decoration: InputDecoration(
-                                          labelText: tr(context, es: 'Tu email', en: 'Your email', gl: 'O teu email', fr: 'Votre e-mail', it: 'La tua email', pt: 'O teu email'),
+                                          labelText: tr(
+                                            context,
+                                            es: 'Tu email',
+                                            en: 'Your email',
+                                            gl: 'O teu email',
+                                            fr: 'Votre e-mail',
+                                            it: 'La tua email',
+                                            pt: 'O teu email',
+                                          ),
                                           hintText: 'nombre@correo.com',
                                         ),
                                         keyboardType: TextInputType.emailAddress,
@@ -201,10 +288,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                         validator: (value) {
                                           final email = value?.trim() ?? '';
                                           if (email.isEmpty) {
-                                            return tr(context, es: 'Introduce tu email.', en: 'Enter your email.', gl: 'Introduce o teu email.', fr: 'Saisissez votre e-mail.', it: 'Inserisci la tua email.', pt: 'Introduz o teu email.');
+                                            return tr(
+                                              context,
+                                              es: 'Introduce tu email.',
+                                              en: 'Enter your email.',
+                                              gl: 'Introduce o teu email.',
+                                              fr: 'Saisissez votre e-mail.',
+                                              it: 'Inserisci la tua email.',
+                                              pt: 'Introduz o teu email.',
+                                            );
                                           }
                                           if (!email.contains('@') || !email.contains('.')) {
-                                            return tr(context, es: 'Revisa el formato del email.', en: 'Check the email format.', gl: 'Revisa o formato do email.', fr: 'Verifiez le format de l e-mail.', it: 'Controlla il formato della email.', pt: 'Revê o formato do email.');
+                                            return tr(
+                                              context,
+                                              es: 'Revisa el formato del email.',
+                                              en: 'Check the email format.',
+                                              gl: 'Revisa o formato do email.',
+                                              fr: 'Verifiez le format de l e-mail.',
+                                              it: 'Controlla il formato della email.',
+                                              pt: 'Revê o formato do email.',
+                                            );
                                           }
                                           return null;
                                         },
@@ -213,8 +316,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                       TextFormField(
                                         controller: _passwordController,
                                         decoration: InputDecoration(
-                                          labelText: _register ? tr(context, es: 'Crea una contraseña', en: 'Create a password', gl: 'Crea un contrasinal', fr: 'Creez un mot de passe', it: 'Crea una password', pt: 'Cria uma palavra-passe') : tr(context, es: 'Tu contraseña', en: 'Your password', gl: 'O teu contrasinal', fr: 'Votre mot de passe', it: 'La tua password', pt: 'A tua palavra-passe'),
-                                          hintText: _register ? tr(context, es: 'Mínimo 6 caracteres', en: 'At least 6 characters', gl: 'Minimo 6 caracteres', fr: 'Minimum 6 caracteres', it: 'Almeno 6 caratteri', pt: 'Minimo 6 caracteres') : tr(context, es: 'Escribe tu contraseña', en: 'Type your password', gl: 'Escribe o teu contrasinal', fr: 'Saisissez votre mot de passe', it: 'Digita la tua password', pt: 'Escreve a tua palavra-passe'),
+                                          labelText: _register
+                                              ? tr(
+                                                  context,
+                                                  es: 'Crea una contraseña',
+                                                  en: 'Create a password',
+                                                  gl: 'Crea un contrasinal',
+                                                  fr: 'Creez un mot de passe',
+                                                  it: 'Crea una password',
+                                                  pt: 'Cria uma palavra-passe',
+                                                )
+                                              : tr(
+                                                  context,
+                                                  es: 'Tu contraseña',
+                                                  en: 'Your password',
+                                                  gl: 'O teu contrasinal',
+                                                  fr: 'Votre mot de passe',
+                                                  it: 'La tua password',
+                                                  pt: 'A tua palavra-passe',
+                                                ),
+                                          hintText: _register
+                                              ? tr(
+                                                  context,
+                                                  es: 'Mínimo 6 caracteres',
+                                                  en: 'At least 6 characters',
+                                                  gl: 'Minimo 6 caracteres',
+                                                  fr: 'Minimum 6 caracteres',
+                                                  it: 'Almeno 6 caratteri',
+                                                  pt: 'Minimo 6 caracteres',
+                                                )
+                                              : tr(
+                                                  context,
+                                                  es: 'Escribe tu contraseña',
+                                                  en: 'Type your password',
+                                                  gl: 'Escribe o teu contrasinal',
+                                                  fr: 'Saisissez votre mot de passe',
+                                                  it: 'Digita la tua password',
+                                                  pt: 'Escreve a tua palavra-passe',
+                                                ),
                                           suffixIcon: _passwordController.text.isEmpty
                                               ? null
                                               : IconButton(
@@ -227,10 +366,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                         validator: (value) {
                                           final password = value?.trim() ?? '';
                                           if (password.isEmpty) {
-                                            return tr(context, es: 'Introduce tu contraseña.', en: 'Enter your password.', gl: 'Introduce o teu contrasinal.', fr: 'Saisissez votre mot de passe.', it: 'Inserisci la tua password.', pt: 'Introduz a tua palavra-passe.');
+                                            return tr(
+                                              context,
+                                              es: 'Introduce tu contraseña.',
+                                              en: 'Enter your password.',
+                                              gl: 'Introduce o teu contrasinal.',
+                                              fr: 'Saisissez votre mot de passe.',
+                                              it: 'Inserisci la tua password.',
+                                              pt: 'Introduz a tua palavra-passe.',
+                                            );
                                           }
                                           if (_register && password.length < 6) {
-                                            return tr(context, es: 'Usa al menos 6 caracteres.', en: 'Use at least 6 characters.', gl: 'Usa polo menos 6 caracteres.', fr: 'Utilisez au moins 6 caracteres.', it: 'Usa almeno 6 caratteri.', pt: 'Usa pelo menos 6 caracteres.');
+                                            return tr(
+                                              context,
+                                              es: 'Usa al menos 6 caracteres.',
+                                              en: 'Use at least 6 characters.',
+                                              gl: 'Usa polo menos 6 caracteres.',
+                                              fr: 'Utilisez au moins 6 caracteres.',
+                                              it: 'Usa almeno 6 caratteri.',
+                                              pt: 'Usa pelo menos 6 caracteres.',
+                                            );
                                           }
                                           return null;
                                         },
@@ -241,8 +396,37 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 const SizedBox(height: 12),
                                 Text(
                                   _register
-                                      ? tr(context, es: 'Crearás tu acceso por email. Después podrás usar Google en cuanto la infraestructura quede activada.', en: 'You will create your account with email. Google can be used later as soon as infrastructure is active.', gl: 'Crearas o teu acceso por email. Despois poderas usar Google cando a infraestrutura estea activa.', fr: 'Vous allez creer votre acces par e-mail. Google pourra etre utilise une fois l infrastructure active.', it: 'Creerai il tuo accesso via email. Potrai usare Google appena l infrastruttura sara attiva.', pt: 'Vais criar o teu acesso por email. Depois poderas usar Google quando a infraestrutura estiver ativa.')
-                                      : tr(context, es: 'Si aún no tienes acceso, cambia a "Soy nuevo" y crea tu cuenta desde aquí.', en: 'If you do not have access yet, switch to the new account mode and create it here.', gl: 'Se ainda non tes acceso, cambia ao modo de conta nova e crea a conta aqui.', fr: 'Si vous n avez pas encore acces, passez en mode nouveau compte et creez-le ici.', it: 'Se non hai ancora accesso, passa alla modalita nuovo account e crealo qui.', pt: 'Se ainda nao tens acesso, muda para o modo nova conta e cria-a aqui.'),
+                                      ? tr(
+                                          context,
+                                          // Este texto decia «podras usar Google en cuanto la
+                                          // infraestructura quede activada». Ya esta activada:
+                                          // los dos proveedores funcionan. Prometer como futuro
+                                          // algo que ya se puede hacer es peor que no decir nada,
+                                          // porque desanima a usar el boton que hay justo debajo.
+                                          es: 'Con cualquiera de los dos entras al mismo sitio: tus grupos van con tu cuenta, no con este móvil.',
+                                          en: 'Either way gets you to the same place: your groups follow your account, not this phone.',
+                                          gl: 'Con calquera dos dous entras ao mesmo sitio: os teus grupos van coa tua conta, non con este movil.',
+                                          ca: 'Amb qualsevol dels dos entres al mateix lloc: els teus grups van amb el teu compte, no amb aquest mobil.',
+                                          eu: 'Bietako edozeinekin leku berera sartzen zara: zure taldeak zure kontuarekin doaz, ez mugikor honekin.',
+                                          fr: 'Les deux menent au meme endroit : vos groupes suivent votre compte, pas ce telephone.',
+                                          it: 'In entrambi i casi arrivi allo stesso posto: i tuoi gruppi seguono il tuo account, non questo telefono.',
+                                          pt: 'Com qualquer um dos dois entras no mesmo sitio: os teus grupos vao com a tua conta, nao com este telemovel.',
+                                          de: 'Beide fuhren zum selben Ort: Deine Gruppen haengen an deinem Konto, nicht an diesem Handy.',
+                                          el: 'Kai me ta dyo pas sto idio simeio: oi omades sou akolouthoun ton logariasmo sou, ohi auto to kinito.',
+                                          ru: 'Оба способа ведут в одно место: ваши группы привязаны к аккаунту, а не к этому телефону.',
+                                          ar: 'كلا الطريقتين توصلك إلى المكان نفسه: مجموعاتك مرتبطة بحسابك، لا بهذا الهاتف.',
+                                          zh: '两种方式进的是同一个地方：你的群组跟着账号走，不跟着这台手机。',
+                                          ja: 'どちらでも同じ場所に入れます。グループはこの端末ではなくアカウントに紐づきます。',
+                                        )
+                                      : tr(
+                                          context,
+                                          es: 'Si aún no tienes acceso, cambia a "Soy nuevo" y crea tu cuenta desde aquí.',
+                                          en: 'If you do not have access yet, switch to the new account mode and create it here.',
+                                          gl: 'Se ainda non tes acceso, cambia ao modo de conta nova e crea a conta aqui.',
+                                          fr: 'Si vous n avez pas encore acces, passez en mode nouveau compte et creez-le ici.',
+                                          it: 'Se non hai ancora accesso, passa alla modalita nuovo account e crealo qui.',
+                                          pt: 'Se ainda nao tens acesso, muda para o modo nova conta e cria-a aqui.',
+                                        ),
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                                 ),
                                 const SizedBox(height: 20),
@@ -251,7 +435,27 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                   child: FilledButton.icon(
                                     onPressed: _loading ? null : _submitEmail,
                                     icon: Icon(_register ? Icons.person_add_alt_1_rounded : Icons.login_rounded),
-                                    label: Text(_register ? tr(context, es: 'Crear cuenta y entrar', en: 'Create account and enter', gl: 'Crear conta e entrar', fr: 'Creer le compte et entrer', it: 'Crea account ed entra', pt: 'Criar conta e entrar') : tr(context, es: 'Entrar con email', en: 'Continue with email', gl: 'Entrar con email', fr: 'Continuer avec e-mail', it: 'Continua con email', pt: 'Entrar com email')),
+                                    label: Text(
+                                      _register
+                                          ? tr(
+                                              context,
+                                              es: 'Crear cuenta y entrar',
+                                              en: 'Create account and enter',
+                                              gl: 'Crear conta e entrar',
+                                              fr: 'Creer le compte et entrer',
+                                              it: 'Crea account ed entra',
+                                              pt: 'Criar conta e entrar',
+                                            )
+                                          : tr(
+                                              context,
+                                              es: 'Entrar con email',
+                                              en: 'Continue with email',
+                                              gl: 'Entrar con email',
+                                              fr: 'Continuer avec e-mail',
+                                              it: 'Continua con email',
+                                              pt: 'Entrar com email',
+                                            ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -260,7 +464,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                   child: OutlinedButton.icon(
                                     onPressed: _loading ? null : _submitGoogle,
                                     icon: const Icon(Icons.account_circle_rounded),
-                                    label: Text(tr(context, es: 'Continuar con Google', en: 'Continue with Google', gl: 'Continuar con Google', fr: 'Continuer avec Google', it: 'Continua con Google', pt: 'Continuar com Google')),
+                                    label: Text(
+                                      tr(
+                                        context,
+                                        es: 'Continuar con Google',
+                                        en: 'Continue with Google',
+                                        gl: 'Continuar con Google',
+                                        fr: 'Continuer avec Google',
+                                        it: 'Continua con Google',
+                                        pt: 'Continuar com Google',
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -333,21 +547,41 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       return raw.replaceFirst('Bad state: ', '');
     }
     if (raw.contains('CONFIGURATION_NOT_FOUND') || raw.contains('BILLING_NOT_ENABLED')) {
-      return tr(context, es: 'El acceso todavía no está habilitado en Google Cloud para este proyecto. Falta activar facturación/Auth en la infraestructura.', en: 'Access is not yet enabled in Google Cloud for this project. Billing/Auth still needs activation.', gl: 'O acceso ainda non esta habilitado en Google Cloud para este proxecto. Falta activar facturacion/Auth na infraestrutura.', fr: 'L acces n est pas encore active dans Google Cloud pour ce projet. Il faut encore activer la facturation/Auth.', it: 'L accesso non e ancora abilitato in Google Cloud per questo progetto. Occorre ancora attivare billing/Auth.', pt: 'O acesso ainda nao esta ativado no Google Cloud para este projeto. Ainda falta ativar billing/Auth.');
+      return tr(
+        context,
+        es: 'El acceso todavía no está habilitado en Google Cloud para este proyecto. Falta activar facturación/Auth en la infraestructura.',
+        en: 'Access is not yet enabled in Google Cloud for this project. Billing/Auth still needs activation.',
+        gl: 'O acceso ainda non esta habilitado en Google Cloud para este proxecto. Falta activar facturacion/Auth na infraestrutura.',
+        fr: 'L acces n est pas encore active dans Google Cloud pour ce projet. Il faut encore activer la facturation/Auth.',
+        it: 'L accesso non e ancora abilitato in Google Cloud per questo progetto. Occorre ancora attivare billing/Auth.',
+        pt: 'O acesso ainda nao esta ativado no Google Cloud para este projeto. Ainda falta ativar billing/Auth.',
+      );
     }
     if (raw.contains('network-request-failed')) {
-      return tr(context, es: 'No se pudo contactar con el servidor. Revisa la conexión y vuelve a intentarlo.', en: 'Could not reach the server. Check your connection and try again.', gl: 'Non se puido contactar co servidor. Revisa a conexion e tenta de novo.', fr: 'Impossible de contacter le serveur. Verifiez votre connexion et reessayez.', it: 'Impossibile contattare il server. Controlla la connessione e riprova.', pt: 'Nao foi possivel contactar o servidor. Verifica a ligacao e tenta novamente.');
+      return tr(
+        context,
+        es: 'No se pudo contactar con el servidor. Revisa la conexión y vuelve a intentarlo.',
+        en: 'Could not reach the server. Check your connection and try again.',
+        gl: 'Non se puido contactar co servidor. Revisa a conexion e tenta de novo.',
+        fr: 'Impossible de contacter le serveur. Verifiez votre connexion et reessayez.',
+        it: 'Impossibile contattare il server. Controlla la connessione e riprova.',
+        pt: 'Nao foi possivel contactar o servidor. Verifica a ligacao e tenta novamente.',
+      );
     }
-    return tr(context, es: 'No se pudo iniciar sesión. $raw', en: 'Sign-in failed. $raw', gl: 'Non se puido iniciar sesion. $raw', fr: 'Connexion impossible. $raw', it: 'Accesso non riuscito. $raw', pt: 'Nao foi possivel iniciar sessao. $raw');
+    return tr(
+      context,
+      es: 'No se pudo iniciar sesión. $raw',
+      en: 'Sign-in failed. $raw',
+      gl: 'Non se puido iniciar sesion. $raw',
+      fr: 'Connexion impossible. $raw',
+      it: 'Accesso non riuscito. $raw',
+      pt: 'Nao foi possivel iniciar sessao. $raw',
+    );
   }
 }
 
 class _ModeButton extends StatelessWidget {
-  const _ModeButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  const _ModeButton({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -359,10 +593,7 @@ class _ModeButton extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: selected ? colorScheme.surface : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: selected ? colorScheme.surface : Colors.transparent, borderRadius: BorderRadius.circular(14)),
       child: TextButton(
         onPressed: onTap,
         style: TextButton.styleFrom(

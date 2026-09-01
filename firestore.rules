@@ -1,4 +1,15 @@
 rules_version = '2';
+
+// Reglas de acceso a Firestore de ShardPay.
+//
+// Regla de oro: un grupo lo leen SUS MIEMBROS y nadie mas. El documento de un
+// grupo lleva dentro todos sus gastos (ADR-0005), asi que dar lectura de mas no
+// expone un nombre: expone el historial completo con importes, fechas, notas y
+// correos. Vease ADR-0009.
+//
+// Lo unico que un desconocido necesita antes de entrar en un grupo es la ficha
+// de la invitacion, y para eso esta la coleccion `invites`, que contiene solo lo
+// que se puede enseñar.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -13,31 +24,114 @@ service cloud.firestore {
       return signedIn() && request.auth.uid in resource.data.memberIds;
     }
 
-    function canPreviewInvite() {
-      return signedIn() && request.query.limit != null && request.query.limit <= 1;
+    function groupDoc(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    // Campos que el cliente puede tocar al unirse por invitacion. `expenses` NO
+    // esta: antes si lo estaba, y eso permitia a cualquiera que tuviera un
+    // codigo reescribir o borrar el historial entero del grupo en la misma
+    // operacion de entrar.
+    function joinAffectedKeys() {
+      return ['memberIds', 'members', 'claimedSlots', 'joinProof', 'updatedAt'];
+    }
+
+    // Prueba de que quien entra conoce el PIN, sin haber podido leer el grupo.
+    //
+    // El cliente calcula sha256("<pin>:<uid>") y lo manda en `joinProof`; aqui
+    // se recalcula con el PIN real, que solo el servidor puede leer. Antes el
+    // PIN se comprobaba en el movil despues de leer el grupo entero, que es
+    // tanto como no comprobarlo.
+    function knowsJoinPin() {
+      return request.resource.data.joinProof ==
+        hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toBase64();
+    }
+
+    // Un hueco reservado ("Marta") solo se puede reclamar si existe, si nadie lo
+    // ha reclamado ya y si quien lo reclama se lo asigna a si mismo.
+    function claimsAtMostOneFreeSlot() {
+      return !('claimedSlots' in request.resource.data.diff(resource.data).affectedKeys())
+        || (
+          request.resource.data.claimedSlots.keys().size() ==
+            resource.data.get('claimedSlots', {}).keys().size() + 1
+          && request.resource.data.claimedSlots.diff(resource.data.get('claimedSlots', {}))
+            .affectedKeys().size() == 1
+          && request.resource.data.claimedSlots.values().hasAny([request.auth.uid])
+        );
     }
 
     function joiningGroupByInvite() {
       return signedIn()
         && !memberOfGroup()
         && resource.data.isClosed == false
+        && knowsJoinPin()
         && request.auth.uid in request.resource.data.memberIds
         && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
         && request.resource.data.members.size() == resource.data.members.size() + 1
-        && request.resource.data.pendingMembers.size() >= resource.data.pendingMembers.size() - 1
         && request.resource.data.inviteCode == resource.data.inviteCode
         && request.resource.data.joinPin == resource.data.joinPin
+        && claimsAtMostOneFreeSlot()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(joinAffectedKeys());
+    }
+
+    // Campos que puede llevar la ficha publica de una invitacion. Lo que no este
+    // en esta lista no se puede escribir ahi, para que nadie use `invites` como
+    // sitio donde dejar caer datos del grupo que si son privados.
+    function invitePublicKeys() {
+      return [
+        'groupId',
+        'groupName',
+        'iconKey',
+        'currency',
+        'memberCount',
+        'pendingMembers',
+        'isClosed',
+        'allowAnonymousJoin',
+        'updatedAt',
+      ];
+    }
+
+    function writingOwnGroupInvite(inviteCode) {
+      let group = groupDoc(request.resource.data.groupId);
+      return signedIn()
+        && request.resource.data.keys().hasOnly(invitePublicKeys())
+        && request.resource.data.keys().hasAll(['groupId', 'groupName', 'memberCount'])
+        && request.resource.data.groupId is string
+        && group.data.inviteCode == inviteCode
+        && request.auth.uid in group.data.memberIds;
+    }
+
+    // Salir de un grupo, y borrarse la cuenta, que hace lo mismo en cada grupo.
+    //
+    // La rama normal de miembro exige seguir estando en `memberIds` **despues**
+    // de escribir, asi que por si sola prohibe salirse: «Salir del grupo» y
+    // «Eliminar mi perfil» fallaban contra Firestore de verdad. No se notaba
+    // porque el modo de demostracion es local y no pasa por reglas.
+    //
+    // Salir solo puede quitarte a ti: la lista nueva mide uno menos, no te
+    // contiene, y todo el que queda ya estaba antes.
+    function leavingGroup() {
+      return memberOfGroup()
+        && !(request.auth.uid in request.resource.data.memberIds)
+        && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+        && request.resource.data.memberIds.hasOnly(resource.data.memberIds)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'memberIds',
           'members',
-          'pendingMembers',
-          'expenses',
+          'ownerId',
+          'adminIds',
+          'claimedSlots',
+          // `leaveGroup` y `deleteUserProfile` reescriben el documento entero, y
+          // `ExpenseGroup.toMap()` no produce `joinProof`, asi que la escritura
+          // lo borra. Sin esta clave, salirse de un grupo en el que alguien
+          // habia entrado por invitacion fallaba.
+          'joinProof',
           'updatedAt',
         ]);
     }
 
     function notificationGroup() {
-      return get(/databases/$(database)/documents/groups/$(request.resource.data.groupId));
+      return groupDoc(request.resource.data.groupId);
     }
 
     function canCreateNotificationFor(userId) {
@@ -53,10 +147,34 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
         && request.auth.uid in request.resource.data.memberIds;
-      allow get: if memberOfGroup() || signedIn();
-      allow list: if signedIn() || canPreviewInvite();
+
+      // Solo miembros. Ni `signedIn()` ni vista previa: para eso esta `invites`.
+      allow get: if memberOfGroup();
+
+      // `list` se evalua documento a documento sobre lo que devuelve la
+      // consulta, asi que esto obliga a que cualquier consulta sobre `groups`
+      // este filtrada por pertenencia. Una consulta sin `where` falla entera.
+      allow list: if memberOfGroup();
+
       allow delete: if memberOfGroup();
-      allow update: if (memberOfGroup() && request.auth.uid in request.resource.data.memberIds) || joiningGroupByInvite();
+      allow update: if (memberOfGroup() && request.auth.uid in request.resource.data.memberIds)
+        || leavingGroup()
+        || joiningGroupByInvite();
+    }
+
+    match /invites/{inviteCode} {
+      // Quien va a unirse todavia no es miembro y necesita ver a que grupo
+      // entra. Ese es el precio de que las invitaciones funcionen, y por eso
+      // aqui dentro no hay gastos, ni correos, ni identificadores de usuario, ni
+      // el PIN.
+      allow get: if signedIn();
+
+      // Sin enumeracion: el codigo hay que conocerlo, no descubrirlo.
+      allow list: if false;
+
+      allow create, update: if writingOwnGroupInvite(inviteCode);
+      allow delete: if signedIn()
+        && request.auth.uid in groupDoc(resource.data.groupId).data.memberIds;
     }
 
     match /users/{userId} {

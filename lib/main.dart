@@ -28,10 +28,7 @@ Future<void> main() async {
 
   runApp(
     ProviderScope(
-      overrides: [
-        bootstrapProvider.overrideWithValue(bootstrap),
-        localPreferencesStoreProvider.overrideWithValue(localPreferencesStore),
-      ],
+      overrides: [bootstrapProvider.overrideWithValue(bootstrap), localPreferencesStoreProvider.overrideWithValue(localPreferencesStore)],
       child: const ShardPayApp(),
     ),
   );

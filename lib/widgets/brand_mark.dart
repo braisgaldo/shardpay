@@ -3,13 +3,7 @@ import 'package:flutter/material.dart';
 class ShardPayBrandMark extends StatelessWidget {
   static const _launcherAssetPath = 'android/app/src/main/res/mipmap-xxxhdpi/shardpay_launcher.png';
 
-  const ShardPayBrandMark({
-    super.key,
-    this.size = 48,
-    this.borderRadius,
-    this.backgroundColor,
-    this.padding = const EdgeInsets.all(0),
-  });
+  const ShardPayBrandMark({super.key, this.size = 48, this.borderRadius, this.backgroundColor, this.padding = EdgeInsets.zero});
 
   final double size;
   final double? borderRadius;
@@ -29,11 +23,7 @@ class ShardPayBrandMark extends StatelessWidget {
           color: backgroundColor ?? Colors.transparent,
           child: Padding(
             padding: padding,
-            child: Image.asset(
-              _launcherAssetPath,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-            ),
+            child: Image.asset(_launcherAssetPath, fit: BoxFit.contain, filterQuality: FilterQuality.high),
           ),
         ),
       ),

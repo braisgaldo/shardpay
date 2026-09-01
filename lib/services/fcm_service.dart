@@ -11,9 +11,9 @@ class FcmService {
     required FirebaseFirestore firestore,
     required FirebaseMessaging messaging,
     required LocalNotificationService localNotifications,
-  })  : _firestore = firestore,
-        _messaging = messaging,
-        _localNotifications = localNotifications;
+  }) : _firestore = firestore,
+       _messaging = messaging,
+       _localNotifications = localNotifications;
 
   final FirebaseFirestore _firestore;
   final FirebaseMessaging _messaging;
@@ -81,10 +81,7 @@ class FcmService {
     }
 
     final typeName = message.data['type'] as String?;
-    final type = AppNotificationType.values.firstWhere(
-      (entry) => entry.name == typeName,
-      orElse: () => AppNotificationType.expenseAdded,
-    );
+    final type = AppNotificationType.values.firstWhere((entry) => entry.name == typeName, orElse: () => AppNotificationType.expenseAdded);
 
     return AppNotification(
       id: message.messageId ?? '${DateTime.now().microsecondsSinceEpoch}',
