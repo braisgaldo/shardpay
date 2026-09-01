@@ -1,200 +1,165 @@
 # ShardPay
 
-ShardPay es una app móvil en Flutter para repartir gastos en grupo con Firebase, invitaciones por enlace o QR, OCR local de tickets, reparto avanzado por persona e insights visuales.
+**Divide tickets, no amistades.**
 
-## Funcionalidad actual
+App móvil para repartir gastos en grupo. Le haces una foto al ticket y ShardPay
+reconoce las líneas, los importes y el total, comprueba que la suma cuadre con lo
+que pone el papel, y calcula quién le debe qué a quién.
 
-- Autenticación con Google y email/password.
-- Grupos con administración, invitaciones y miembros pendientes de vincular.
-- Creación de grupos con divisa configurable.
-- Gastos manuales y gastos a partir de ticket usando cámara o galería.
-- Reparto por porcentajes con suma obligatoria del 100%.
-- Categorías por defecto y categorías personalizadas por grupo.
-- Gráficos e insights calculados en cliente.
-- Cambio de idioma y tema desde la app.
-- Fallback a modo demo local si Firebase no está configurado.
+Gratis, sin anuncios y sin recoger datos para nada que no sea hacerla funcionar.
 
-## Stack técnico
+[![CI](https://github.com/braisgaldo/shardpay/actions/workflows/ci.yml/badge.svg)](https://github.com/braisgaldo/shardpay/actions/workflows/ci.yml)
+[![Licencia](https://img.shields.io/badge/licencia-Apache--2.0-blue)](LICENSE)
 
-- Flutter con Riverpod para estado y composición de pantallas.
-- Firebase Auth, Firestore y Storage.
-- ML Kit OCR en dispositivo para evitar coste de APIs externas.
-- `fl_chart` para visualizaciones.
-- `image_picker`, `mobile_scanner`, `qr_flutter` y `share_plus` para captura, QR y compartición.
+---
 
-## Requisitos
+## Qué hace
 
-- Windows con PowerShell.
-- JDK 17.
-- Android SDK y `adb` disponibles.
-- Node.js si vas a usar Firebase CLI mediante `npx firebase`.
-- Una cuenta de Firebase si quieres backend real.
+- **Lee tickets con la cámara.** Pantalla de captura propia con guía de
+  encuadre, linterna y enfoque al tocar. El reconocimiento de texto ocurre
+  **entero en el dispositivo**: las fotos no salen del móvil.
+- **Cuadra con el total impreso.** Si la suma de las líneas no llega al total,
+  añade una línea de ajuste y lo dice. El grupo reparte lo que de verdad se pagó,
+  no una cifra aproximada.
+- **Reparte línea a línea.** A partes iguales de un toque, o con el porcentaje
+  exacto de cada persona en cada línea.
+- **Salda con el mínimo de pagos.** Si tres personas se deben cosas cruzadas,
+  propone las dos transferencias que hacen falta, no las seis.
+- **Grupos compartidos** con invitación por enlace o QR, incluso para gente que
+  todavía no tiene cuenta.
+- **Exporta e importa** todos tus datos en un fichero `.shardpay.bak`.
+- **14 idiomas y 13 temas**, con soporte de derecha a izquierda para el árabe y
+  la opción de seguir el modo claro u oscuro del sistema.
 
-## Estructura relevante
+> **Seguridad.** Un grupo lo leen sus miembros y nadie más. Las reglas de
+> Firestore que lo garantizan se ejecutan contra el emulador en cada envío —38
+> comprobaciones en `firestore-tests/`—, porque un agujero de este tipo no se ve
+> leyendo el fichero. La historia de por qué esto no era así y cómo se arregló
+> está en [ADR-0009](docs/adr/0009-lectura-de-invitaciones.md).
 
-- [lib](lib): código principal de la app.
-- [lib/app](lib/app): bootstrap, tema, preferencias e infraestructura base.
-- [lib/models](lib/models): modelos de dominio.
-- [lib/repositories](lib/repositories): acceso a datos, con implementación Firebase y mock.
-- [lib/screens](lib/screens): pantallas y flujos UI.
-- [config](config): configuración local y plantillas Firebase.
-- [scripts](scripts): utilidades para emulador, Firebase y ejecución Android.
-- [test](test): pruebas automatizadas.
-- [tools/flutter](tools/flutter): SDK local de Flutter usado por este repo en este entorno.
+## Instalar
 
-## Instalación
+| Vía | Estado |
+| --- | --- |
+| [GitHub Releases](https://github.com/braisgaldo/shardpay/releases) — APK directo | disponible en cada versión |
+| Google Play | pendiente de publicación |
+| F-Droid | candidato |
+| App Store | pendiente ([ADR-0007](docs/adr/0007-escritorio-e-ios.md)) |
 
-### 1. Preparar Flutter
+El APK de las Releases se instala directamente, sin pasar por ninguna tienda.
 
-Este proyecto usa Flutter local en [tools/flutter](tools/flutter). Si ya existe, no necesitas instalar otro SDK global para trabajar en este repo.
+## Desarrollar
 
-```powershell
-.\tools\flutter\bin\flutter --version
-.\tools\flutter\bin\flutter pub get
+```bash
+git clone https://github.com/braisgaldo/shardpay.git
+cd shardpay
+flutter pub get
+flutter run
 ```
 
-### 2. Preparar Android
+**Arranca sin ninguna credencial.** Si no encuentra la configuración de Firebase,
+usa un repositorio en memoria con datos de ejemplo y la app es completamente
+navegable. Es el modo cómodo para tocar la interfaz y probar el lector de
+tickets.
 
-Si no tienes emulador abierto, puedes arrancarlo con:
+Para conectar con Firebase de verdad, y para todo lo demás, mira
+[`docs/INSTALL.md`](docs/INSTALL.md).
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-emulator.ps1
+### Probar
+
+```bash
+flutter test        # 220 pruebas, sin dispositivo, en unos 16 segundos
 ```
 
-Para lanzar la app en Android con el helper del repo:
+Entre ellas hay una comprobación de **contraste AA para las trece paletas** y
+otra que verifica que `locales_config.xml` no se separe de la lista de idiomas de
+Dart.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-android.ps1
+El núcleo de lógica (`lib/core/`) es **Dart puro sin Flutter ni plugins**, así que
+también se puede probar sin el SDK de Flutter:
+
+```bash
+dart test test/core
 ```
 
-También puedes ejecutar Flutter directamente:
+## Cómo está montado
 
-```powershell
-.\tools\flutter\bin\flutter run -d emulator-5554
+```
+lib/
+├── core/           DART PURO — parser de tickets, saldos, copias, políticas
+├── models/         modelo de dominio
+├── repositories/   Firestore + repositorio de demostración
+├── services/       cámara, OCR, ficheros, notificaciones
+├── screens/        pantallas
+└── widgets/        piezas reutilizables
 ```
 
-## Configuración de Firebase real
+La regla que lo sostiene: **`lib/core/` no importa Flutter, ni `dart:ui`, ni
+ningún plugin.** Es lo que permite probar la lógica en milisegundos y sin
+dispositivo, y lo único que habría que traducir si algún día se migra a otra
+tecnología.
 
-### 1. Crear tu fichero local
+El mapa completo está en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-La configuración sensible no se versiona. Parte de la plantilla incluida en [config/firebase.template.json](config/firebase.template.json):
+## Documentación
 
-```powershell
-Copy-Item .\config\firebase.template.json .\config\firebase.local.json
-```
+| Documento | Para quién |
+| --- | --- |
+| [Manual de usuario](docs/MANUAL-USUARIO.md) | quien usa la app |
+| [Manual técnico](docs/MANUAL-TECNICO.md) | quien la toca |
+| [Arquitectura](docs/ARCHITECTURE.md) | quien quiere entenderla |
+| [Instalación y despliegue](docs/INSTALL.md) | quien la compila |
+| [Guía de publicación](docs/GUIA-PUBLICACION.md) | quien la sube a las tiendas |
+| [Política de privacidad](docs/PRIVACIDAD.md) | todo el mundo |
+| [Decisiones de arquitectura](docs/adr/) | quien se pregunta «¿y por qué así?» |
 
-Rellena después `config/firebase.local.json` con tus valores reales.
+Los manuales en **HTML y PDF** —con portada, índice, estilo propio y, en el de
+usuario, **capturas de la app incrustadas**— se generan con
+[`docs/build-docs.sh`](docs/build-docs.sh) (Python y un navegador sin ventana,
+sin Pandoc) y se adjuntan a cada
+[Release](https://github.com/braisgaldo/shardpay/releases). Cada uno sale como un
+único fichero, sin carpeta de imágenes al lado. No se versionan: la fuente es el
+Markdown de `docs/`.
 
-### 2. Variables esperadas
+## Privacidad, en corto
 
-El fichero local debe contener estos campos:
+- El texto de los tickets se reconoce **en tu móvil**, con ML Kit. Las fotos no
+  se envían a ningún servicio de terceros.
+- Los datos de un grupo los ven **los miembros de ese grupo**.
+- **No hay analítica, ni telemetría, ni publicidad.**
+- Solo dos permisos: cámara y notificaciones, los dos opcionales y justificados
+  en [ADR-0006](docs/adr/0006-permisos-y-privacidad.md).
 
-- `FIREBASE_API_KEY`
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_MESSAGING_SENDER_ID`
-- `FIREBASE_STORAGE_BUCKET`
-- `FIREBASE_ANDROID_APP_ID`
-- `FIREBASE_IOS_APP_ID`
-- `FIREBASE_IOS_BUNDLE_ID`
-- `GOOGLE_SERVER_CLIENT_ID`
-- `GOOGLE_IOS_CLIENT_ID`
+Política completa: <https://braisgaldo.github.io/shardpay/privacidad.html>
 
-### 3. Enlazar el proyecto Firebase
+## Invítame a un café
 
-```powershell
-npx firebase login
-npx firebase use --add
-```
+ShardPay es **gratuita y completa**. No hay versión de pago, no hay funciones
+reservadas y no las va a haber.
 
-Si necesitas reconfigurar artefactos Firebase del proyecto:
+Si te resulta útil, puedes [invitarme a un café](https://revolut.me/brais2oz6).
+**No desbloquea absolutamente nada**: ni funciones, ni temas, ni contenido. Es un
+agradecimiento por algo que ya tienes entero.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\configure-firebase.ps1
-```
+Por eso mismo el proyecto **no incluye ninguna biblioteca de facturación** de
+ninguna tienda, y hay una comprobación en integración continua que falla si
+alguna se cuela. El razonamiento completo, con las políticas de Google y de
+Apple citadas, está en
+[ADR-0008](docs/adr/0008-donacion-y-politicas-de-tienda.md).
 
-### 4. Ejecutar con Firebase activo
+## Contribuir
 
-```powershell
-.\tools\flutter\bin\flutter run -d emulator-5554 --dart-define-from-file=.\config\firebase.local.json
-```
+Las normas están en [`CONTRIBUTING.md`](CONTRIBUTING.md). En resumen: commits en
+castellano, todo lo que entre en `lib/core/` con pruebas, y nada de texto fijo en
+la interfaz.
 
-Si `firebase.local.json` no existe, la app entra en modo demo local automáticamente.
+Para fallos de seguridad, [`SECURITY.md`](SECURITY.md) — **no** una incidencia
+pública.
 
-## Comandos útiles
+Contacto: [ghatostudioofficial@gmail.com](mailto:ghatostudioofficial@gmail.com)
 
-Instalar dependencias:
+## Licencia
 
-```powershell
-.\tools\flutter\bin\flutter pub get
-```
-
-Analizar el proyecto:
-
-```powershell
-.\tools\flutter\bin\flutter analyze lib test
-```
-
-Ejecutar tests:
-
-```powershell
-.\tools\flutter\bin\flutter test
-```
-
-Generar APK release:
-
-```powershell
-.\tools\flutter\bin\flutter build apk --dart-define-from-file=config/firebase.local.json
-```
-
-Instalar APK en un dispositivo conectado:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" -s <DEVICE_ID> install -r "build\app\outputs\flutter-apk\app-release.apk"
-```
-
-## Cómo ampliar el desarrollo
-
-### Añadir una nueva funcionalidad de producto
-
-1. Define o extiende el modelo en [lib/models/app_models.dart](lib/models/app_models.dart).
-2. Añade la firma necesaria en [lib/repositories/app_repository.dart](lib/repositories/app_repository.dart).
-3. Implementa el cambio en Firebase y mock para no romper el modo demo:
-	[lib/repositories/firebase/firebase_app_repository.dart](lib/repositories/firebase/firebase_app_repository.dart)
-	[lib/repositories/mock/mock_app_repository.dart](lib/repositories/mock/mock_app_repository.dart)
-4. Expón el estado desde providers si hace falta en [lib/app/providers.dart](lib/app/providers.dart).
-5. Conecta la UI en la pantalla correspondiente dentro de [lib/screens](lib/screens).
-
-### Añadir una nueva pantalla
-
-1. Crea la pantalla en `lib/screens/...`.
-2. Mantén la lógica de acceso a datos en repositorio, no en widgets.
-3. Reutiliza `tr(...)` desde [lib/app/app_text.dart](lib/app/app_text.dart) para no dejar textos sin traducir.
-4. Usa `sortedMembersByName(...)` y `group.visibleMembers` cuando el flujo deba incluir miembros pendientes.
-
-### Añadir nuevas categorías o divisas
-
-- Categorías por defecto: [lib/core/defaults.dart](lib/core/defaults.dart).
-- Divisas disponibles: [lib/core/defaults.dart](lib/core/defaults.dart).
-
-### Mejorar i18n
-
-La base actual usa `tr(...)` y `localeTag(...)` en [lib/app/app_text.dart](lib/app/app_text.dart). Si el proyecto crece, el siguiente paso razonable es migrar a un sistema basado en ARB y generación de localizaciones para evitar textos embebidos en widgets.
-
-### Escalar persistencia
-
-Ahora mismo los gastos viven embebidos en cada grupo. Para grupos con mucho histórico, conviene mover `expenses` a subcolecciones Firestore y calcular agregados ligeros para listados.
-
-## Convenciones de este repo
-
-- Mantén la paridad entre repositorio Firebase y mock.
-- No subas secretos: `config/firebase.local.json`, `google-services.json` y credenciales nativas están ignorados.
-- Usa el Flutter local del repo para evitar diferencias de versión.
-- Valida siempre con análisis y tests antes de generar APK.
-
-## Riesgos y próximos pasos recomendados
-
-- Migrar textos restantes a un sistema de localización más estructurado.
-- Separar gastos en subcolecciones si el volumen real crece.
-- Añadir persistencia de preferencias locales de tema e idioma.
-- Añadir más tests de repositorio y flujos de grupo.
+[Apache-2.0](LICENSE). Se eligió por dos motivos: incluye concesión expresa de
+patentes, y es compatible con la distribución en la App Store, cosa que la GPL-3
+no es.

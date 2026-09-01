@@ -1,0 +1,210 @@
+/* Página del proyecto y política de privacidad.
+   Mismos tokens de color que el tema «Claro Arena» de la app, con su hermana
+   oscura, para que la web y la app se reconozcan como lo mismo. */
+
+:root {
+  color-scheme: light dark;
+  --lienzo: #f6efe8;
+  --papel: #fffbf8;
+  --tinta: #101522;
+  --suave: #6b6558;
+  --acento: #c9431f;
+  --secundario: #f3c677;
+  --linea: #e6ddd3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lienzo: #0e121a;
+    --papel: #161c27;
+    --tinta: #f6f2ec;
+    --suave: #9aa3b2;
+    --acento: #ff7a59;
+    --secundario: #4cc9f0;
+    --linea: #28303d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--lienzo);
+  color: var(--tinta);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+a { color: var(--acento); }
+
+.hero {
+  text-align: center;
+  padding: 4.5rem 1.5rem 3.5rem;
+  background: var(--papel);
+  border-bottom: 1px solid var(--linea);
+}
+
+.hero h1 {
+  margin: 1rem 0 0.2rem;
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.lema {
+  margin: 0 0 1.2rem;
+  font-size: 1.3rem;
+  color: var(--acento);
+  font-weight: 700;
+}
+
+.entradilla {
+  max-width: 34rem;
+  margin: 0 auto 2rem;
+  color: var(--suave);
+}
+
+.acciones {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.boton {
+  display: inline-block;
+  /* 48 px de alto minimo: la misma regla de area tactil que en la app. */
+  min-height: 48px;
+  padding: 0.85rem 1.6rem;
+  border-radius: 999px;
+  background: var(--acento);
+  color: var(--papel);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.boton.secundario {
+  background: transparent;
+  color: var(--acento);
+  border: 2px solid var(--acento);
+}
+
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+section { margin-bottom: 3.5rem; }
+
+h2 {
+  font-size: 1.7rem;
+  font-weight: 800;
+  margin-bottom: 1.2rem;
+}
+
+h3 {
+  font-size: 1.12rem;
+  margin: 0 0 0.5rem;
+}
+
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.2rem;
+}
+
+.rejilla article {
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: 20px;
+  padding: 1.4rem 1.5rem;
+}
+
+.rejilla p {
+  margin: 0;
+  color: var(--suave);
+  font-size: 0.96rem;
+}
+
+.cafe {
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: 24px;
+  padding: 2rem 1.8rem;
+  text-align: center;
+}
+
+.cafe p { color: var(--suave); }
+.cafe strong { color: var(--tinta); }
+
+.enlaces {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.enlaces li {
+  border-bottom: 1px solid var(--linea);
+  padding: 0.75rem 0;
+}
+
+footer {
+  border-top: 1px solid var(--linea);
+  padding: 2rem 1.5rem 3rem;
+  text-align: center;
+  color: var(--suave);
+  font-size: 0.9rem;
+}
+
+/* Política de privacidad, generada con Pandoc dentro de este mismo sitio. */
+body > h1.title,
+body > .subtitle,
+body > #TOC,
+body > p,
+body > h1,
+body > h2,
+body > h3,
+body > ul,
+body > ol,
+body > table,
+body > blockquote,
+body > hr {
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+#TOC {
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: 16px;
+  padding: 1.2rem 1.6rem;
+  margin-top: 2rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.94rem;
+  display: block;
+  overflow-x: auto;
+}
+
+th, td {
+  border: 1px solid var(--linea);
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: var(--papel); }
+
+blockquote {
+  border-left: 4px solid var(--acento);
+  color: var(--suave);
+  margin-left: 0;
+}
