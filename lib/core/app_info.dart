@@ -14,7 +14,7 @@ class AppInfo {
   const AppInfo._();
 
   /// Versión semántica. Coincide con `version` en `pubspec.yaml`.
-  static const String version = String.fromEnvironment('SHARDPAY_VERSION', defaultValue: '1.0.0');
+  static const String version = String.fromEnvironment('SHARDPAY_VERSION', defaultValue: '1.1.0');
 
   /// Número de compilación monótono (`versionCode` en Android).
   ///

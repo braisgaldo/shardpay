@@ -5,7 +5,7 @@ Todos los cambios reseñables de ShardPay se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [1.1.0] — 2026-09-01
 
 ### Añadido
 
@@ -272,7 +272,7 @@ versionado sigue [SemVer](https://semver.org/lang/es/).
   proveedor `autoDispose`, que lo crea y lo destruye en el acto: la exportación
   de datos habría salido siempre sin ningún grupo.
 
-## [1.0.0] — pendiente
+## [1.0.0] — 2026-03-14
 
-Primera versión publicable. Se cerrará cuando se cumpla la lista de
-`docs/GUIA-PUBLICACION.md`.
+Primera etiqueta del proyecto, con un APK de la app antes de esta entrega. Se
+mantiene por no romper a quien la tuviera fijada.

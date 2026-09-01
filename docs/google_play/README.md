@@ -35,7 +35,7 @@ SHA-1:       3D:E5:D5:5C:26:77:F8:95:DD:D4:55:08:FA:EE:A6:DA:0C:A2:1A:04
 Se comprueba así, y conviene hacerlo antes de cada envío:
 
 ```bash
-keytool -printcert -jarfile app/shardpay-1.0.0.aab | grep -i propietario
+keytool -printcert -jarfile app/shardpay-1.1.0.aab | grep -i propietario
 ```
 
 Si dijera `CN=Android Debug`, Gradle no encontró `android/key.properties` y Play
