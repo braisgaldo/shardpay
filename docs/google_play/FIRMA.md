@@ -122,4 +122,12 @@ de verdad hay que subir el almacén como secreto:
 3. Un paso previo al build que reconstruya el `.jks` y escriba `key.properties`.
 
 Mientras eso no exista, **el paquete que se sube a Play se compila a mano**, no
-lo produce la CI.
+lo produce la CI. El workflow **falla a propósito** si el secreto no está: antes
+avisaba y seguía, y el resultado era una Release con un AAB firmado en
+depuración —un fichero que parece la app, pesa como la app y Play rechaza—.
+Publicar eso es peor que no publicar nada.
+
+Hay además una comprobación después de compilar que mira el certificado del
+artefacto de verdad, porque que exista `key.properties` no garantiza que Gradle
+lo haya usado: una ruta mal resuelta en `storeFile` deja el paquete firmado en
+depuración sin que nada falle.

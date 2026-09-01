@@ -77,9 +77,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          # Antes esto avisaba y seguía. El resultado era una Release con un AAB
+          # firmado en depuración: un fichero que parece la app, pesa como la
+          # app, y Play rechaza. Publicar eso es peor que no publicar nada, así
+          # que ahora se para aquí.
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::Sin ANDROID_KEYSTORE_BASE64: el AAB se firmará con la clave de depuración y NO se puede subir a Play."
-            exit 0
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64. Sin él, el AAB se firma con la clave de depuración y Play lo rechaza."
+            echo "Configúralo con:  base64 -w0 android/shardpay-upload.jks"
+            echo "y añade además ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD y ANDROID_KEY_ALIAS."
+            echo "El detalle está en docs/google_play/FIRMA.md."
+            exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/shardpay-release.jks"
           cat > android/key.properties <<EOF
@@ -129,6 +136,18 @@ jobs:
         env:
           SHARDPAY_VERSION: ${{ steps.version.outputs.version }}
         run: bash docs/build-docs.sh
+
+      # Que exista key.properties no garantiza que Gradle lo haya usado: una ruta
+      # mal resuelta en storeFile deja el paquete firmado en depuración sin que
+      # nada falle. Se comprueba el certificado del artefacto de verdad.
+      - name: Comprobar que el AAB no va firmado en depuración
+        run: |
+          CERT=$(keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab | grep -iE -m1 'owner|propietario')
+          echo "$CERT"
+          if echo "$CERT" | grep -qi 'Android Debug'; then
+            echo "::error::El AAB va firmado con la clave de depuración. Play lo rechazaría."
+            exit 1
+          fi
 
       - name: Renombrar los artefactos
         run: |
