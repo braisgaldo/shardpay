@@ -111,15 +111,21 @@ pwsh scripts/crear-clave-subida.ps1
 
 ## Para la CI
 
-`.github/workflows/release.yml` compila sin `key.properties`, así que **lo que
-publica la CI hoy va firmado con la clave de depuración**. Para que la CI firme
-de verdad hay que subir el almacén como secreto:
+`.github/workflows/release.yml` ya trae el paso que reconstruye el almacén desde
+un secreto; lo que falta es **crear los secretos**. En GitHub → Settings →
+Secrets and variables → Actions, con estos nombres exactos:
 
-1. `base64 -w0 android/shardpay-upload.jks` y guardarlo como secreto
-   `ANDROID_KEYSTORE_BASE64`.
-2. La contraseña y el alias como `ANDROID_KEYSTORE_PASSWORD` y
-   `ANDROID_KEY_ALIAS`.
-3. Un paso previo al build que reconstruya el `.jks` y escriba `key.properties`.
+| Secreto | Valor |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 android/shardpay-upload.jks` |
+| `ANDROID_STORE_PASSWORD` | la contraseña de `android/key.properties` |
+| `ANDROID_KEY_PASSWORD` | la misma |
+| `ANDROID_KEY_ALIAS` | `shardpay` |
+
+Y los de Firebase, o la CI publicará una app en modo de demostración:
+`FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_MESSAGING_SENDER_ID`,
+`FIREBASE_STORAGE_BUCKET`, `FIREBASE_ANDROID_APP_ID` y
+`GOOGLE_SERVER_CLIENT_ID`, todos en `config/firebase.local.json`.
 
 Mientras eso no exista, **el paquete que se sube a Play se compila a mano**, no
 lo produce la CI. El workflow **falla a propósito** si el secreto no está: antes
