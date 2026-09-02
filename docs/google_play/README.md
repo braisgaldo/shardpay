@@ -3,12 +3,12 @@
 Todo lo que hace falta para la ficha, en una carpeta, en el orden en que Play
 Console lo pide.
 
-> **Estado: 1.2.0 lista para subir, firmada con la clave de subida real.**
+> **Estado: 1.2.1 lista para subir, firmada con la clave de subida real.**
 >
-> **La 1.1.0 que está en pruebas internas tiene un fallo grave**: entrar en un
-> grupo por invitación falla para unas tres de cada cuatro personas. No abras la
-> prueba cerrada con ella; sube la 1.2.0 antes. El detalle está en el epílogo de
-> [ADR-0009](../adr/0009-lectura-de-invitaciones.md).
+> La 1.2.0 ya está en pruebas internas y sirve: arregla el fallo que impedía
+> entrar por invitación a tres de cada cuatro personas. La 1.2.1 solo quita el
+> permiso de micrófono del paquete y deja de guardar el token de notificaciones
+> de quien las rechaza; las dos cosas se ven en la ficha, no en la app.
 
 ## Qué hay aquí
 
@@ -38,7 +38,7 @@ SHA-1:       3D:E5:D5:5C:26:77:F8:95:DD:D4:55:08:FA:EE:A6:DA:0C:A2:1A:04
 Se comprueba así, y conviene hacerlo antes de cada envío:
 
 ```bash
-keytool -printcert -jarfile app/shardpay-1.2.0.aab | grep -i propietario
+keytool -printcert -jarfile app/shardpay-1.2.1.aab | grep -i propietario
 ```
 
 Si dijera `CN=Android Debug`, Gradle no encontró `android/key.properties` y Play
@@ -185,8 +185,8 @@ Cuando eso funcione, producción.
 ```bash
 # El versionCode sigue la formula AAMMDDNN de docs/INSTALL.md, y tiene que subir
 # en cada envio: Play rechaza un versionCode ya usado.
-VERSION=1.2.0
-BUILD=26090201
+VERSION=1.2.1
+BUILD=26090202
 
 flutter build appbundle --release   --dart-define-from-file=config/firebase.local.json   --dart-define=SHARDPAY_VERSION=$VERSION   --dart-define=SHARDPAY_BUILD=$BUILD   --dart-define=SHARDPAY_COMMIT=$(git rev-parse --short HEAD)   --dart-define=SHARDPAY_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)   --build-name=$VERSION --build-number=$BUILD
 
