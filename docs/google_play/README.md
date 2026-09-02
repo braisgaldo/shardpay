@@ -3,9 +3,12 @@
 Todo lo que hace falta para la ficha, en una carpeta, en el orden en que Play
 Console lo pide.
 
-> **Estado: el paquete ya está firmado con la clave de subida real.** Lo que
-> queda antes de publicar está en la lista de más abajo; nada de eso impide
-> subirlo a pruebas internas.
+> **Estado: 1.2.0 lista para subir, firmada con la clave de subida real.**
+>
+> **La 1.1.0 que está en pruebas internas tiene un fallo grave**: entrar en un
+> grupo por invitación falla para unas tres de cada cuatro personas. No abras la
+> prueba cerrada con ella; sube la 1.2.0 antes. El detalle está en el epílogo de
+> [ADR-0009](../adr/0009-lectura-de-invitaciones.md).
 
 ## Qué hay aquí
 
@@ -35,7 +38,7 @@ SHA-1:       3D:E5:D5:5C:26:77:F8:95:DD:D4:55:08:FA:EE:A6:DA:0C:A2:1A:04
 Se comprueba así, y conviene hacerlo antes de cada envío:
 
 ```bash
-keytool -printcert -jarfile app/shardpay-1.1.0.aab | grep -i propietario
+keytool -printcert -jarfile app/shardpay-1.2.0.aab | grep -i propietario
 ```
 
 Si dijera `CN=Android Debug`, Gradle no encontró `android/key.properties` y Play
@@ -47,10 +50,10 @@ paso de Play App Signing que no se ve fallar— está en [`FIRMA.md`](FIRMA.md).
 - [x] Clave de subida creada, en formato PKCS12
 - [x] `.aab` firmado con esa clave y verificado
 - [x] SHA-1 y SHA-256 de la clave de subida registrados en Firebase
-- [ ] **Guardar una copia del `.jks` y de `key.properties` fuera de este
-      ordenador.** No hay ninguna otra: los dos están fuera de git
-- [ ] SHA-1 de Play App Signing registrado en Firebase (después del primer envío;
-      sin esto el acceso con Google falla para todo el mundo menos para ti)
+- [x] Copia del `.jks` y de `key.properties` guardada fuera de este ordenador
+- [x] SHA-1 de Play App Signing registrado en Firebase
+      (`A1:75:DF:D5:7A:78:95:03:02:3D:B9:13:07:56:B9:FD:9C:28:9A:83`). Queda
+      comprobar el acceso con Google **instalando desde Play**, no por USB
 - [ ] **App Check activado** — es la capa de control de gasto que falta desde que
       el proyecto está en Blaze ([ADR-0010](../adr/0010-plan-blaze-y-control-de-gasto.md))
 - [ ] Presupuesto de 5 € con alertas configurado en Cloud Billing
@@ -152,9 +155,23 @@ Cuando eso funcione, producción.
 ## Regenerar todo
 
 ```bash
-flutter build appbundle --release --dart-define-from-file=config/firebase.local.json
-flutter build apk        --release --dart-define-from-file=config/firebase.local.json
+# El versionCode sigue la formula AAMMDDNN de docs/INSTALL.md, y tiene que subir
+# en cada envio: Play rechaza un versionCode ya usado.
+VERSION=1.2.0
+BUILD=26090201
+
+flutter build appbundle --release   --dart-define-from-file=config/firebase.local.json   --dart-define=SHARDPAY_VERSION=$VERSION   --dart-define=SHARDPAY_BUILD=$BUILD   --dart-define=SHARDPAY_COMMIT=$(git rev-parse --short HEAD)   --dart-define=SHARDPAY_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)   --build-name=$VERSION --build-number=$BUILD
+
+flutter build apk --release <las mismas opciones>
+
 python scripts/graficos_play.py    # icono, gráfico destacado y capturas a 9:16
+```
+
+Comprueba las dos cosas que Play rechaza, antes de subir:
+
+```bash
+keytool -printcert -jarfile app/shardpay-$VERSION.aab | grep -i propietario  # CN=Ghato Studio
+aapt2 dump badging app/shardpay-$VERSION.apk | head -1                       # versionCode nuevo
 ```
 
 Si compilas **sin** `--dart-define-from-file`, la app se publica en **modo de

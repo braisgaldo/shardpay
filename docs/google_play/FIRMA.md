@@ -92,6 +92,11 @@ Después del primer envío:
    aplicación** → certificado de firma de apps.
 2. Copia su SHA-1 y regístralo también:
 
+**Ya está hecho** para esta app: el SHA-1 de Play App Signing es
+`A1:75:DF:D5:7A:78:95:03:02:3D:B9:13:07:56:B9:FD:9C:28:9A:83` y está registrado.
+Lo que queda es comprobarlo instalando **desde Play**, porque por USB se instala
+el paquete firmado con la clave de subida y el fallo no se ve.
+
 ```bash
 npx firebase apps:android:sha:create \
   1:626260906991:android:8749331d8c852a841f5c1a <SHA-1-de-Play> --project shardpay

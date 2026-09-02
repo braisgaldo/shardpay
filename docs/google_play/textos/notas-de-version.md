@@ -1,4 +1,4 @@
-# Notas de la versión 1.1.0
+# Notas de la versión 1.2.0
 
 Play Console pide las notas **por idioma**, con un límite de **500 caracteres**
 cada una. Se pueden pegar todas de golpe usando las etiquetas de abajo: en el
@@ -9,196 +9,131 @@ en la vista de código que ofrece la consola.
 > creado los catorce, pega el bloque igualmente: Play ignora los que no
 > reconoce, y luego los rellena al añadir cada ficha.
 
-Las notas son cortas a propósito. Nadie las lee enteras, y las tres cosas que
-importan de esta versión caben en dos líneas.
+Lo importante de esta versión es el **arreglo**: en la 1.1.0, entrar en un grupo
+por invitación fallaba para unas tres de cada cuatro personas. Va primero porque
+es lo que más gente notó.
 
 ## Bloque completo para pegar
 
 ```xml
 <es-ES>
-Novedades:
-
-• Lector de tickets con la cámara: reconoce las líneas y los importes, y
-  comprueba que la suma cuadre con el total impreso.
-• Tour guiado la primera vez, relanzable desde Ajustes.
-• Saldos del grupo con el mínimo número de pagos para dejarlo todo a cero.
-• Copias de seguridad de tus datos en un fichero propio.
-• Catorce idiomas y trece paletas, en claro y en oscuro.
-
-Gratis y completa, sin anuncios.
+• Arreglado: entrar en un grupo con código y PIN fallaba para la mayoría de la
+  gente. Ya funciona.
+• Quien administra un grupo puede quitar a alguien. Sus gastos se quedan y los
+  saldos siguen cuadrando.
+• Al borrar tu cuenta desaparecen también tu nombre y tu correo de los grupos en
+  los que estabas.
 </es-ES>
 <en-US>
-What's new:
-
-• Receipt reader with the camera: it picks up the lines and amounts, and checks
-  they add up to the printed total.
-• Guided tour on first run, replayable from Settings.
-• Group balances with the fewest payments needed to settle up.
-• Back up your data to a file of your own.
-• Fourteen languages and thirteen palettes, light and dark.
-
-Free and complete, no ads.
+• Fixed: joining a group with a code and PIN failed for most people. It works
+  now.
+• Group admins can remove someone. Their expenses stay and the balances still
+  add up.
+• Deleting your account now also removes your name and email from the groups you
+  were in.
 </en-US>
 <gl-ES>
-Novidades:
-
-• Lector de tickets coa cámara: recoñece as liñas e os importes, e comproba que
-  a suma cadre co total impreso.
-• Titorial guiado a primeira vez, que se pode repetir desde Axustes.
-• Saldos do grupo co mínimo número de pagos para deixalo todo a cero.
-• Copias de seguridade dos teus datos nun ficheiro propio.
-• Catorce idiomas e trece paletas, en claro e en escuro.
-
-Gratuíta e completa, sen anuncios.
+• Arranxado: entrar nun grupo con código e PIN fallaba para a maioría da xente.
+  Xa funciona.
+• Quen administra un grupo pode quitar a alguén. Os seus gastos quedan e os
+  saldos seguen cadrando.
+• Ao borrar a túa conta desaparecen tamén o teu nome e o teu correo dos grupos
+  nos que estabas.
 </gl-ES>
 <ca>
-Novetats:
-
-• Lector de tiquets amb la càmera: reconeix les línies i els imports, i comprova
-  que la suma quadri amb el total imprès.
-• Tour guiat el primer cop, que pots repetir des d'Ajustaments.
-• Saldos del grup amb el mínim nombre de pagaments per deixar-ho tot a zero.
-• Còpies de seguretat de les teves dades en un fitxer propi.
-• Catorze idiomes i tretze paletes, en clar i en fosc.
-
-Gratuïta i completa, sense anuncis.
+• Corregit: entrar en un grup amb codi i PIN fallava per a la majoria de la gent.
+  Ja funciona.
+• Qui administra un grup pot treure algú. Les seves despeses es queden i els
+  saldos continuen quadrant.
+• En esborrar el teu compte desapareixen també el teu nom i el teu correu dels
+  grups on eres.
 </ca>
 <eu-ES>
-Berritasunak:
-
-• Tiketen irakurgailua kamerarekin: lerroak eta zenbatekoak antzematen ditu, eta
-  batura inprimatutako guztizkoarekin bat datorrela egiaztatzen du.
-• Bisita gidatua lehen aldian, Ezarpenetatik berriz ikusgai.
-• Taldearen saldoak, dena zerora uzteko ordainketa gutxienekin.
-• Zure datuen babeskopiak fitxategi propio batean.
-• Hamalau hizkuntza eta hamahiru paleta, argian eta ilunean.
-
-Doakoa eta osoa, iragarkirik gabe.
+• Konpondua: taldean kodearekin eta PINarekin sartzea gehienei huts egiten
+  zitzaien. Orain badabil.
+• Taldea kudeatzen duenak norbait kendu dezake. Haren gastuak gelditzen dira eta
+  saldoek bat egiten jarraitzen dute.
+• Kontua ezabatzean zure izena eta helbide elektronikoa ere desagertzen dira
+  zeunden taldeetatik.
 </eu-ES>
 <fr-FR>
-Nouveautés :
-
-• Lecteur de tickets avec l'appareil photo : il reconnaît les lignes et les
-  montants, et vérifie que la somme correspond au total imprimé.
-• Visite guidée au premier lancement, à revoir depuis les Réglages.
-• Soldes du groupe avec le minimum de paiements pour tout remettre à zéro.
-• Sauvegarde de vos données dans un fichier à vous.
-• Quatorze langues et treize palettes, en clair et en sombre.
-
-Gratuite et complète, sans publicité.
+• Corrigé : rejoindre un groupe avec un code et un PIN échouait pour la plupart
+  des gens. C'est réparé.
+• Qui administre un groupe peut en retirer quelqu'un. Ses dépenses restent et les
+  soldes restent justes.
+• Supprimer votre compte efface aussi votre nom et votre e-mail des groupes où
+  vous étiez.
 </fr-FR>
 <it-IT>
-Novità:
-
-• Lettore di scontrini con la fotocamera: riconosce le voci e gli importi e
-  verifica che la somma torni con il totale stampato.
-• Tour guidato al primo avvio, ripetibile dalle Impostazioni.
-• Saldi del gruppo con il minimo numero di pagamenti per azzerare tutto.
-• Backup dei tuoi dati in un file tuo.
-• Quattordici lingue e tredici palette, in chiaro e in scuro.
-
-Gratuita e completa, senza pubblicità.
+• Corretto: entrare in un gruppo con codice e PIN non funzionava per la maggior
+  parte delle persone. Ora funziona.
+• Chi amministra un gruppo può rimuovere qualcuno. Le sue spese restano e i saldi
+  tornano.
+• Eliminando il tuo account spariscono anche nome ed email dai gruppi in cui
+  eri.
 </it-IT>
 <pt-PT>
-Novidades:
-
-• Leitor de faturas com a câmara: reconhece as linhas e os valores e confirma
-  que a soma bate certo com o total impresso.
-• Visita guiada na primeira vez, repetível nas Definições.
-• Saldos do grupo com o mínimo de pagamentos para ficar tudo a zero.
-• Cópias de segurança dos teus dados num ficheiro teu.
-• Catorze idiomas e treze paletas, em claro e em escuro.
-
-Gratuita e completa, sem anúncios.
+• Corrigido: entrar num grupo com código e PIN falhava para a maioria das
+  pessoas. Já funciona.
+• Quem administra um grupo pode remover alguém. As despesas ficam e os saldos
+  continuam a bater certo.
+• Ao apagar a tua conta desaparecem também o teu nome e o teu email dos grupos
+  onde estavas.
 </pt-PT>
 <de-DE>
-Neu:
-
-• Belegleser mit der Kamera: erkennt Positionen und Beträge und prüft, ob die
-  Summe zur gedruckten Gesamtsumme passt.
-• Geführte Tour beim ersten Start, jederzeit erneut in den Einstellungen.
-• Gruppensalden mit der kleinsten Zahl an Zahlungen, um alles auszugleichen.
-• Sicherung deiner Daten in einer eigenen Datei.
-• Vierzehn Sprachen und dreizehn Farbwelten, hell und dunkel.
-
-Kostenlos und vollständig, ohne Werbung.
+• Behoben: einer Gruppe mit Code und PIN beizutreten scheiterte bei den meisten.
+  Jetzt geht es.
+• Wer eine Gruppe verwaltet, kann jemanden entfernen. Die Ausgaben bleiben und
+  die Salden stimmen weiter.
+• Beim Löschen deines Kontos verschwinden auch Name und E-Mail aus den Gruppen,
+  in denen du warst.
 </de-DE>
 <el-GR>
-Τι νέο υπάρχει:
-
-• Ανάγνωση αποδείξεων με την κάμερα: αναγνωρίζει τις γραμμές και τα ποσά και
-  ελέγχει ότι το άθροισμα βγαίνει με το εκτυπωμένο σύνολο.
-• Ξενάγηση την πρώτη φορά, με δυνατότητα επανάληψης από τις Ρυθμίσεις.
-• Υπόλοιπα της ομάδας με τις λιγότερες πληρωμές για να μηδενίσουν όλα.
-• Αντίγραφα ασφαλείας των δεδομένων σου σε δικό σου αρχείο.
-• Δεκατέσσερις γλώσσες και δεκατρείς παλέτες, σε φωτεινό και σκούρο.
-
-Δωρεάν και πλήρης, χωρίς διαφημίσεις.
+• Διορθώθηκε: η είσοδος σε ομάδα με κωδικό και PIN αποτύγχανε για τους
+  περισσότερους. Τώρα δουλεύει.
+• Όποιος διαχειρίζεται μια ομάδα μπορεί να αφαιρέσει κάποιον. Τα έξοδά του
+  μένουν και τα υπόλοιπα βγαίνουν.
+• Διαγράφοντας τον λογαριασμό σου φεύγουν και το όνομα και το email σου από τις
+  ομάδες.
 </el-GR>
 <ru-RU>
-Что нового:
-
-• Чтение чеков камерой: распознаёт позиции и суммы и проверяет, сходится ли
-  итог с напечатанным.
-• Обучающий тур при первом запуске, можно повторить из настроек.
-• Балансы группы с минимальным числом переводов, чтобы всё свести к нулю.
-• Резервные копии ваших данных в собственном файле.
-• Четырнадцать языков и тринадцать палитр, светлая и тёмная тема.
-
-Бесплатно и полностью, без рекламы.
+• Исправлено: вход в группу по коду и PIN не работал у большинства. Теперь
+  работает.
+• Администратор группы может удалить участника. Его расходы остаются, и балансы
+  сходятся.
+• При удалении аккаунта из групп исчезают также ваше имя и адрес почты.
 </ru-RU>
 <ar>
-الجديد:
-
-• قارئ الإيصالات بالكاميرا: يتعرّف على البنود والمبالغ ويتحقّق من مطابقة المجموع
-  للإجمالي المطبوع.
-• جولة تعريفية في أول تشغيل، ويمكن إعادتها من الإعدادات.
-• أرصدة المجموعة بأقل عدد من الدفعات لتصفية الحساب.
-• نسخ احتياطي لبياناتك في ملف خاص بك.
-• أربعة عشر لغة وثلاث عشرة مجموعة ألوان، في الوضع الفاتح والداكن.
-
-مجاني وكامل، بلا إعلانات.
+• تم الإصلاح: الانضمام إلى مجموعة برمز ورقم سري كان يفشل لمعظم الناس. يعمل الآن.
+• من يدير المجموعة يمكنه إزالة أحد الأعضاء. تبقى مصروفاته وتظل الأرصدة متوازنة.
+• حذف حسابك يحذف أيضًا اسمك وبريدك من المجموعات التي كنت فيها.
 </ar>
 <zh-CN>
-新功能：
-
-• 相机识别小票：读取明细和金额，并核对合计是否与打印总额一致。
-• 首次启动有引导教程，之后可在「设置」里重看。
-• 群组余额，并给出结清所需的最少转账笔数。
-• 把数据备份成你自己的文件。
-• 十四种语言、十三套配色，支持浅色和深色。
-
-免费且完整，没有广告。
+• 已修复：用邀请码和 PIN 加入群组对大多数人失败的问题。现在可以正常加入了。
+• 群组管理员可以移出成员。该成员的支出保留，余额依然对得上。
+• 删除账号时，你的姓名和邮箱也会从所在群组中一并移除。
 </zh-CN>
 <ja-JP>
-新機能:
-
-• カメラでレシートを読み取り、明細と金額を認識して、印字された合計と一致するか
-  確認します。
-• 初回起動時のガイドツアー。設定からいつでも見直せます。
-• グループの残高と、精算に必要な最少回数の支払い。
-• データを自分のファイルにバックアップ。
-• 14 言語、13 種類の配色、ライトとダーク。
-
-無料で全機能、広告なし。
+• 修正: コードと PIN でグループに参加できない不具合。ほとんどの人に起きていました。
+• グループの管理者がメンバーを外せるようになりました。支出は残り、残高も合ったままです。
+• アカウントを削除すると、参加していたグループから名前とメールアドレスも消えます。
 </ja-JP>
 ```
 
 ## Para la primera versión de prueba interna
 
 Si solo vas a hacer una prueba interna contigo mismo, no hace falta nada de
-esto: con la línea del idioma por defecto sobra. Las notas completas hacen falta
-cuando la versión llega a producción.
+esto: con la línea del idioma por defecto sobra.
 
 ```
-Lector de tickets con la cámara, tour guiado, saldos y liquidación en un toque,
-copias de seguridad y catorce idiomas.
+Arreglado el fallo que impedía entrar en un grupo por invitación. Quien
+administra puede ahora quitar a alguien del grupo.
 ```
 
 ## Si en el futuro cambian
 
 Las notas describen **lo que ve el usuario**, no lo que cambió por dentro. De
-esta versión se han dejado fuera a propósito el cierre de los tres agujeros de
-las reglas de Firestore y la mejora de rendimiento del cálculo de saldos: son lo
-más importante que trae, y no le dicen nada a quien solo quiere repartir una
-cena. Están en el CHANGELOG y en las notas de la GitHub Release.
+esta versión se han dejado fuera a propósito el endurecimiento de las reglas de
+Firestore para que la expulsión se compruebe en el servidor, y la página pública
+de eliminación de cuenta que exige Google Play. Están en el CHANGELOG y en las
+notas de la GitHub Release.
