@@ -48,13 +48,26 @@ es un enlace externo a Revolut y ocurre **fuera** de la app
 
 | Dato | ¿Se recoge? | Para qué |
 | --- | --- | --- |
-| **Fotos** | Sí, **solo si el usuario adjunta una** | Guardar el ticket junto al gasto, si decide adjuntarlo |
+| **Fotos** | **No** | — |
 
-Punto importante y contraintuitivo: **la foto que se usa para leer un ticket no
-se recoge**. El reconocimiento de texto ocurre **entero en el dispositivo** con
-ML Kit, y el fichero temporal se borra al terminar (`ticket_ocr_service.dart`,
-bloque `finally`). Solo sale del móvil la imagen que el usuario decide adjuntar
-al gasto a propósito.
+Contraintuitivo, pero es que **no**: ninguna foto sale nunca del dispositivo.
+
+La foto de un ticket se usa para leerlo y ya está. El reconocimiento de texto
+ocurre **entero en el móvil** con ML Kit, y el fichero temporal se borra al
+terminar (`ticket_ocr_service.dart`, bloque `finally`).
+
+Tampoco hay forma de adjuntar una foto a un gasto: no existe esa pantalla. El
+proyecto tiene un `ReceiptStorageService` preparado para subirlas a Firebase
+Storage y los campos `receiptStoragePath` y `receiptDownloadUrl` en el modelo,
+pero **no los llama nadie** y esos campos están siempre en nulo. Comprobado con:
+
+```bash
+grep -rn "uploadReceipt" lib/          # solo la definición, ninguna llamada
+grep -rn "receiptStoragePath:" lib/    # nada fuera del propio modelo
+```
+
+Si algún día se activa esa función, esta respuesta pasa a ser «Sí» y hay que
+actualizar el formulario **antes** de publicar la versión que la traiga.
 
 ### Lo que NO se recoge
 

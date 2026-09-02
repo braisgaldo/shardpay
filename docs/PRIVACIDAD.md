@@ -14,8 +14,9 @@ Contacto: [ghatostudioofficial@gmail.com](mailto:ghatostudioofficial@gmail.com)
 
 ## En corto
 
-- Las fotos de tus tickets **se leen en tu propio móvil**. No se envían a ningún
-  servicio de terceros para reconocer el texto.
+- Las fotos de tus tickets **se leen en tu propio móvil** y no se guardan en
+  ninguna parte: ni se envían a un servicio de reconocimiento, ni se suben a la
+  nube, ni quedan asociadas al gasto.
 - Los datos de un grupo los ven **los miembros de ese grupo**, nadie más.
 - **No hay analítica, ni telemetría, ni publicidad, ni venta de datos.**
 - Puedes exportar todo lo tuyo y borrar tu cuenta desde la propia app.
@@ -39,7 +40,7 @@ Contacto: [ghatostudioofficial@gmail.com](mailto:ghatostudioofficial@gmail.com)
 | Grupos: nombre, descripción, moneda, miembros | Organizar los gastos |
 | Gastos: concepto, importe, fecha, categoría, notas | Calcular quién debe qué |
 | Repartos por persona | Calcular los saldos |
-| Fotos de tickets | **Solo si decides adjuntarlas** a un gasto |
+| Fotos de tickets | **Ninguna.** Se leen en tu móvil y no se guardan en ningún sitio |
 
 ### Los técnicos
 
@@ -84,7 +85,6 @@ ShardPay funciona sobre **Firebase**, de Google Ireland Limited:
 | --- | --- |
 | Firebase Authentication | Correo e identificador de usuario |
 | Cloud Firestore | Grupos, gastos y repartos |
-| Firebase Storage | Fotos de tickets, solo las que adjuntes |
 | Firebase Cloud Messaging | Token de notificaciones |
 
 Google actúa como **encargado del tratamiento**: procesa los datos por cuenta de
@@ -120,8 +120,9 @@ del sistema, que da acceso únicamente al fichero que elijas.
   porque borrarla sin más rompería el histórico de saldos del resto del grupo. Tu
   nombre, tu correo y tu foto se borran también de esa participación archivada.
   Lo que sí sigue visible para los miembros de esos grupos son los **gastos** que
-  creaste —importes, fechas, notas y fotos de ticket—, porque son de todo el
-  grupo, no solo tuyos. Si quieres que desaparezcan, bórralos antes.
+  creaste —importes, fechas y notas—, porque son de todo el grupo, no solo
+  tuyos. Si quieres que desaparezcan, bórralos antes: se pueden borrar uno a uno
+  sin borrar la cuenta.
 - **Si borras un grupo del que eres propietario**, se borra para todos.
 
 ---

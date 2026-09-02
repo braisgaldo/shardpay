@@ -85,10 +85,14 @@ marcada como **cuenta eliminada** y **tu nombre, tu correo y tu foto se borran d
 ella**: los demás miembros del grupo siguen viendo que hubo un gasto y cuánto
 costaba, pero ya no ven quién eras.
 
-Los importes, las fechas, las notas y las fotos de ticket **de los gastos que
-creaste** siguen visibles para los miembros de esos grupos, igual que antes.
-Si quieres que también desaparezcan, bórralos desde la app **antes** de eliminar
-la cuenta, o pídelo en el correo de solicitud.
+Los importes, las fechas y las notas **de los gastos que creaste** siguen
+visibles para los miembros de esos grupos, igual que antes. Si quieres que
+también desaparezcan, **bórralos antes** —se pueden borrar uno a uno sin eliminar
+la cuenta, como se explica más abajo— o pídelo en el correo de solicitud.
+
+**Las fotos de tickets no aparecen en ninguna de las dos listas** porque no se
+guardan en ningún sitio. La foto se usa para leer el ticket en tu propio móvil y
+se descarta ahí mismo: no se sube a la nube ni queda asociada al gasto.
 
 ### Periodos de retención adicionales
 
@@ -101,6 +105,32 @@ la cuenta, o pídelo en el correo de solicitud.
   que no está bajo mi control.
 - **No hay ningún periodo de gracia ni de reactivación.** No se puede recuperar
   una cuenta eliminada: si vuelves, empiezas de cero.
+
+---
+
+## Borrar datos concretos sin eliminar la cuenta
+
+No hace falta borrarlo todo para borrar algo. Desde la propia app, y sin pedir
+permiso a nadie:
+
+| Qué quieres borrar | Cómo |
+| --- | --- |
+| **Un gasto** —con su importe, su fecha y su nota— | Abre el grupo, pestaña **Gastos**, despliega el gasto y pulsa **Eliminar** |
+| **Un grupo entero**, con todos sus gastos, para todo el mundo | Abre el grupo → menú **⋮** → **Eliminar grupo**. Solo puede hacerlo quien lo administra |
+| **Tu participación en un grupo**, dejando el histórico del resto intacto | Abre el grupo → menú **⋮** → **Abandonar grupo** |
+| **El nombre con el que te ven** en un grupo | Abre el grupo → **Ajustes del grupo** → **Alias de miembros** |
+
+Todo eso se ejecuta en el momento y no se puede deshacer.
+
+**Si prefieres pedirlo por escrito**, escribe a
+[ghatostudioofficial@gmail.com](mailto:ghatostudioofficial@gmail.com) desde la
+dirección con la que te registraste, diciendo qué quieres que se borre. El plazo
+máximo de respuesta es de **30 días**.
+
+Un aviso honesto sobre los gastos de grupo: un gasto compartido no es solo tuyo.
+Si borras uno que pagaste, los saldos del resto del grupo cambian, porque esa
+deuda deja de existir para todos. Es lo correcto —el dato es tuyo y puedes
+borrarlo— pero conviene saberlo antes de hacerlo.
 
 ---
 
