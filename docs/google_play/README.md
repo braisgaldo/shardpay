@@ -87,6 +87,34 @@ formato: Play las pide todas juntas etiquetadas por idioma. Están listas para
 pegar en [`textos/notas-de-version.md`](textos/notas-de-version.md), las catorce
 y dentro del límite de 500 caracteres.
 
+### Categoría y etiquetas
+
+- **Tipo de aplicación**: aplicación, no juego.
+- **Categoría**: **Finanzas**.
+- **Etiquetas**: solo las que describan lo que la app hace de verdad. No hay que
+  llegar a cinco.
+
+**Finanzas y no Productividad** porque es donde busca la gente que necesita esto:
+Splitwise, Tricount y Settle Up están ahí. Productividad es más segura de cara a
+las políticas, pero nadie entra en Productividad buscando cómo repartir una cena.
+
+**Estar en Finanzas no contradice haber declarado que la app no tiene funciones
+financieras.** Son dos cosas distintas y conviene tenerlo claro por si alguien
+lo pregunta:
+
+- La **declaración de funciones financieras** habla de servicios regulados:
+  prestar dinero, procesar pagos, operar con valores, custodiar criptomonedas.
+  ShardPay no hace ninguno, y por eso va en blanco.
+- La **categoría** es solo el estante de la tienda donde la app aparece.
+
+**Etiquetas que NO hay que marcar**, aunque suenen cercanas: banca, préstamos,
+pagos, transferencias de dinero, carteras digitales, inversión, criptomonedas,
+impuestos, seguros y puntuación crediticia. Ninguna es cierta, y marcar una
+puede meter la ficha en la revisión de servicios financieros que precisamente se
+ha evitado al declarar que no hay funciones financieras. Las etiquetas salen de
+una lista fija que Play propone según la categoría, así que hay que elegir de lo
+que ofrezca; el criterio es ese.
+
 Gráficos:
 
 - **Icono**: `graficos/icono-512.png`
