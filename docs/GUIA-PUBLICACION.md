@@ -105,95 +105,177 @@ Plan sugerido:
 
 ### 2.2 Ficha de la tienda
 
-El texto en los trece idiomas está en [`store/ficha-play.md`](store/ficha-play.md).
+Los textos están en [`google_play/textos/`](google_play/textos/), **un fichero
+por idioma**, catorce en total. Las longitudes ya están comprobadas contra los
+límites.
 
 | Campo | Límite | Estado |
 | --- | --- | --- |
-| Título | 30 caracteres | listo |
-| Descripción corta | 80 caracteres | listo, en 13 idiomas |
-| Descripción larga | 4000 caracteres | listo, en 13 idiomas |
-| Icono | 512 × 512 PNG, 32 bits | **pendiente de exportar** |
-| Gráfico destacado | 1024 × 500 PNG o JPEG | **pendiente** |
-| Capturas de teléfono | 2 mínimo, 8 máximo, entre 320 y 3840 px | **pendiente** |
-| Capturas de tablet 7" | opcional | pendiente |
-| Capturas de tablet 10" | opcional | pendiente |
+| Título | 30 caracteres | listo, 14 idiomas |
+| Descripción corta | 80 caracteres | listo, 14 idiomas |
+| Descripción larga | 4000 caracteres | listo, 14 idiomas |
+| Icono | 512 × 512 PNG, 32 bits | listo — `google_play/graficos/icono-512.png` |
+| Gráfico destacado | 1024 × 500 | listo — `google_play/graficos/destacado-1024x500.png` |
+| Capturas de teléfono | 2 mínimo, 8 máximo | listo — ocho en `google_play/capturas/`, montadas a 9:16 |
+| Capturas de tablet | opcional | no hay |
 
-Las capturas se toman del dispositivo real y se guardan en
-`docs/store/capturas/`.
+Las **notas de la versión** van aparte, en el paso de crear la versión, y en otro
+formato: Play las pide todas juntas etiquetadas por idioma. Están listas para
+pegar en [`google_play/textos/notas-de-version.md`](google_play/textos/notas-de-version.md).
+
+#### Categoría y etiquetas
+
+- **Tipo**: aplicación, no juego.
+- **Categoría**: **Finanzas**.
+- **Etiquetas**: solo las que sean ciertas. No hay que llegar a cinco.
+
+Finanzas y no Productividad porque es donde busca la gente que necesita esto:
+Splitwise, Tricount y Settle Up están ahí.
+
+**No marcar** ninguna etiqueta de banca, préstamos, pagos, transferencias,
+carteras, inversión, criptomonedas, impuestos, seguros ni puntuación crediticia.
+Ninguna es cierta, y una sola puede meter la ficha en la revisión de servicios
+financieros que se evita declarando que no hay funciones financieras (§2.8).
 
 ### 2.3 Clasificación de contenido
 
-Cuestionario IARC. Respuestas para ShardPay:
-
-| Pregunta | Respuesta |
-| --- | --- |
-| Categoría de la app | Utilidades / Productividad |
-| Violencia | No |
-| Sexualidad | No |
-| Lenguaje soez | No |
-| Sustancias controladas | No |
-| Juegos de azar (simulados o reales) | **No** |
-| Contenido generado por usuarios | Sí — nombres de grupo, conceptos de gasto y notas, visibles solo dentro del grupo |
-| Compartición de ubicación | No |
-| Compras digitales | **No** |
-| Publicidad | No |
-
+Cuestionario IARC. Las respuestas, con su razonamiento, están en
+[`google_play/clasificacion-de-contenido.md`](google_play/clasificacion-de-contenido.md).
 Resultado esperado: **PEGI 3 / Todos**.
 
-> Ojo con «juegos de azar»: ShardPay maneja dinero, pero no hay apuesta, ni
-> premio, ni azar. La respuesta es No.
+Las tres que se responden mal con más facilidad:
+
+- **¿Los usuarios intercambian contenido?** **Sí.** La tentación es decir que no
+  porque no hay chat, pero las notas de un gasto son texto libre que leen los
+  demás miembros del grupo. Declarar que no y que Google lo vea después es peor.
+- **¿Se puede denunciar o bloquear?** **No**, ninguna de las dos. Lo que hay a
+  cambio es que los grupos son cerrados —código **y** PIN, sin descubrimiento— y
+  que **quien administra puede expulsar a cualquier miembro**.
+- **¿Juegos de azar?** **No.** La app maneja dinero, pero no hay apuesta, ni
+  premio, ni azar.
 
 ### 2.4 Seguridad de los datos
 
-Formulario obligatorio. Respuestas decididas (véase
-[ADR-0006](adr/0006-permisos-y-privacidad.md)):
+Formulario obligatorio, y lo que se declare **sale publicado en la ficha**. La
+autoridad son las respuestas de
+[`google_play/seguridad-de-datos.md`](google_play/seguridad-de-datos.md), que
+llevan al lado dónde comprobar cada una en el código.
 
-| Tipo de dato | ¿Se recopila? | ¿Se comparte? | ¿Obligatorio? | Para qué |
+Siete tipos de datos, todos **recogidos**, **ninguno compartido**:
+
+| Tipo | Recogido | Compartido | Obligatorio | Finalidad |
 | --- | --- | --- | --- | --- |
-| Nombre | Sí | No | Sí | Identificar a la persona dentro del grupo |
-| Dirección de correo | Sí | No | Sí | Autenticación |
-| Foto de perfil | Sí, si se entra con Google | No | No | Mostrar el avatar |
-| Fotos (tickets) | Solo si el usuario adjunta el ticket | No | No | Adjuntar el justificante al gasto |
-| Información financiera del usuario | **No** | No | — | La app no maneja cuentas ni pagos: solo cantidades que las personas se apuntan entre sí |
-| Ubicación | No | No | — | — |
-| Contactos | No | No | — | — |
-| Identificadores de dispositivo | Sí (token de notificaciones) | No | Sí | Entregar los avisos |
-| Actividad en la app / analítica | **No** | No | — | No hay analítica |
+| Nombre | Sí | No | Sí | Funcionalidad + Gestión de cuentas |
+| Dirección de correo | Sí | No | Sí | Funcionalidad + Gestión de cuentas |
+| IDs de usuario | Sí | No | Sí | Funcionalidad + Gestión de cuentas |
+| Historial de compras | Sí | No | Sí | Funcionalidad |
+| Otra información financiera | Sí | No | Sí | Funcionalidad |
+| Otro contenido generado por el usuario | Sí | No | Sí | Funcionalidad |
+| IDs de dispositivo | Sí | No | **No** | Funcionalidad |
 
-Además:
+Y las cinco trampas de este formulario:
 
-- **¿Se cifran los datos en tránsito?** Sí (HTTPS, por Firebase).
-- **¿Se pueden solicitar el borrado?** Sí, desde **Ajustes → Eliminar perfil**, y
-  también por correo.
-- **¿La app cumple la política de familias?** No aplica: no está dirigida a
-  menores.
+- **Fotos: No.** Contraintuitivo. La foto de un ticket se lee en el propio móvil
+  y se descarta; no hay ninguna pantalla para adjuntarla a un gasto, y los campos
+  `receiptStoragePath` y `receiptDownloadUrl` del modelo están siempre en nulo
+  porque nadie llama a `uploadReceipt`.
+- **Información para pagos del usuario: No.** La app no procesa pagos. Marcarla
+  publicaría que recoge datos de tarjeta, que es falso.
+- **Historial de compras: Sí**, aunque no se venda nada. Google lo define como
+  «transacciones que ha hecho el usuario» sin exigir que pasen por la app, y un
+  gasto es exactamente eso.
+- **«Se comparten»: en ninguno.** Firebase es un proveedor de servicios, no un
+  tercero; y lo que ve el resto del grupo llega por una acción deliberada
+  —teclear un código y un PIN— cuyo efecto el usuario espera. Las dos son
+  exenciones que el propio formulario reconoce.
+- **El token de notificaciones es el único opcional**, y solo desde la 1.2.1:
+  antes se guardaba aunque se rechazara el permiso.
 
-### 2.5 Público objetivo
+Además: **cifrado en tránsito**, sí, lo impone Firebase. **Ninguno se trata de
+forma temporal**: todo se guarda en Firestore.
 
-- **Edad:** 18 y más. Justificación: gestión de dinero entre adultos.
+### 2.5 Eliminación de datos
+
+Dos URL, en campos distintos:
+
+| Campo | URL |
+| --- | --- |
+| Eliminación de cuentas | <https://braisgaldo.github.io/shardpay/eliminar-cuenta.html> |
+| Solicitud de eliminación de datos | la misma, con `#borrar-datos-concretos-sin-eliminar-la-cuenta` |
+
+La segunda existe porque a la pregunta «¿pueden los usuarios borrar algunos datos
+sin eliminar la cuenta?» la respuesta es **sí**: se puede borrar un gasto, un
+grupo o la propia participación desde la app. La fuente de la página es
+[`ELIMINAR-CUENTA.md`](ELIMINAR-CUENTA.md) y la publica el mismo flujo de Pages.
+
+### 2.6 Datos de inicio de sesión
+
+Antes «Acceso a la app». **Sí, hay partes restringidas, y hay que dar
+credenciales.** Es fácil responderlo mal: la tentación es decir que no hacen
+falta porque cualquiera se crea una cuenta desde la app, pero el propio
+formulario avisa de que **Google no crea cuentas para revisar**. Sin
+credenciales, el revisor se queda en la pantalla de acceso y rechaza la versión.
+
+Hay una cuenta de revisión creada para esto. La contraseña va en el gestor de
+contraseñas, junto a la clave de firma.
+
+Conviene decirle al revisor que al entrar sale un tour guiado y que el lector de
+tickets está dentro de un grupo, en «Ticket con cámara» o «Subir ticket».
+
+### 2.7 Público objetivo y privacidad
+
+- **Edad**: 18 y más. Gestión de dinero entre adultos.
 - **¿Atrae a menores?** No. Ni gráficos infantiles, ni personajes, ni temática
   escolar.
+- **Política de privacidad**:
+  <https://braisgaldo.github.io/shardpay/privacidad.html>. La fuente está en
+  [`PRIVACIDAD.md`](PRIVACIDAD.md) y la publica `.github/workflows/pages.yml`.
 
-### 2.6 Política de privacidad
+### 2.8 Los tres formularios que se responden en un minuto
 
-**URL obligatoria y pública:**
-<https://braisgaldo.github.io/shardpay/privacidad.html>
+| Formulario | Respuesta |
+| --- | --- |
+| **ID de publicidad** | **No usa ninguno.** Comprobado en el manifiesto fusionado del paquete: `aapt2 dump permissions` no saca `com.google.android.gms.permission.AD_ID`. No hay que marcar «desactivar errores de la versión»: esa casilla es para quien declara que sí |
+| **Funciones financieras** | **«Mi aplicación no proporciona funciones financieras».** Ninguna de las otras. La app no mueve dinero, no procesa pagos y no se conecta a ningún banco: calcula quién debe qué. Marcar cualquiera abre una verificación regulatoria que no corresponde |
+| **Aplicaciones de salud** | **«Mi aplicación no tiene ninguna función de salud»** |
 
-La fuente está en [`PRIVACIDAD.md`](PRIVACIDAD.md) y la publica el flujo
-`.github/workflows/pages.yml` en GitHub Pages, que es gratis.
+### 2.9 Subir la versión
 
-### 2.7 Subir la versión
+El `versionCode` sigue la fórmula `AAMMDDNN` de [`INSTALL.md`](INSTALL.md) y
+**tiene que subir en cada envío**: Play rechaza uno repetido.
 
 ```bash
+VERSION=1.2.1
+BUILD=26090202
+
 flutter build appbundle --release \
-  --dart-define=SHARDPAY_VERSION=1.0.0 \
-  --dart-define=SHARDPAY_BUILD=26083101 \
+  --dart-define-from-file=config/firebase.local.json \
+  --dart-define=SHARDPAY_VERSION=$VERSION \
+  --dart-define=SHARDPAY_BUILD=$BUILD \
   --dart-define=SHARDPAY_COMMIT=$(git rev-parse --short HEAD) \
   --dart-define=SHARDPAY_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  --build-name=1.0.0 --build-number=26083101
+  --build-name=$VERSION --build-number=$BUILD
 ```
 
-El AAB sale en `build/app/outputs/bundle/release/app-release.aab`.
+El AAB sale en `build/app/outputs/bundle/release/app-release.aab`. **Comprueba
+las dos cosas que Play rechaza**, antes de subirlo:
+
+```bash
+keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab | grep -i propietario
+# CN=Ghato Studio  -> correcto
+# CN=Android Debug -> Gradle no encontro android/key.properties. Play lo rechaza
+
+aapt2 dump badging build/app/outputs/flutter-apk/app-release.apk | head -1
+# versionCode nuevo y mayor que el anterior
+```
+
+Si compilas **sin** `--dart-define-from-file`, la app se publica en modo de
+demostración local: funciona, parece normal y no guarda nada en la nube. No
+avisa. Compruébalo con `adb logcat | grep FirebaseApp`, que debe decir
+«initialization successful».
+
+Todo el detalle de la firma, y el paso de Play App Signing que no se ve fallar,
+está en [`google_play/FIRMA.md`](google_play/FIRMA.md).
 
 ---
 
@@ -352,21 +434,27 @@ Para grupos de amigos, no se acerca.
 
 ### Código
 
-- [x] `flutter analyze` sin avisos — *verificado el 2026-08-31 con Flutter 3.47.2*
-- [x] `flutter test` en verde — *220 pruebas*
-- [x] **Proveedores de acceso habilitados** en Firebase Auth: email/contraseña y
-      Google — *verificado el 2026-08-31 contra el proyecto*
+- [x] `flutter analyze` sin avisos — *verificado el 2026-09-02 con Flutter 3.47.2*
+- [x] `flutter test` en verde — *231 pruebas*
+- [x] Reglas de Firestore probadas contra el emulador — *44 comprobaciones,
+      `cd firestore-tests && npm test`* — [ADR-0009](adr/0009-lectura-de-invitaciones.md)
 - [x] **Reglas desplegadas** en el proyecto (`firebase deploy --only firestore:rules`)
-      — *2026-08-31*
+      — *2026-09-02*
+- [x] **Proveedores de acceso habilitados** en Firebase Auth: email/contraseña y
+      Google — *verificado contra el proyecto*
 - [x] **Alta, acceso, cierre de sesión y borrado de cuenta probados en un
       dispositivo físico** contra Firebase real, comprobando en cada paso que la
       cuenta aparece y desaparece del proyecto
-- [x] Reglas de Firestore probadas contra el emulador — *38 comprobaciones,
-      `cd firestore-tests && npm test`* — [ADR-0009](adr/0009-lectura-de-invitaciones.md)
+- [x] **Entrada por invitación probada en un dispositivo físico** con una segunda
+      cuenta, reclamando un hueco reservado. No es opcional: esto estuvo roto en
+      producción en la 1.1.0 y la suite no lo cogía
+- [x] **Expulsar a un miembro probado en un dispositivo físico**, comprobando que
+      la participación queda como «histórico» y los saldos no cambian
 - [x] Proyecto en **Blaze** con presupuesto de 5 € y alertas al 50/90/100 % —
       [ADR-0010](adr/0010-plan-blaze-y-control-de-gasto.md)
 - [ ] `./gradlew :app:dependencies` sin `billingclient`
-- [x] Probado en dispositivo físico — *acceso completo; falta el lector con un ticket de papel*
+- [ ] **Abrir la cámara del lector de tickets** en un dispositivo, después de
+      quitar `RECORD_AUDIO` del manifiesto en la 1.2.1
 - [ ] Las 13 paletas revisadas
 - [ ] Los 14 idiomas revisados
 - [ ] Árabe en RTL revisado, con captura
@@ -376,23 +464,41 @@ Para grupos de amigos, no se acerca.
 
 ### Firma y compilación
 
-- [ ] `android/key.properties` fuera del repositorio
-- [ ] Huellas SHA-1 y SHA-256 registradas en Firebase
-- [ ] `versionCode` mayor que el de la versión anterior
-- [ ] AAB generado con los `--dart-define` de versión, compilación y commit
+- [x] `android/key.properties` y el `.jks` fuera del repositorio, con copia
+      guardada en otro sitio
+- [x] Huellas SHA-1 y SHA-256 de la clave de subida registradas en Firebase
+- [x] SHA-1 de **Play App Signing** registrado en Firebase
+- [x] `versionCode` mayor que el de la versión anterior — *fórmula `AAMMDDNN`*
+- [x] AAB generado con los `--dart-define` de versión, compilación y commit
+- [x] Certificado del artefacto comprobado con `keytool` antes de subirlo
+      (`CN=Ghato Studio`, no `CN=Android Debug`)
+- [ ] Secretos de firma configurados en GitHub para que el flujo `Release`
+      compile él los paquetes — hasta entonces **falla a propósito** y el
+      paquete se compila a mano ([`google_play/FIRMA.md`](google_play/FIRMA.md))
 
 ### Ficha de Play
 
-- [ ] Título, descripción corta y larga en los 13 idiomas
-- [ ] Icono 512 × 512
-- [ ] Gráfico destacado 1024 × 500
-- [ ] Al menos 2 capturas de teléfono
-- [ ] Clasificación de contenido completada
-- [ ] Seguridad de los datos completada
-- [ ] URL de política de privacidad accesible y pública
-- [ ] Público objetivo declarado
+- [x] Título, descripción corta y larga en los **14** idiomas —
+      [`google_play/textos/`](google_play/textos/)
+- [x] Icono 512 × 512 y gráfico destacado 1024 × 500 —
+      [`google_play/graficos/`](google_play/graficos/)
+- [x] Ocho capturas de teléfono montadas a 9:16 —
+      [`google_play/capturas/`](google_play/capturas/)
+- [x] Notas de la versión en los 14 idiomas, dentro del límite de 500 caracteres
+- [ ] **Categoría Finanzas**, tipo aplicación, y ninguna etiqueta de banca,
+      préstamos, pagos, transferencias, inversión ni criptomonedas (§2.2)
+- [ ] Clasificación de contenido completada (§2.3)
+- [ ] Seguridad de los datos completada (§2.4)
+- [ ] **Las dos URL de eliminación de datos** (§2.5)
+- [ ] Credenciales de la cuenta de revisión dadas en «Datos de inicio de sesión»
+      (§2.6). Sin ellas, el revisor se queda en la pantalla de acceso
+- [ ] Público objetivo declarado: 18 y más
 - [ ] **Compras integradas: No**
-- [ ] Capturas de ambas políticas guardadas con fecha en `docs/store/politicas/`
+- [ ] **ID de publicidad: No** — y sin marcar «desactivar errores de la versión»
+- [ ] **Funciones financieras: ninguna**
+- [ ] **Funciones de salud: ninguna**
+- [ ] URL de política de privacidad accesible y pública
+- [ ] Capturas de las políticas guardadas con fecha en `store/politicas/`
 
 ### Pruebas cerradas
 
@@ -401,13 +507,19 @@ Para grupos de amigos, no se acerca.
 - [ ] 14 días consecutivos cumplidos
 - [ ] Acceso a producción solicitado
 
+> **Instala desde Play, no por USB.** Es la única forma de comprobar que Play App
+> Signing no ha roto el acceso con Google: por USB se instala el paquete firmado
+> con la clave de subida, que sí está registrada, y el fallo no se ve.
+
 ### Repositorio
 
-- [ ] `CHANGELOG.md` cerrado con la versión y la fecha
-- [ ] Etiqueta `v1.0.0` creada
-- [ ] GitHub Release con el AAB, el APK y los documentos adjuntos
-- [ ] GitHub Pages publicado con la política de privacidad
-- [ ] Sin secretos en la historia de git
+- [x] `CHANGELOG.md` cerrado con la versión y la fecha
+- [x] Etiqueta `v1.2.0` creada y GitHub Release publicada con el AAB, el APK y
+      los documentos
+- [x] GitHub Pages publicado con la política de privacidad y la página de
+      eliminación de cuenta
+- [x] Sin secretos en la historia de git
+- [ ] Etiqueta `v1.2.1`, pendiente de comprobar la cámara
 
 ### Después
 
