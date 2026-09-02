@@ -79,6 +79,11 @@ Pega desde `textos/es.md`. Después añade cada idioma con su fichero: `en`, `gl
 `ca`, `eu`, `fr`, `it`, `pt`, `de`, `el`, `ru`, `ar`, `zh`, `ja`. Las longitudes
 ya están comprobadas contra los límites.
 
+Las **notas de la versión** van aparte, en el paso de crear la versión, y en otro
+formato: Play las pide todas juntas etiquetadas por idioma. Están listas para
+pegar en [`textos/notas-de-version.md`](textos/notas-de-version.md), las catorce
+y dentro del límite de 500 caracteres.
+
 Gráficos:
 
 - **Icono**: `graficos/icono-512.png`
