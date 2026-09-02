@@ -112,7 +112,7 @@ class FirebaseAppRepository implements AppRepository {
         if (entry.userId != user.id) {
           return entry;
         }
-        return entry.copyWith(isArchived: true, isDeletedAccount: true, archivedAt: DateTime.now());
+        return entry.anonymized();
       }).toList();
 
       if (remainingActive.isEmpty && group.ownerId == user.id) {
@@ -132,6 +132,17 @@ class FirebaseAppRepository implements AppRepository {
             .toMap(),
       );
     }
+
+    // Borrar el documento de usuario NO borra sus subcolecciones: Firestore las
+    // deja huerfanas, colgando de un documento que ya no existe. Las
+    // notificaciones llevan dentro de que grupo son y quien las provoco, asi que
+    // hay que barrerlas a mano antes.
+    try {
+      final notificaciones = await _notificationsRef(user.id).get();
+      for (final doc in notificaciones.docs) {
+        await doc.reference.delete();
+      }
+    } catch (_) {}
 
     try {
       await _firestore.collection('users').doc(user.id).delete();
@@ -493,6 +504,48 @@ class FirebaseAppRepository implements AppRepository {
           .toSet()
           .toList();
       transaction.set(docRef, current.copyWith(adminIds: validAdminIds, updatedAt: DateTime.now()).toMap());
+    });
+  }
+
+  @override
+  Future<void> removeGroupMember({required String groupId, required String requesterId, required String userId}) async {
+    final docRef = _firestore.collection('groups').doc(groupId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(docRef);
+      final current = ExpenseGroup.fromMap(snapshot.data()!);
+
+      if (!current.isAdmin(requesterId)) {
+        throw StateError('Solo quien administra el grupo puede quitar a alguien.');
+      }
+      if (userId == requesterId) {
+        throw StateError('Para salirte tu, usa «Salir del grupo».');
+      }
+      if (userId == current.ownerId) {
+        throw StateError('No se puede quitar a la persona propietaria del grupo. Traspasa antes la propiedad.');
+      }
+      if (!current.memberIds.contains(userId)) {
+        return;
+      }
+
+      // La participacion se archiva, no se borra: los gastos que pago o en los
+      // que participo siguen contando, y sin su entrada el resto del grupo
+      // veria saldos que no cuadran.
+      transaction.set(
+        docRef,
+        current
+            .copyWith(
+              adminIds: current.adminIds.where((entry) => entry != userId).toList(),
+              memberIds: current.memberIds.where((entry) => entry != userId).toList(),
+              members: current.members.map((entry) {
+                if (entry.userId != userId) {
+                  return entry;
+                }
+                return entry.copyWith(isArchived: true, archivedAt: DateTime.now());
+              }).toList(),
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
+      );
     });
   }
 

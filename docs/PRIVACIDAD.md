@@ -118,7 +118,10 @@ del sistema, que da acceso únicamente al fichero que elijas.
 - **Si borras tu cuenta** desde Ajustes → Eliminar perfil, se elimina tu perfil.
   Tu participación en los grupos queda archivada bajo un identificador anónimo,
   porque borrarla sin más rompería el histórico de saldos del resto del grupo. Tu
-  nombre y tu correo desaparecen.
+  nombre, tu correo y tu foto se borran también de esa participación archivada.
+  Lo que sí sigue visible para los miembros de esos grupos son los **gastos** que
+  creaste —importes, fechas, notas y fotos de ticket—, porque son de todo el
+  grupo, no solo tuyos. Si quieres que desaparezcan, bórralos antes.
 - **Si borras un grupo del que eres propietario**, se borra para todos.
 
 ---
@@ -131,7 +134,7 @@ Bajo el Reglamento General de Protección de Datos (UE 2016/679) tienes derecho 
 | --- | --- |
 | **Acceso y portabilidad** | Ajustes → Exportar mis datos. Sale un fichero legible con todo lo tuyo |
 | **Rectificación** | Editar tu nombre y tus gastos desde la app |
-| **Supresión** | Ajustes → Eliminar perfil |
+| **Supresión** | Ajustes → Eliminar perfil. Los pasos, y el detalle de qué se borra y qué se conserva, en [Eliminar tu cuenta](eliminar-cuenta.html) |
 | **Oposición y limitación** | Escribe al correo de contacto |
 | **Reclamación** | Agencia Española de Protección de Datos, <https://www.aepd.es> |
 

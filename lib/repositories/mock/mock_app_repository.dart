@@ -74,7 +74,7 @@ class MockAppRepository implements AppRepository {
           if (entry.userId != user.id) {
             return entry;
           }
-          return entry.copyWith(isArchived: true, isDeletedAccount: true, archivedAt: DateTime.now());
+          return entry.anonymized();
         }).toList(),
         memberIds: group.memberIds.where((entry) => entry != user.id).toList(),
         updatedAt: DateTime.now(),
@@ -352,6 +352,39 @@ class MockAppRepository implements AppRepository {
     }
     final now = DateTime.now();
     _groups[groupId] = isClosed ? group.archived(at: now) : group.copyWith(isClosed: false, closedAt: null, updatedAt: now);
+    _groupsController.add(null);
+  }
+
+  @override
+  Future<void> removeGroupMember({required String groupId, required String requesterId, required String userId}) async {
+    final group = _groups[groupId]!;
+
+    if (!group.isAdmin(requesterId)) {
+      throw StateError('Solo quien administra el grupo puede quitar a alguien.');
+    }
+    if (userId == requesterId) {
+      throw StateError('Para salirte tu, usa «Salir del grupo».');
+    }
+    if (userId == group.ownerId) {
+      throw StateError('No se puede quitar a la persona propietaria del grupo. Traspasa antes la propiedad.');
+    }
+    if (!group.memberIds.contains(userId)) {
+      return;
+    }
+
+    // La participacion se archiva, no se borra: los gastos que pago o en los que
+    // participo siguen contando en los saldos del resto.
+    _groups[groupId] = group.copyWith(
+      adminIds: group.adminIds.where((entry) => entry != userId).toList(),
+      memberIds: group.memberIds.where((entry) => entry != userId).toList(),
+      members: group.members.map((entry) {
+        if (entry.userId != userId) {
+          return entry;
+        }
+        return entry.copyWith(isArchived: true, archivedAt: DateTime.now());
+      }).toList(),
+      updatedAt: DateTime.now(),
+    );
     _groupsController.add(null);
   }
 

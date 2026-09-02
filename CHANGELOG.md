@@ -5,6 +5,34 @@ Todos los cambios reseñables de ShardPay se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [No publicado]
+
+### Añadido
+
+- **Quitar a alguien de un grupo.** Quien administra tiene ahora una X en la
+  etiqueta de cada persona, en «Personas del grupo». Hasta ahora sólo se podía
+  salir uno mismo, cerrar el grupo o borrarlo: si alguien entraba con un código
+  que no le tocaba, o dejaba de pintar algo, no había forma de sacarlo. La
+  participación se archiva con su nombre, no se borra, porque los gastos que pagó
+  siguen contando en los saldos del resto.
+- **Página pública de eliminación de cuenta**, en
+  `braisgaldo.github.io/shardpay/eliminar-cuenta.html`. Google Play la exige como
+  campo propio de la ficha, con los pasos y el detalle de qué se borra y qué se
+  conserva.
+
+### Corregido
+
+- **Borrarse la cuenta dejaba el nombre y el correo en cada grupo.** La
+  participación se marcaba como archivada, pero conservaba nombre, correo y foto,
+  a la vista de los demás miembros. La política de privacidad decía —y dice— que
+  desaparecen; ahora desaparecen de verdad. El identificador interno sí se
+  conserva: los gastos apuntan a él, y quitarlo rompería los saldos de todo el
+  grupo.
+- **Borrarse la cuenta dejaba las notificaciones huérfanas.** Borrar el documento
+  de usuario en Firestore no borra sus subcolecciones, así que las notificaciones
+  —que llevan dentro de qué grupo son y quién las provocó— seguían existiendo
+  colgando de un documento que ya no estaba. Ahora se barren antes.
+
 ## [1.1.0] — 2026-09-01
 
 ### Añadido

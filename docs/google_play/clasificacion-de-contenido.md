@@ -49,6 +49,25 @@ Aquí hay que ser preciso, porque la respuesta **no es «no»**:
 - ¿Se pueden intercambiar fotos o vídeos? **Sí**, sólo la foto del ticket que
   alguien decida adjuntar a un gasto, y sólo la ven los miembros de ese grupo.
 - ¿Hay funciones de red social? **No**
+- ¿Se puede bloquear a otros usuarios? **No**
+- ¿Se puede denunciar a un usuario o un contenido? **No**
+- ¿Hay moderación del chat? **No** — no hay chat
+- ¿La interacción puede limitarse a personas invitadas? **Sí**
+
+**El hueco, dicho en voz alta.** Responder que sí al intercambio de contenido y
+que no a denunciar y bloquear deja una app con contenido de usuario sin
+moderación, y la política de contenido generado por usuarios de Google pide las
+dos cosas. Lo que hay a cambio:
+
+- Los grupos son **cerrados**: se entra con código de invitación **y** PIN. No
+  hay descubrimiento, ni perfiles públicos, ni forma de encontrar a nadie.
+- Quien administra un grupo **puede quitar a cualquier miembro** desde la X de su
+  etiqueta en «Personas del grupo». Es la vía de escape real cuando alguien se
+  porta mal: en un grupo cerrado de gente conocida, echar a esa persona sirve
+  para más que denunciarla a un moderador que no existe.
+
+Denunciar contenido a Ghato Studio sigue sin existir dentro de la app. Si Google
+lo reclama, ese es el trabajo pendiente.
 
 ### Compras y contenido comercial
 

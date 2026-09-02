@@ -60,7 +60,7 @@ void main() {
     'lib/widgets/tour/guided_tour.dart': 1,
 
     // --- Deuda congelada, pendiente de tokens semánticos ---------------------
-    'lib/screens/groups/group_detail_screen.dart': 78,
+    'lib/screens/groups/group_detail_screen.dart': 77,
     'lib/screens/balances/global_balances_screen.dart': 12,
     'lib/screens/stats/stats_screen.dart': 11,
     'lib/screens/home/home_shell.dart': 6,

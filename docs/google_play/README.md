@@ -94,6 +94,12 @@ Gráficos:
 
 - **Política de privacidad**: la URL pública. El texto está en
   `politicas/privacidad.md`.
+- **URL de eliminación de cuentas**:
+  `https://braisgaldo.github.io/shardpay/eliminar-cuenta.html`. Es un campo
+  aparte del de la privacidad, y Play lo publica en la ficha. La fuente es
+  [`docs/ELIMINAR-CUENTA.md`](../ELIMINAR-CUENTA.md), y cumple los tres
+  requisitos que exige el formulario: nombra la app y el desarrollador, da los
+  pasos exactos, y dice qué se borra y qué se conserva.
 - **Anuncios**: no, la app no tiene.
 - **Datos de inicio de sesión** (antes «Acceso a la app»): **sí, hay partes
   restringidas**, y hay que dar credenciales. Esto es fácil responderlo mal: la

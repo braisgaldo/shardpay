@@ -13,6 +13,7 @@ on:
     paths:
       - 'site/**'
       - 'docs/PRIVACIDAD.md'
+      - 'docs/ELIMINAR-CUENTA.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -43,6 +44,7 @@ jobs:
           cp -r site/* _site/
           python3 docs/build_docs.py --no-pdf
           cp docs/out/shardpay-privacidad.html _site/privacidad.html
+          cp docs/out/shardpay-eliminar-cuenta.html _site/eliminar-cuenta.html
           cp docs/out/shardpay-manual-usuario.html _site/manual-usuario.html
           cp docs/out/shardpay-manual-tecnico.html _site/manual-tecnico.html
           ls -la _site

@@ -116,6 +116,13 @@ String _groupParticipantName(BuildContext context, ExpenseGroup group, String ra
   return looksOpaque ? _unknownParticipantLabel(context) : normalizedUserId;
 }
 
+/// El rojo de «esto no se deshace»: salir de un grupo, quitar a alguien.
+///
+/// No sale del tema a proposito. Una accion destructiva tiene que verse igual
+/// de destructiva en las trece paletas, y en varias de ellas el `error` del
+/// tema es un rojo suave que no alarma a nadie.
+const _rojoDestructivo = Color(0xFF9B1C1C);
+
 class GroupDetailScreen extends ConsumerStatefulWidget {
   const GroupDetailScreen({super.key, required this.user, required this.groupId});
 
@@ -436,6 +443,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     onOcrGallery: () => _importTicket(context, group, ImageSource.gallery),
                     groupClosed: group.isClosed,
                     onManagePeople: () => _showJoinSettingsDialog(context, group),
+                    onRemoveMember: group.isAdmin(widget.user.id) ? (member) => _confirmRemoveMember(context, group, member) : null,
                   ),
                   _BalancesTab(group: group, balances: balances, currentUserId: widget.user.id),
                   _ExpensesTab(
@@ -1293,8 +1301,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       ? null
                       : () => Navigator.of(dialogContext).pop(true),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF9B1C1C),
-                    foregroundColor: colorOn(const Color(0xFF9B1C1C)),
+                    backgroundColor: _rojoDestructivo,
+                    foregroundColor: colorOn(_rojoDestructivo),
                   ),
                   icon: const Icon(Icons.logout_rounded),
                   label: Text(tr(context, es: 'Salir', en: 'Leave', gl: 'Saír', fr: 'Quitter', it: 'Esci', pt: 'Sair')),
@@ -1314,6 +1322,71 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       if (context.mounted) {
         Navigator.of(context).pop();
       }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+      }
+    }
+  }
+
+  /// Expulsar a alguien del grupo, desde la X de su etiqueta.
+  ///
+  /// Dice explicitamente que los gastos se quedan, porque es la duda inmediata
+  /// —y la respuesta tranquilizadora— de quien va a pulsar el boton.
+  Future<void> _confirmRemoveMember(BuildContext context, ExpenseGroup group, GroupMember member) async {
+    final approved =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: Text(
+                tr(
+                  context,
+                  es: 'Quitar a ${member.name}',
+                  en: 'Remove ${member.name}',
+                  gl: 'Quitar a ${member.name}',
+                  fr: 'Retirer ${member.name}',
+                  it: 'Rimuovere ${member.name}',
+                  pt: 'Remover ${member.name}',
+                ),
+              ),
+              content: Text(
+                tr(
+                  context,
+                  es: '${member.name} dejará de ver el grupo y de recibir avisos. Sus gastos se quedan, y su participación aparecerá como histórico para que los saldos sigan cuadrando.',
+                  en: '${member.name} will no longer see the group or get notifications. Their expenses stay, and their share shows as historical so the balances still add up.',
+                  gl: '${member.name} deixará de ver o grupo e de recibir avisos. Os seus gastos quedan, e a súa participación aparecerá como histórico para que os saldos sigan cadrando.',
+                  fr: '${member.name} ne verra plus le groupe ni les notifications. Ses depenses restent, et sa participation apparait comme historique pour que les soldes restent justes.',
+                  it: '${member.name} non vedra piu il gruppo ne le notifiche. Le sue spese restano e la sua partecipazione appare come storico, cosi i saldi tornano.',
+                  pt: '${member.name} deixara de ver o grupo e de receber avisos. As despesas ficam, e a participacao aparece como historico para os saldos continuarem a bater.',
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(tr(context, es: 'Cancelar', en: 'Cancel', gl: 'Cancelar', fr: 'Annuler', it: 'Annulla', pt: 'Cancelar')),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _rojoDestructivo,
+                    foregroundColor: colorOn(_rojoDestructivo),
+                  ),
+                  icon: const Icon(Icons.person_remove_rounded),
+                  label: Text(tr(context, es: 'Quitar', en: 'Remove', gl: 'Quitar', fr: 'Retirer', it: 'Rimuovi', pt: 'Remover')),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
+    if (!approved) {
+      return;
+    }
+
+    try {
+      await ref.read(repositoryProvider).removeGroupMember(groupId: group.id, requesterId: widget.user.id, userId: member.userId);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
@@ -2794,6 +2867,7 @@ class _OverviewTab extends StatelessWidget {
     required this.onOcrGallery,
     required this.groupClosed,
     this.onManagePeople,
+    this.onRemoveMember,
   });
 
   final AppUser user;
@@ -2807,6 +2881,9 @@ class _OverviewTab extends StatelessWidget {
   final VoidCallback onOcrGallery;
   final bool groupClosed;
   final VoidCallback? onManagePeople;
+
+  /// Quitar a alguien del grupo. Nulo cuando quien mira no administra.
+  final void Function(GroupMember member)? onRemoveMember;
 
   Future<void> _showQuickActionsInfo(BuildContext context) {
     return showDialog<void>(
@@ -3106,7 +3183,28 @@ class _OverviewTab extends StatelessWidget {
                         : isAdmin
                         ? tr(context, es: 'admin', en: 'admin', gl: 'admin', fr: 'admin', it: 'admin', pt: 'admin')
                         : null;
-                    return Chip(label: Text(suffix == null ? member.name : '${member.name} · $suffix'));
+                    // Quien administra puede quitar a alguien. No a si mismo
+                    // —para eso esta «Salir del grupo»—, ni a la persona
+                    // propietaria, ni a quien ya esta archivado.
+                    final puedoExpulsar =
+                        onRemoveMember != null &&
+                        !member.isPending &&
+                        !member.isArchived &&
+                        member.userId != user.id &&
+                        member.userId != group.ownerId;
+                    return Chip(
+                      label: Text(suffix == null ? member.name : '${member.name} · $suffix'),
+                      onDeleted: puedoExpulsar ? () => onRemoveMember!(member) : null,
+                      deleteButtonTooltipMessage: tr(
+                        context,
+                        es: 'Quitar del grupo',
+                        en: 'Remove from group',
+                        gl: 'Quitar do grupo',
+                        fr: 'Retirer du groupe',
+                        it: 'Rimuovi dal gruppo',
+                        pt: 'Remover do grupo',
+                      ),
+                    );
                   }).toList(),
                 ),
               ],

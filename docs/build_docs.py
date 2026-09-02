@@ -55,6 +55,8 @@ DOCUMENTOS = [
      'Google Play y App Store, paso a paso', '🚀'),
     ('PRIVACIDAD.md', 'shardpay-privacidad', 'Política de privacidad',
      'Qué datos se tratan, quién los ve y qué no se hace', '🔒'),
+    ('ELIMINAR-CUENTA.md', 'shardpay-eliminar-cuenta', 'Eliminar tu cuenta',
+     'Cómo se pide, qué se borra y qué se conserva', '🗑️'),
 ]
 
 # --- Estilo -------------------------------------------------------------------

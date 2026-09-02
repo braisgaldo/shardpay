@@ -101,9 +101,12 @@ class GroupMember {
   };
 
   factory GroupMember.fromMap(Map<String, dynamic> map) {
+    // Una cuenta eliminada deja el nombre en blanco. Cae al mismo respaldo que
+    // un nombre ausente, y asi nada que pinte la inicial se queda sin letra.
+    final nombre = (map['name'] as String? ?? '').trim();
     return GroupMember(
       userId: map['userId'] as String,
-      name: map['name'] as String? ?? 'Miembro',
+      name: nombre.isEmpty ? 'Miembro' : nombre,
       email: map['email'] as String? ?? '',
       photoUrl: map['photoUrl'] as String?,
       isPending: map['isPending'] as bool? ?? false,
@@ -134,6 +137,24 @@ class GroupMember {
       archivedAt: archivedAt ?? this.archivedAt,
     );
   }
+
+  /// Version anonima de este miembro, para cuando su duenno borra la cuenta.
+  ///
+  /// El `userId` se conserva a proposito: los gastos apuntan a el, y quitarlo
+  /// romperia el historico de saldos del resto del grupo. Lo que desaparece es
+  /// lo que identifica a la persona —nombre, correo y foto—, que es justo lo
+  /// que la politica de privacidad promete que desaparece.
+  ///
+  /// `copyWith` no sirve aqui: no puede poner `photoUrl` a nulo.
+  GroupMember anonymized({DateTime? at}) => GroupMember(
+    userId: userId,
+    name: '',
+    email: '',
+    isPending: isPending,
+    isArchived: true,
+    isDeletedAccount: true,
+    archivedAt: at ?? DateTime.now(),
+  );
 }
 
 enum ExpenseRecordKind { expense, settlement }

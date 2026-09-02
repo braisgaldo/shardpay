@@ -42,6 +42,12 @@ abstract class AppRepository {
   Future<void> setGroupAdmins({required String groupId, required String requesterId, required List<String> adminIds});
   Future<void> setGroupClosed({required String groupId, required String requesterId, required bool isClosed});
   Future<void> leaveGroup({required String groupId, required String userId});
+
+  /// Expulsa a alguien del grupo. Solo quien administra el grupo puede hacerlo.
+  ///
+  /// No es lo mismo que borrar una cuenta: la participacion queda archivada con
+  /// su nombre, porque el historico de saldos del resto del grupo la necesita.
+  Future<void> removeGroupMember({required String groupId, required String requesterId, required String userId});
   Future<void> deleteGroup({required String groupId, required String requesterId});
   Future<void> updateItemAllocations({
     required String groupId,
