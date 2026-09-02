@@ -35,6 +35,27 @@ una cadena de trabajo que no compra nada:
 A cambio de eso, el beneficio es cero: `com.` es la convención mayoritaria y
 ningún usuario ve nunca el identificador.
 
+## Epílogo: la decisión se cobró en la primera subida
+
+**2 de septiembre de 2026.** Al subir el primer paquete a Play Console salió:
+
+```
+El nombre del paquete del APK o Android App Bundle debe ser es.ghatostudio.shardpay
+```
+
+La ficha de Play a la que se subía tenía reservado el identificador de la
+plantilla, seguramente de una compilación anterior. Un paquete queda atado a su
+ficha para siempre: no se puede cambiar ni en la app ni en la ficha.
+
+Se resolvió **creando una ficha nueva**, que quedó atada a
+`com.ghatostudio.shardpay`. Cero cambios de código, y todo lo verificado
+—registro de Firebase, cliente OAuth, huellas SHA y el acceso con Google probado
+en un dispositivo— siguió valiendo sin tocar nada. La ficha del identificador
+antiguo se queda sin usar.
+
+Lo que confirma la decisión de arriba: la cadena de trabajo del renombrado es
+real, y el momento de pagarla habría sido este.
+
 ## Cuándo sí habría que hacerlo
 
 Si Brais quiere unificar el identificador con el resto de apps de Ghato Studio

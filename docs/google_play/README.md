@@ -63,6 +63,14 @@ paso de Play App Signing que no se ve fallar— está en [`FIRMA.md`](FIRMA.md).
 Nombre **ShardPay**, idioma predeterminado **español**, tipo **aplicación**,
 **gratuita**. Ojo: de gratuita a de pago no se puede cambiar después.
 
+> **El identificador se ata en la primera subida y no se suelta.** El de esta app
+> es `com.ghatostudio.shardpay`. Si al subir el paquete sale *«El nombre del
+> paquete debe ser …»* con otro identificador, es que esa ficha ya tiene uno
+> reservado de una compilación anterior: no se puede cambiar ni en la app ni en
+> la ficha. La salida es **crear una ficha nueva**, que quedará atada al
+> identificador correcto. Pasó de verdad; está contado en
+> [ADR-0003](../adr/0003-identificador-de-aplicacion.md).
+
 ### 2. Ficha principal
 
 Play Console → **Presencia en Google Play** → **Ficha de Play principal**.
