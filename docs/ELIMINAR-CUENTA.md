@@ -10,8 +10,16 @@ lang: es
 Aplicación: **ShardPay**, de **Ghato Studio** (Brais Castiñeiras Galdo).
 Contacto: [ghatostudioofficial@gmail.com](mailto:ghatostudioofficial@gmail.com)
 
-Esta página explica cómo pedir que se elimine tu cuenta de ShardPay y qué pasa
-exactamente con cada dato cuando lo haces.
+Esta página explica **las dos cosas** que puedes pedir, y qué pasa exactamente
+con cada dato en cada caso:
+
+- **[Eliminar tu cuenta entera](#como-eliminarla-desde-la-app)**, con todo lo que
+  lleva asociado.
+- **[Borrar datos concretos sin eliminar la cuenta](#borrar-datos-concretos-sin-eliminar-la-cuenta)**:
+  un gasto, un grupo, tu participación en un grupo o el nombre con el que te ven.
+
+Las dos se pueden hacer desde la propia app, en el momento, y también por correo
+si has perdido el acceso.
 
 ---
 
