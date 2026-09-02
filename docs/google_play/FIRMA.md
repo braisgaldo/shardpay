@@ -88,14 +88,50 @@ esta. La app que instala la gente lleva **otro certificado, con otro SHA-1**.
 
 Después del primer envío:
 
-1. Play Console → **Configuración de la aplicación** → **Integridad de la
-   aplicación** → certificado de firma de apps.
-2. Copia su SHA-1 y regístralo también:
+### No lo copies de la consola: sácalo del paquete que Play instala
 
-**Ya está hecho** para esta app: el SHA-1 de Play App Signing es
-`A1:75:DF:D5:7A:78:95:03:02:3D:B9:13:07:56:B9:FD:9C:28:9A:83` y está registrado.
-Lo que queda es comprobarlo instalando **desde Play**, porque por USB se instala
-el paquete firmado con la clave de subida y el fallo no se ve.
+Esto costó un «error de OAuth mal configurado» con la app ya publicada en
+pruebas. En Firebase estaba registrado
+`A1:75:DF:D5:7A:78:95:03:02:3D:B9:13:07:56:B9:FD:9C:28:9A:83`, copiado de la
+consola, y **no era el de esta app**: lo más probable es que viniera de la ficha
+anterior, la que hubo que abandonar por el choque de identificador
+([ADR-0003](../adr/0003-identificador-de-aplicacion.md)). Cada ficha tiene su
+propia clave de Play App Signing.
+
+La huella de verdad se saca del APK que Play ha instalado en un móvil, que no
+admite discusión:
+
+```bash
+adb shell pm path com.ghatostudio.shardpay        # da la ruta de base.apk
+adb pull <ruta de base.apk> instalado.apk
+apksigner verify --print-certs instalado.apk
+```
+
+**`keytool -printcert -jarfile` no vale aquí**: lo que Play instala va firmado
+solo con el esquema v2/v3 y keytool responde «No es un archivo jar firmado», que
+parece un fichero corrupto y no lo es. `apksigner` sí lo lee.
+
+La huella correcta para esta app, comprobada así:
+
+```
+SHA-1    0F:83:F3:4A:5E:00:CF:10:20:E3:0E:C3:0F:08:19:2D:D8:D4:2D:2D
+SHA-256  AC:4D:25:F4:23:57:DD:91:1E:46:18:CD:D1:62:7C:33:82:CD:49:CF:C5:C6:CB:BB:41:0D:DF:D5:0E:34:31:90
+```
+
+El titular es `CN=Android, O=Google Inc.`, no `CN=Ghato Studio`: esa es justo la
+señal de que estás mirando la clave de Google y no la tuya.
+
+Las dos están registradas. Se comprueba con:
+
+```bash
+npx firebase apps:sdkconfig ANDROID   1:626260906991:android:8749331d8c852a841f5c1a --project shardpay
+```
+
+y mirando que exista un `oauth_client` de tipo ANDROID con ese
+`certificate_hash`. Si no está, el acceso con Google falla **solo para quien
+instala desde Play**: en tu movil por USB funciona, porque ahi corre el paquete
+firmado con la clave de subida, que si estaba registrada. Es el peor tipo de
+fallo que hay, el que tu no ves.
 
 ```bash
 npx firebase apps:android:sha:create \

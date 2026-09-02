@@ -52,8 +52,10 @@ paso de Play App Signing que no se ve fallar— está en [`FIRMA.md`](FIRMA.md).
 - [x] SHA-1 y SHA-256 de la clave de subida registrados en Firebase
 - [x] Copia del `.jks` y de `key.properties` guardada fuera de este ordenador
 - [x] SHA-1 de Play App Signing registrado en Firebase
-      (`A1:75:DF:D5:7A:78:95:03:02:3D:B9:13:07:56:B9:FD:9C:28:9A:83`). Queda
-      comprobar el acceso con Google **instalando desde Play**, no por USB
+      (`0F:83:F3:4A:5E:00:CF:10:20:E3:0E:C3:0F:08:19:2D:D8:D4:2D:2D`), sacado
+      del APK que Play instala con `apksigner`, no copiado de la consola. El que
+      había copiado antes era de la ficha anterior y el acceso con Google fallaba
+      para todo el que instalara desde Play. Véase [`FIRMA.md`](FIRMA.md)
 - [ ] **App Check activado** — es la capa de control de gasto que falta desde que
       el proyecto está en Blaze ([ADR-0010](../adr/0010-plan-blaze-y-control-de-gasto.md))
 - [ ] Presupuesto de 5 € con alertas configurado en Cloud Billing
