@@ -35,14 +35,22 @@ ni ninguna otra categoría. La app no los pide.
 
 ### Información financiera
 
-| Dato | ¿Se recoge? | Para qué |
-| --- | --- | --- |
-| **Otra información financiera** | Sí | Los importes de los gastos y los saldos entre miembros del grupo |
+| Dato | ¿Se recoge? | ¿Se comparte? | Para qué |
+| --- | --- | --- | --- |
+| **Historial de compras** | Sí | No | El concepto, el importe y la fecha de cada gasto que apunta el usuario |
+| **Otra información financiera** | Sí | No | Los saldos y las deudas entre miembros del grupo |
 
-**No** se recoge información de pago: la app **no procesa pagos**. No hay
+**Historial de compras se marca aunque la app no venda nada.** Google lo define
+como «información sobre compras o transacciones que ha hecho el usuario», sin
+exigir que pasen por la app, y un gasto de ShardPay —«Cena, 84 €, 15 de marzo»—
+es exactamente eso. La tentación es no marcarlo porque no hay pasarela de pago,
+pero eso es la casilla de al lado.
+
+**Información para pagos del usuario: NO.** La app **no procesa pagos**. No hay
 pasarela, no hay tarjetas y no hay compras dentro de la aplicación. La donación
 es un enlace externo a Revolut y ocurre **fuera** de la app
-([ADR-0008](../adr/0008-donacion-y-politicas-de-tienda.md)).
+([ADR-0008](../adr/0008-donacion-y-politicas-de-tienda.md)). Marcar esta casilla
+publicaría en la ficha que ShardPay recoge datos de pago, que es falso.
 
 ### Fotos y vídeos
 
@@ -114,3 +122,33 @@ Merece explicarse, porque **no** es un borrado total y hay que declararlo bien:
 Esto es lo que dice el diálogo de confirmación dentro de la app, con estas mismas
 palabras. Está implementado en `deleteUserProfile`
 (`lib/repositories/firebase/firebase_app_repository.dart`).
+
+
+---
+
+## «Se recogen» frente a «Se comparten»
+
+Después de elegir los tipos, Play pregunta por cada uno si se **recoge**, se
+**comparte**, o las dos cosas. Son cosas distintas y la segunda casi nunca
+aplica aquí:
+
+- **Se recoge** = el dato sale del dispositivo, aunque sea hacia tu propio
+  servidor. Todo lo que declara ShardPay sale del móvil: vive en Firestore.
+- **Se comparte** = el dato llega a un **tercero**.
+
+**Los siete tipos van marcados solo como «se recogen».** Ninguno como «se
+comparte», por dos exenciones que el propio formulario reconoce:
+
+1. **Un proveedor de servicios no es un tercero.** Firebase procesa los datos
+   por cuenta de ShardPay y según sus instrucciones. Mandar un gasto a Firestore
+   no es compartirlo con Google en el sentido del formulario.
+2. **Lo que ve el resto del grupo llega por una acción deliberada del usuario.**
+   El formulario exime «los datos que se transfieren a un tercero por una acción
+   concreta iniciada por el usuario, cuando este espera razonablemente que se
+   compartan». A un grupo se entra tecleando un código y un PIN, y los gastos se
+   apuntan uno a uno. Que los otros miembros vean tu nombre y lo que apuntaste es
+   justo lo que esperas al hacerlo.
+
+Y no hay ningún tercero más: no hay analítica, ni publicidad, ni SDK de terceros
+que reciba nada. Comprobado en el `pubspec.yaml` y en el manifiesto, donde los
+únicos permisos son `CAMERA` y `POST_NOTIFICATIONS`.
