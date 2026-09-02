@@ -208,3 +208,43 @@ Las otras cinco finalidades van **todas en blanco**, en los seis tipos:
   prueba `joinProof` son control de acceso, o sea funcionalidad. No se monitoriza
   nada ni se perfila a nadie con fines de seguridad, y declararlo sugeriría que
   sí.
+
+
+---
+
+## Permisos que van en el paquete y no deberian
+
+El manifiesto de ShardPay declara dos permisos: `CAMERA` y `POST_NOTIFICATIONS`.
+El manifiesto **fusionado** del paquete que se sube declara tres más, heredados
+del complemento de cámara:
+
+```bash
+aapt2 dump permissions build/app/outputs/flutter-apk/app-release.apk
+```
+
+```
+android.permission.RECORD_AUDIO
+android.permission.WRITE_EXTERNAL_STORAGE   maxSdkVersion=28
+android.permission.READ_EXTERNAL_STORAGE
+```
+
+`RECORD_AUDIO` y `WRITE_EXTERNAL_STORAGE` los declara `camera_android_camerax`,
+que también sabe grabar vídeo. `READ_EXTERNAL_STORAGE` aparece sin que el
+informe de fusión lo atribuya a ningún fichero, lo que apunta a que lo añade el
+propio combinador junto al de escritura.
+
+**No cambian ninguna respuesta de este formulario.** Declarar un permiso no es
+recoger un dato: la app no solicita ninguno de los tres en tiempo de ejecución
+—no hay `permission_handler` ni ninguna llamada de permiso en `lib/`— y no graba
+audio ni lee ficheros del usuario. Así que **Grabaciones de voz o de sonido** y
+**Archivos y documentos** siguen siendo **No**.
+
+Lo que sí hacen es salir en la ficha de Play: al usuario le aparece que la app
+puede usar el **micrófono**, en una app de repartir cuentas. Es una mala señal
+gratuita.
+
+> **Pendiente para la 1.2.1.** Quitarlos con `tools:node="remove"` en el
+> manifiesto de la app. No se ha hecho antes de enviar la 1.2.0 a propósito:
+> cambiar el manifiesto obliga a recompilar, y lo que se declara aquí tiene que
+> describir el paquete que se sube. La política de privacidad, mientras tanto,
+> los explica en vez de negarlos.

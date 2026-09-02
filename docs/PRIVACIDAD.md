@@ -102,13 +102,36 @@ atención al cliente con acceso a los datos.
 
 ## Permisos que pide la app
 
+Estos dos son los que la app **te pide** de verdad:
+
 | Permiso | Para qué | ¿Obligatorio? |
 | --- | --- | --- |
 | **Cámara** | Fotografiar tickets desde la pantalla de captura | No. Puedes apuntar los gastos a mano o usar la galería |
 | **Notificaciones** | Avisarte de gastos y reembolsos | No. Se puede denegar y la app sigue funcionando |
 
-**No se pide** almacenamiento: exportar e importar usan el selector de ficheros
-del sistema, que da acceso únicamente al fichero que elijas.
+### Los que aparecen declarados y la app nunca usa
+
+Si miras la lista de permisos en Google Play verás además **micrófono** y
+**almacenamiento**. Conviene explicarlo, porque queda raro en una app de repartir
+cuentas:
+
+| Permiso declarado | De dónde sale | ¿Se usa? |
+| --- | --- | --- |
+| `RECORD_AUDIO` (micrófono) | Lo declara el complemento de cámara, que también sabe grabar vídeo | **No.** ShardPay solo hace fotos fijas. No graba audio nunca |
+| `READ_EXTERNAL_STORAGE` y `WRITE_EXTERNAL_STORAGE` (hasta Android 9) | Del mismo complemento de cámara | **No.** La app no los solicita en ningún momento |
+
+Los dos entran en el paquete al combinarse los manifiestos de las librerías con
+el de la app: no están escritos en el manifiesto de ShardPay. **Y declarar un
+permiso no es usarlo**: Android solo da acceso cuando la app lo pide y tú
+aceptas, y ShardPay no lo pide. No hay ninguna biblioteca de gestión de permisos
+en el proyecto.
+
+Exportar e importar copias de seguridad usan el **selector de ficheros del
+sistema**, que da acceso únicamente al fichero que elijas y no necesita permiso
+de almacenamiento.
+
+> Están de sobra y se pueden quitar del paquete. Es lo previsto para la próxima
+> versión.
 
 ---
 
