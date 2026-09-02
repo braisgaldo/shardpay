@@ -41,9 +41,14 @@ const INVITE_CODE = 'COSTA26';
 const JOIN_PIN = '4821';
 const GROUP_ID = 'grupo-roadtrip';
 
-/// La misma prueba que calcula el cliente: sha256("<pin>:<uid>") en base64.
+/// La misma prueba que calcula el cliente: sha256("<pin>:<uid>") en hex mayuscula.
+///
+/// Era base64 y estaba roto: `toBase64()` de las reglas devuelve base64 urlsafe
+/// y el cliente producia el estandar, asi que solo coincidian cuando el hash no
+/// llevaba `+` ni `/`. Lo tapaba el que el unico uid con valor fijado en las
+/// pruebas, `uid-bea`, es justo uno de los que no lo llevan.
 function joinProof(pin, uid) {
-  return createHash('sha256').update(`${pin}:${uid}`).digest('base64');
+  return createHash('sha256').update(`${pin}:${uid}`).digest('hex').toUpperCase();
 }
 
 function grupoBase(overrides = {}) {
@@ -219,6 +224,28 @@ describe('unirse por invitacion', () => {
     await assertSucceeds(updateDoc(doc(como(BEA), 'groups', GROUP_ID), entrada(BEA)));
   });
 
+  it('el formato de la prueba coincide para cualquier uid', async () => {
+    // La prueba que faltaba. Antes solo se comprobaba con `uid-bea`, y ese uid
+    // es uno de los pocos cuyo hash en base64 no lleva `+` ni `/`, que es
+    // exactamente donde cliente y reglas dejaban de coincidir. Con veinte uids,
+    // que alguno caiga en el caso malo esta practicamente garantizado.
+    for (let i = 0; i < 20; i += 1) {
+      const uid = `uid-barrido-${i}`;
+      await sembrar();
+      await assertSucceeds(
+        updateDoc(doc(como(uid), 'groups', GROUP_ID), {
+          memberIds: [ANA, uid],
+          members: [
+            { userId: ANA, name: 'Ana', email: 'ana@ejemplo.com' },
+            { userId: uid, name: 'Quien sea', email: '' },
+          ],
+          joinProof: joinProof(JOIN_PIN, uid),
+          updatedAt: '2026-09-02T10:00:00.000',
+        }),
+      );
+    }
+  });
+
   it('con el PIN equivocado no', async () => {
     await sembrar();
     await assertFails(
@@ -384,6 +411,108 @@ describe('un miembro sigue pudiendo trabajar', () => {
           { userId: BEA, name: 'Bea', email: 'bea@ejemplo.com', isArchived: true },
         ],
         updatedAt: '2026-07-19T10:00:00.000',
+      }),
+    );
+  });
+
+  it('quien administra puede quitar a otra persona', async () => {
+    await sembrar({ group: { memberIds: [ANA, BEA], members: [
+      { userId: ANA, name: 'Ana', email: 'ana@ejemplo.com' },
+      { userId: BEA, name: 'Bea', email: 'bea@ejemplo.com' },
+    ] } });
+
+    // ANA es la propietaria. Quitar a BEA la archiva y la saca de memberIds.
+    await assertSucceeds(
+      updateDoc(doc(como(ANA), 'groups', GROUP_ID), {
+        memberIds: [ANA],
+        members: [
+          { userId: ANA, name: 'Ana', email: 'ana@ejemplo.com' },
+          { userId: BEA, name: 'Bea', email: 'bea@ejemplo.com', isArchived: true },
+        ],
+        updatedAt: '2026-09-02T10:00:00.000',
+      }),
+    );
+  });
+
+  it('un miembro raso NO puede quitar a otro', async () => {
+    // La app solo le ensena el boton a quien administra, pero eso lo decide el
+    // cliente. Con el SDK en la mano, BEA podia echar a CHUS.
+    await sembrar({ group: { memberIds: [ANA, BEA, CHUS], members: [
+      { userId: ANA, name: 'Ana', email: '' },
+      { userId: BEA, name: 'Bea', email: '' },
+      { userId: CHUS, name: 'Chus', email: '' },
+    ] } });
+
+    await assertFails(
+      updateDoc(doc(como(BEA), 'groups', GROUP_ID), {
+        memberIds: [ANA, BEA],
+        members: [
+          { userId: ANA, name: 'Ana', email: '' },
+          { userId: BEA, name: 'Bea', email: '' },
+          { userId: CHUS, name: 'Chus', email: '', isArchived: true },
+        ],
+        updatedAt: '2026-09-02T10:00:00.000',
+      }),
+    );
+  });
+
+  it('quien esta en adminIds si puede quitar a otro', async () => {
+    await sembrar({ group: { adminIds: [BEA], memberIds: [ANA, BEA, CHUS], members: [
+      { userId: ANA, name: 'Ana', email: '' },
+      { userId: BEA, name: 'Bea', email: '' },
+      { userId: CHUS, name: 'Chus', email: '' },
+    ] } });
+
+    await assertSucceeds(
+      updateDoc(doc(como(BEA), 'groups', GROUP_ID), {
+        memberIds: [ANA, BEA],
+        members: [
+          { userId: ANA, name: 'Ana', email: '' },
+          { userId: BEA, name: 'Bea', email: '' },
+          { userId: CHUS, name: 'Chus', email: '', isArchived: true },
+        ],
+        updatedAt: '2026-09-02T10:00:00.000',
+      }),
+    );
+  });
+
+  it('quien administra no puede quitar a la persona propietaria', async () => {
+    await sembrar({ group: { adminIds: [BEA], memberIds: [ANA, BEA], members: [
+      { userId: ANA, name: 'Ana', email: '' },
+      { userId: BEA, name: 'Bea', email: '' },
+    ] } });
+
+    await assertFails(
+      updateDoc(doc(como(BEA), 'groups', GROUP_ID), {
+        memberIds: [BEA],
+        members: [
+          { userId: ANA, name: 'Ana', email: '', isArchived: true },
+          { userId: BEA, name: 'Bea', email: '' },
+        ],
+        updatedAt: '2026-09-02T10:00:00.000',
+      }),
+    );
+  });
+
+  it('al quitar a alguien no se puede colar a un desconocido', async () => {
+    // `hasOnly` sobre la lista vieja: en la misma escritura que saca a dos
+    // personas no se puede meter a una que no estaba.
+    await sembrar({ group: { memberIds: [ANA, BEA, CHUS], members: [
+      { userId: ANA, name: 'Ana', email: '' },
+      { userId: BEA, name: 'Bea', email: '' },
+      { userId: CHUS, name: 'Chus', email: '' },
+    ] } });
+
+    await assertFails(
+      updateDoc(doc(como(ANA), 'groups', GROUP_ID), {
+        memberIds: [ANA, 'uid-desconocido'],
+        members: [
+          { userId: ANA, name: 'Ana', email: '' },
+          { userId: BEA, name: 'Bea', email: '', isArchived: true },
+          { userId: CHUS, name: 'Chus', email: '', isArchived: true },
+          { userId: 'uid-desconocido', name: 'Alguien', email: '' },
+        ],
+        updatedAt: '2026-09-02T10:00:00.000',
       }),
     );
   });

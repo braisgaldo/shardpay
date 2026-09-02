@@ -163,7 +163,7 @@ el mismo problema de plan que la sincronización por función.
 
 Un fallo de este tipo no se ve leyendo el fichero de reglas por encima. La suite
 `firestore-tests/rules.test.js` lo ejecuta contra el **emulador de Firestore**:
-**38 comprobaciones**, incluidas las que reproducen exactamente los agujeros
+**44 comprobaciones**, incluidas las que reproducen exactamente los agujeros
 descritos arriba. Corre en CI en el job `reglas` y bloquea el pipeline.
 
 Lo que no necesita emulador está en `test/core/join_proof_test.dart`: el formato
@@ -183,3 +183,49 @@ la ficha pública no serializa PIN, gastos, correos ni identificadores.
   cambia su cara pública. En un plan gratuito, irrelevante.
 - Los grupos dejan de ser legibles por quien no es miembro, que es lo que esta
   app debería haber hecho desde el principio.
+
+
+---
+
+## Epílogo: la prueba del PIN estuvo rota en producción
+
+**2 de septiembre de 2026.** La 1.1.0 salió con esto roto y con las 38 pruebas en
+verde. Entrar en un grupo por invitación fallaba con «permiso denegado» para
+**unas tres de cada cuatro personas**.
+
+La regla comparaba dos hashes que se calculan en sitios distintos:
+
+```
+request.resource.data.joinProof ==
+  hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toBase64()
+```
+
+`toBase64()` de las reglas de Firestore devuelve base64 **urlsafe** —con `-` y
+`_`—. `base64.encode` de Dart devuelve el **estándar** —con `+` y `/`—. Las dos
+cadenas coinciden exactamente cuando el hash no contiene ninguno de esos dos
+caracteres, y sobre 43 caracteres eso pasa una vez de cada cuatro. El resto de
+las veces, el PIN correcto se rechazaba.
+
+**Por qué no lo cogió la suite.** El valor esperado estaba fijado con un solo
+usuario, `uid-bea`, y su hash es justo uno de los que no llevan `+` ni `/`. Una
+prueba con un único caso de un espacio donde solo falla el 75 % es una prueba que
+pasa por casualidad.
+
+**Por qué tampoco lo cogió el ojo.** El emulador redacta las denegaciones como
+`evaluation error at L190:24`, que suena a que algo ha reventado y no a que una
+condición ha dado `false`. Se pierde un buen rato buscando una excepción que no
+existe.
+
+**El arreglo.** La prueba pasa a ser **hex en mayúsculas**, en los dos lados. Hex
+no tiene variantes de alfabeto: solo mayúsculas o minúsculas, y eso se ve.
+`toHexString()` de las reglas devuelve mayúsculas.
+
+**La prueba que faltaba**, y que ahora existe en los dos niveles: barrer *muchos*
+uids en vez de uno. Veinte contra el emulador, cien contra el formato en Dart.
+Con veinte, que alguno caiga en el caso malo está prácticamente garantizado.
+
+**Lo que hay que llevarse de aquí.** Cuando dos implementaciones tienen que
+producir el mismo byte a byte, el valor de ejemplo no es la prueba: la prueba es
+el barrido. Y conviene desconfiar de los formatos con más de un alfabeto posible
+—base64, hex, URL-encoding, Unicode normalizado— antes de elegirlos para algo que
+tiene que coincidir a través de una frontera.

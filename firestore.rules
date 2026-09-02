@@ -42,9 +42,16 @@ service cloud.firestore {
     // se recalcula con el PIN real, que solo el servidor puede leer. Antes el
     // PIN se comprobaba en el movil despues de leer el grupo entero, que es
     // tanto como no comprobarlo.
+    //
+    // **Hex en mayusculas, no base64.** Esto usaba `toBase64()`, y `toBase64()`
+    // aqui devuelve base64 **urlsafe** —`-` y `_`— mientras que el cliente
+    // producia el estandar —`+` y `/`—. Coincidian solo cuando el hash no
+    // llevaba ninguno de esos caracteres: tres de cada cuatro personas no podian
+    // entrar en un grupo. `toHexString()` devuelve mayusculas y no tiene
+    // variantes de alfabeto.
     function knowsJoinPin() {
       return request.resource.data.joinProof ==
-        hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toBase64();
+        hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toHexString();
     }
 
     // Un hueco reservado ("Marta") solo se puede reclamar si existe, si nadie lo
@@ -130,6 +137,33 @@ service cloud.firestore {
         ]);
     }
 
+    // Quien administra el grupo. `adminIds` con respaldo porque los grupos
+    // creados antes de que existiera el campo no lo traen.
+    function adminOfGroup() {
+      return signedIn()
+        && (request.auth.uid == resource.data.ownerId
+            || request.auth.uid in resource.data.get('adminIds', []));
+    }
+
+    // La escritura deja el grupo con menos gente de la que tenia.
+    function shrinksMembership() {
+      return request.resource.data.memberIds.size() < resource.data.memberIds.size();
+    }
+
+    // Quitar a alguien del grupo, que es lo que hace `removeGroupMember`.
+    //
+    // La app solo ofrece el boton a quien administra, pero eso es una decision
+    // del cliente y el cliente no manda: con el SDK en la mano, cualquier
+    // miembro podia echar al resto. Aqui se exige de verdad, y se exige tambien
+    // que la persona propietaria siga dentro, que es la otra comprobacion que
+    // hasta ahora solo vivia en el movil.
+    function adminRemovingSomeoneElse() {
+      return adminOfGroup()
+        && request.auth.uid in request.resource.data.memberIds
+        && resource.data.ownerId in request.resource.data.memberIds
+        && request.resource.data.memberIds.hasOnly(resource.data.memberIds);
+    }
+
     function notificationGroup() {
       return groupDoc(request.resource.data.groupId);
     }
@@ -157,7 +191,12 @@ service cloud.firestore {
       allow list: if memberOfGroup();
 
       allow delete: if memberOfGroup();
-      allow update: if (memberOfGroup() && request.auth.uid in request.resource.data.memberIds)
+      // La rama normal cubre editar el grupo: gastos, categorias, nombres. Lo que
+      // NO cubre es reducir la lista de miembros, porque eso es echar a alguien
+      // y tiene sus propias condiciones.
+      allow update: if (memberOfGroup()
+          && request.auth.uid in request.resource.data.memberIds
+          && (!shrinksMembership() || adminRemovingSomeoneElse()))
         || leavingGroup()
         || joiningGroupByInvite();
     }

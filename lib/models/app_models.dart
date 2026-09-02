@@ -321,7 +321,7 @@ class GroupInvitePreview {
       groupName: group.name,
       iconKey: group.iconKey,
       currency: group.currency,
-      memberCount: group.members.length,
+      memberCount: group.activeMembers.length,
       openSlots: group.openSlots,
       isClosed: group.isClosed,
       allowAnonymousJoin: group.allowAnonymousJoin,
@@ -631,7 +631,12 @@ class ExpenseGroup {
 
   late final List<GroupMember> selectableMembers = List<GroupMember>.unmodifiable(<GroupMember>[...activeMembers, ..._pendingAsMembers]);
 
-  int get totalDisplayedMembers => members.length + openSlots.length;
+  /// Cuanta gente se enseña que hay en el grupo.
+  ///
+  /// Cuenta los **activos**, no `members`, porque ahi dentro tambien estan los
+  /// archivados: quien se salio, quien borro su cuenta y quien fue expulsado.
+  /// Contandolos, un grupo de una persona con un hueco libre decia «3 miembros».
+  int get totalDisplayedMembers => activeMembers.length + openSlots.length;
 
   Map<String, dynamic> toMap() => {
     'id': id,

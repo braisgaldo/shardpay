@@ -12,7 +12,7 @@
 ///
 /// ```
 /// request.resource.data.joinProof ==
-///   hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toBase64()
+///   hashing.sha256(resource.data.joinPin + ':' + request.auth.uid).toHexString()
 /// ```
 ///
 /// El uid va dentro del hash a proposito: si no, la prueba de una persona
@@ -24,17 +24,32 @@
 /// leer el grupo es la regla de pertenencia, no esto.
 library;
 
-import 'dart:convert';
+import 'dart:convert' show utf8;
 
 import 'package:crypto/crypto.dart';
 
 /// Calcula la prueba que espera `firestore.rules` para `joinProof`.
 ///
-/// El formato exacto —`"<pin>:<uid>"`, SHA-256, base64 estandar— esta fijado por
-/// `test/core/join_proof_test.dart` y por las pruebas de reglas de
+/// El formato exacto —`"<pin>:<uid>"`, SHA-256, **hex en mayusculas**— esta
+/// fijado por `test/core/join_proof_test.dart` y por las pruebas de reglas de
 /// `firestore-tests/`. Cambiarlo aqui sin cambiarlo alli deja a la gente sin
 /// poder entrar en ningun grupo.
+///
+/// ## Por que hex y no base64
+///
+/// Esto era base64 y estaba roto en produccion: `toBase64()` de las reglas de
+/// Firestore devuelve base64 **urlsafe** —con `-` y `_`—, mientras que
+/// `base64.encode` de Dart devuelve el estandar, con `+` y `/`. Los dos
+/// coinciden solo cuando el hash no contiene ninguno de esos dos caracteres, y
+/// eso pasa en una de cada cuatro veces: **tres de cada cuatro personas no
+/// podian entrar en un grupo**, con un «permiso denegado» que no explicaba nada.
+///
+/// Y no se detecto porque el valor fijado en la prueba era el de `uid-bea`, que
+/// da la casualidad de ser uno de los que no lleva `+` ni `/`.
+///
+/// Hex no tiene variantes de alfabeto. Solo tiene mayusculas y minusculas, y eso
+/// se ve a simple vista. `toHexString()` de las reglas devuelve mayusculas.
 String joinProofFor({required String joinPin, required String userId}) {
   final payload = utf8.encode('${joinPin.trim()}:${userId.trim()}');
-  return base64.encode(sha256.convert(payload).bytes);
+  return sha256.convert(payload).toString().toUpperCase();
 }

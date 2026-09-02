@@ -139,6 +139,22 @@ void main() {
       expect((await estadoActual()).memberIds, contains(propietaria.id));
     });
 
+    test('quien queda archivado deja de contar como miembro', () async {
+      // El hueco reservado vuelve a quedar libre al soltar el reclamo, asi que
+      // el grupo pasa de «2 miembros» —una persona y un hueco— a lo mismo, no a
+      // tres. Contar `members` en bruto incluia a la archivada.
+      final marta = await entraMarta();
+      expect((await estadoActual()).totalDisplayedMembers, 2);
+
+      await repositorio.removeGroupMember(groupId: grupo.id, requesterId: propietaria.id, userId: marta.id);
+
+      final despues = await estadoActual();
+      expect(despues.activeMembers.length, 1);
+      expect(despues.openSlots.length, 1, reason: 'el hueco de Marta vuelve a estar libre');
+      expect(despues.totalDisplayedMembers, 2);
+      expect(GroupInvitePreview.fromGroup(despues).memberCount, 1);
+    });
+
     test('quitar a quien ya no esta no cambia nada', () async {
       final antes = await estadoActual();
 

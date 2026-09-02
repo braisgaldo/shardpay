@@ -22,6 +22,22 @@ versionado sigue [SemVer](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **Entrar en un grupo por invitación fallaba para tres de cada cuatro
+  personas.** La regla de Firestore comparaba el hash del PIN en base64
+  **urlsafe** —lo que devuelve `toBase64()` allí— contra el base64 **estándar**
+  que produce Dart. Coinciden solo cuando el hash no lleva `+` ni `/`, o sea una
+  vez de cada cuatro; el resto daba «permiso denegado» sin más explicación. La
+  prueba pasa a ser hex en mayúsculas, que no tiene variantes de alfabeto.
+
+  Las 38 pruebas de reglas estaban en verde porque fijaban el valor esperado con
+  **un solo usuario**, y su hash resulta ser de los que no llevan esos
+  caracteres. Ahora se barren veinte uids contra el emulador y cien contra el
+  formato. Todo el análisis está en el epílogo de
+  [ADR-0009](docs/adr/0009-lectura-de-invitaciones.md).
+- **Un miembro archivado seguía contando como miembro.** Un grupo con una persona
+  y un hueco libre decía «3 miembros» después de expulsar a alguien, porque el
+  contador miraba `members` en bruto en vez de los activos. Afectaba también al
+  número que se le enseña a quien está decidiendo si entra.
 - **Borrarse la cuenta dejaba el nombre y el correo en cada grupo.** La
   participación se marcaba como archivada, pero conservaba nombre, correo y foto,
   a la vista de los demás miembros. La política de privacidad decía —y dice— que

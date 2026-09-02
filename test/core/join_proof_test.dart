@@ -13,8 +13,23 @@ import 'package:shardpay/models/app_models.dart';
 void main() {
   group('prueba del PIN', () {
     test('coincide con el valor que verifican las reglas', () {
-      // sha256("4821:uid-bea") en base64. Comprobado contra el emulador.
-      expect(joinProofFor(joinPin: '4821', userId: 'uid-bea'), 'tRPHGYaED3M0Zcv0tN2ogq3LIcnvhnyYrP5W5NZegVE=');
+      // sha256("4821:uid-bea") en hex mayuscula. Comprobado contra el emulador.
+      expect(joinProofFor(joinPin: '4821', userId: 'uid-bea'), 'B513C71986840F733465CBF4B4DDA882ADCB21C9EF867C98ACFE56E4D65E8151');
+    });
+
+    test('el formato no depende del uid que toque', () {
+      // Esta es la prueba que faltaba, y la que habria pillado el fallo.
+      //
+      // Antes esto era base64 y no coincidia con las reglas cuando el hash
+      // llevaba `+` o `/`, o sea tres veces de cada cuatro. Se colo porque el
+      // unico valor fijado era el de `uid-bea`, que da la casualidad de no
+      // llevarlos. Hex solo admite 0-9 y A-F: si esto pasa para cien uids, pasa
+      // para todos.
+      final formato = RegExp(r'^[0-9A-F]{64}$');
+      for (var i = 0; i < 100; i += 1) {
+        final prueba = joinProofFor(joinPin: '4821', userId: 'uid-barrido-$i');
+        expect(formato.hasMatch(prueba), isTrue, reason: 'formato inesperado para uid-barrido-$i: $prueba');
+      }
     });
 
     test('cambia con el usuario', () {
