@@ -95,8 +95,20 @@ Gráficos:
 - **Política de privacidad**: la URL pública. El texto está en
   `politicas/privacidad.md`.
 - **Anuncios**: no, la app no tiene.
-- **Acceso a la app**: no hace falta credencial de prueba, cualquiera puede
-  crearse una cuenta desde la propia app.
+- **Datos de inicio de sesión** (antes «Acceso a la app»): **sí, hay partes
+  restringidas**, y hay que dar credenciales. Esto es fácil responderlo mal: la
+  tentación es decir que no hace falta porque cualquiera se crea una cuenta desde
+  la app, pero el propio formulario avisa de que Google **no crea cuentas para
+  revisar**. Sin credenciales, el revisor se queda en la pantalla de acceso y
+  rechaza la versión.
+
+  Hay una cuenta de revisión creada para esto: `play.review@shardpay.app`. La
+  contraseña va en el gestor de contraseñas, junto a la clave de firma. Si se
+  pierde, se crea otra desde la propia app y se actualiza la ficha.
+
+  En las instrucciones para el revisor conviene decirle que al entrar sale un
+  tour guiado que recorre las funciones con un grupo de ejemplo, y que el lector
+  de tickets está dentro de un grupo, en «Ticket con cámara» o «Subir ticket».
 - **Clasificación de contenido**: respuestas en `clasificacion-de-contenido.md`.
 - **Seguridad de los datos**: respuestas en `seguridad-de-datos.md`. Esto sale
   publicado en la ficha, así que las respuestas tienen que coincidir con lo que
