@@ -21,7 +21,9 @@ permissions:
   contents: write
 
 env:
-  FLUTTER_VERSION: '3.35.0'
+  # Tiene que traer Dart >= 3.11, que es lo que pide pubspec.yaml. Con la
+  # 3.35.0 que habia aqui, `flutter pub get` falla antes de empezar.
+  FLUTTER_VERSION: '3.47.2'
 
 jobs:
   compilar:
