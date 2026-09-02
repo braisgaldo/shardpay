@@ -14,14 +14,14 @@ class AppInfo {
   const AppInfo._();
 
   /// Versión semántica. Coincide con `version` en `pubspec.yaml`.
-  static const String version = String.fromEnvironment('SHARDPAY_VERSION', defaultValue: '1.2.0');
+  static const String version = String.fromEnvironment('SHARDPAY_VERSION', defaultValue: '1.2.1');
 
   /// Número de compilación monótono (`versionCode` en Android).
   ///
   /// Fórmula documentada en `docs/INSTALL.md`: se genera desde la fecha en UTC
   /// como `AAMMDDNN`, donde `NN` es el número de compilación de ese día. Es
   /// creciente por construcción y legible de un vistazo.
-  static const String buildNumber = String.fromEnvironment('SHARDPAY_BUILD', defaultValue: '26090201');
+  static const String buildNumber = String.fromEnvironment('SHARDPAY_BUILD', defaultValue: '26090202');
 
   /// Hash corto del commit.
   static const String commit = String.fromEnvironment('SHARDPAY_COMMIT', defaultValue: 'local');

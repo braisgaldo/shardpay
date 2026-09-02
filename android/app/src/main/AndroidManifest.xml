@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!--
       Minimo privilegio: solo se piden los permisos que una funcion concreta
       necesita, y cada uno esta justificado en docs/adr/0006-permisos.md y en la
@@ -6,14 +7,32 @@
 
       - POST_NOTIFICATIONS: avisos de gastos y reembolsos del grupo.
       - CAMERA: fotografiar el ticket. El reconocimiento de texto ocurre entero
-        en el dispositivo; la foto no sale de aqui salvo que el usuario decida
-        adjuntarla al gasto.
+        en el dispositivo y la foto no sale del movil: se lee y se descarta.
 
-      No se pide almacenamiento: exportar e importar usan el selector del
-      sistema, que da acceso solo al fichero elegido.
+      Exportar e importar copias usan el selector de ficheros del sistema, que da
+      acceso solo al fichero elegido y no necesita permiso de almacenamiento.
     -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!--
+      Tres permisos que la app NO usa y que entraban en el paquete solos.
+
+      `camera_android_camerax` tambien sabe grabar video, asi que su manifiesto
+      declara el microfono y el almacenamiento; al combinarse los manifiestos,
+      acababan dentro del .aab. El resultado era que Google Play le decia al
+      usuario que una app de repartir cuentas puede usar el **microfono**.
+
+      Quitarlos es seguro: la camara se abre con `enableAudio: false`
+      (receipt_scanner_screen.dart) y no se graba audio en ninguna parte, y las
+      copias de seguridad van por el selector del sistema.
+
+      Se comprueba en el paquete de verdad, que es donde importa:
+        aapt2 dump permissions build/app/outputs/flutter-apk/app-release.apk
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
 
     <!-- La camara no es obligatoria: sin ella se pueden seguir metiendo los
          gastos a mano y leer tickets desde la galeria. -->

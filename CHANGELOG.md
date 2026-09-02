@@ -5,6 +5,24 @@ Todos los cambios reseñables de ShardPay se anotan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [1.2.1] — 2026-09-02
+
+### Corregido
+
+- **El paquete declaraba el permiso de micrófono**, así que Google Play le decía
+  al usuario que una app de repartir cuentas puede grabar audio. No estaba en el
+  manifiesto de ShardPay: lo declara `camera_android_camerax`, que también sabe
+  grabar vídeo, y entraba al combinarse los manifiestos. Con él se colaban
+  `READ_EXTERNAL_STORAGE` y `WRITE_EXTERNAL_STORAGE`. Los tres se quitan con
+  `tools:node="remove"`. Quitarlos es seguro: la cámara se abre con
+  `enableAudio: false` y las copias de seguridad van por el selector de ficheros
+  del sistema.
+- **Se guardaba el token de notificaciones de quien las rechazaba.** Se pedía el
+  permiso y no se miraba el resultado, así que el token acababa en Firestore
+  aunque no hubiera forma de enviar nada a ese dispositivo. Ahora solo se guarda
+  si el permiso está concedido, lo que además convierte esa recogida en
+  **opcional** en la ficha de Play en vez de obligatoria.
+
 ## [1.2.0] — 2026-09-02
 
 ### Añadido

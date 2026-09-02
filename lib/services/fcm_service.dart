@@ -32,7 +32,16 @@ class FcmService {
     _activeUserId = user.id;
     await _localNotifications.ensureInitialized();
 
-    await _messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
+    // Mirar lo que devuelve `requestPermission` no es opcional, aunque compile
+    // sin hacerlo. Antes se ignoraba: se pedia el permiso y se guardaba el token
+    // pasara lo que pasara, asi que quien pulsaba «No permitir» dejaba su token
+    // en Firestore. Un dato recogido para nada —no se le puede enviar ninguna
+    // notificacion— y, en el formulario de Seguridad de los datos de Google, una
+    // recogida que hay que declarar como imposible de desactivar.
+    final permiso = await _messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
+    if (!_concedido(permiso.authorizationStatus)) {
+      return;
+    }
 
     final token = await _messaging.getToken();
     if (token != null && token.isNotEmpty) {
@@ -59,6 +68,15 @@ class FcmService {
     _tokenRefreshSubscription = null;
     _foregroundSubscription = null;
     _activeUserId = null;
+  }
+
+  /// Si con este estado se pueden entregar notificaciones.
+  ///
+  /// `provisional` es el permiso silencioso de iOS: llegan, pero sin sonido ni
+  /// aviso hasta que la persona lo confirme. Cuenta como concedido, porque el
+  /// token si sirve.
+  static bool _concedido(AuthorizationStatus estado) {
+    return estado == AuthorizationStatus.authorized || estado == AuthorizationStatus.provisional;
   }
 
   Future<void> _saveToken(AppUser user, String token) {
