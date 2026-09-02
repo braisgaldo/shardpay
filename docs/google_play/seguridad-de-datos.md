@@ -152,3 +152,59 @@ comparte», por dos exenciones que el propio formulario reconoce:
 Y no hay ningún tercero más: no hay analítica, ni publicidad, ni SDK de terceros
 que reciba nada. Comprobado en el `pubspec.yaml` y en el manifiesto, donde los
 únicos permisos son `CAMERA` y `POST_NOTIFICATIONS`.
+
+
+---
+
+## Las tres preguntas que Play hace por cada tipo
+
+### ¿Se tratan de forma temporal?
+
+**No, en los seis.** «Temporal» significa que el dato solo pasa por memoria
+mientras se atiende una petición en tiempo real. Todo lo que ShardPay declara se
+**guarda** en Firestore y sigue ahí hasta que alguien lo borra.
+
+### ¿Necesario u opcional?
+
+**Necesaria en los seis**, es decir «los usuarios no pueden desactivarla». No hay
+ningún interruptor que impida recoger nada de esto: sin cuenta y sin gastos la
+app no hace nada.
+
+Ojo con el token de notificaciones, que **parece** opcional y no lo es: en
+`lib/services/fcm_service.dart` se llama a `requestPermission(...)` pero **no se
+mira lo que devuelve**, y `getToken()` se ejecuta y se guarda a continuación pase
+lo que pase. Quien rechaza las notificaciones también deja su token en Firestore.
+
+> **Pendiente, para la siguiente versión.** Guardar un token de quien ha dicho
+> que no quiere notificaciones es un dato recogido para nada: no se le puede
+> enviar ninguna. Comprobar el resultado del permiso, y guardar el token solo si
+> está concedido, es un `if` y permitiría declarar esta recogida como
+> **opcional**, que es lo que de verdad debería ser. No se ha cambiado antes de
+> enviar la 1.2.0 a propósito: la declaración tiene que describir el paquete que
+> se sube, no el que vendrá.
+
+### ¿Por qué se recogen?
+
+| Dato | Funcionalidad | Gestión de cuentas |
+| --- | :---: | :---: |
+| Nombre | Sí | Sí |
+| Dirección de correo | Sí | Sí |
+| IDs de usuario | Sí | Sí |
+| Historial de compras | Sí | — |
+| Otro contenido generado por el usuario | Sí | — |
+| IDs de dispositivo | Sí | — |
+
+Las otras cinco finalidades van **todas en blanco**, en los seis tipos:
+
+- **Análisis** — no hay analítica ni telemetría de ninguna clase.
+- **Publicidad o marketing** — no hay anuncios, y las notificaciones nunca
+  promocionan nada.
+- **Comunicaciones del desarrollador** — las notificaciones las provoca lo que
+  hace otra persona del grupo, no yo. Nunca se manda una noticia ni un aviso de
+  producto.
+- **Personalización** — el tema y el idioma se guardan en el propio dispositivo
+  con `shared_preferences`. No salen de ahí, así que ni se recogen.
+- **Prevención de fraudes, seguridad y cumplimiento** — el PIN de un grupo y la
+  prueba `joinProof` son control de acceso, o sea funcionalidad. No se monitoriza
+  nada ni se perfila a nadie con fines de seguridad, y declararlo sugeriría que
+  sí.
